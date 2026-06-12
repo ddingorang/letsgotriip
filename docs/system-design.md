@@ -1,5 +1,8 @@
 # 관통 여행 — 시스템 설계서 (v0.1 Draft)
 
+> ⚠️ **폐기됨(superseded)**: 이 문서는 강의용 backend/(MyBatis 데모) 전제로 작성된 v0.1입니다.
+> 실제 팀 백엔드(`BE/`, com.trip JPA) 기준의 최신 설계는 **`BE/docs/system-design.md` (v0.2)** 를 보세요.
+
 > 상태: **초안 — Codex 리뷰 대기**
 > 범위: MVP (도메인 1 인증 · 2 관광 탐색 · 3 여행 계획 · 4 AI 추천) + 확장 대비 구조
 > 관련 문서: [domain-architecture.md](domain-architecture.md), [design/design-system.md](design/design-system.md)

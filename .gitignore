@@ -24,3 +24,6 @@ Thumbs.db
 
 # frontend는 자체 git 저장소
 frontend/
+
+.omx/
+BE/
