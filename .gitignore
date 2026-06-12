@@ -1,0 +1,26 @@
+# Node
+node_modules/
+frontend/dist/
+
+# Java/Maven
+backend/target/
+
+# Env & secrets
+.env
+.env.local
+*.local.properties
+backend/src/main/resources/application-local.properties
+
+# IDE/OS
+.idea/
+.vscode/
+*.iml
+Thumbs.db
+.DS_Store
+
+# OMC/Claude state
+.omc/
+.claude/settings.local.json
+
+# frontend는 자체 git 저장소
+frontend/
