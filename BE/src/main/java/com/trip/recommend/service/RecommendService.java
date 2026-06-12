@@ -30,6 +30,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
@@ -88,8 +89,11 @@ public class RecommendService {
     // 추천 생성
     // ─────────────────────────────────────────────────────────────
 
-    // @Transactional 미적용: DB 쓰기(성공/실패 Recommendation 저장)는 repository.save 단위로
-    // 처리한다. 실패 기록이 예외 재던지기로 롤백되지 않도록 process는 비트랜잭션화.
+    // NOT_SUPPORTED: 클래스 레벨 @Transactional(readOnly=true)를 무력화해 process를 트랜잭션 밖에서
+    // 실행한다. 이렇게 해야 (1) 외부 호출(TourAPI/LLM) 동안 DB 커넥션을 점유하지 않고,
+    // (2) 성공/실패 Recommendation 저장이 repository.save 자체 쓰기 트랜잭션으로 커밋되며
+    //     (readOnly 커넥션 INSERT 오류 방지), (3) 실패 기록이 예외 재던지기로 롤백되지 않는다.
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public RecommendationResponseDto process(Long userId, RecommendRequestDto req) {
         // 기간 유효성 검사
         if (!req.isPeriodValid()) {
