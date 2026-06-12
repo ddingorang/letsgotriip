@@ -1,0 +1,63 @@
+/* =====================================================
+   관통 여행 — App Global Styles
+   디자인 시스템 토큰 + 모바일 앱 셸 베이스
+   ===================================================== */
+
+@import './styles/tokens/colors.css';
+@import './styles/tokens/typography.css';
+@import './styles/tokens/spacing.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-neutral-200);
+  color: var(--text-primary);
+}
+
+#app {
+  height: 100%;
+}
+
+/* ── 모바일 앱 프레임 (390×844 기준, 데스크톱에선 중앙 정렬) ── */
+.app-frame {
+  position: relative;
+  max-width: 430px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--surface-subtle);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+  padding-bottom: calc(var(--tab-bar-height) + 12px);
+}
+
+.app-main.no-tab {
+  padding-bottom: 0;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}

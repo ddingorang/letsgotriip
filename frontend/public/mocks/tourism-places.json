@@ -1,0 +1,102 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "place-1001",
+      "externalId": "KTOUR-126508",
+      "source": "KTOUR",
+      "title": "해운대해수욕장",
+      "contentType": "TOURIST_ATTRACTION",
+      "areaCode": "6",
+      "sigunguCode": "16",
+      "address": "부산광역시 해운대구",
+      "latitude": 35.1587,
+      "longitude": 129.1604,
+      "thumbnailUrl": "/mock/haeundae.jpg",
+      "tags": ["바다", "산책"],
+      "contextBadges": ["PHOTO", "WEATHER", "NEWS"]
+    },
+    {
+      "id": "place-1002",
+      "externalId": "KTOUR-126102",
+      "source": "KTOUR",
+      "title": "경복궁",
+      "contentType": "TOURIST_ATTRACTION",
+      "areaCode": "1",
+      "sigunguCode": "23",
+      "address": "서울특별시 종로구",
+      "latitude": 37.5796,
+      "longitude": 126.977,
+      "thumbnailUrl": "/mock/gyeongbokgung.jpg",
+      "tags": ["역사", "궁궐"],
+      "contextBadges": ["PHOTO", "WEATHER"]
+    },
+    {
+      "id": "place-1003",
+      "externalId": "KTOUR-128901",
+      "source": "KTOUR",
+      "title": "광안리 해물탕 골목",
+      "contentType": "RESTAURANT",
+      "areaCode": "6",
+      "sigunguCode": "10",
+      "address": "부산광역시 수영구 광안해변로",
+      "latitude": 35.1532,
+      "longitude": 129.1186,
+      "thumbnailUrl": "/mock/gwangalli-food.jpg",
+      "tags": ["맛집", "해변"],
+      "contextBadges": ["WEATHER"]
+    },
+    {
+      "id": "place-1004",
+      "externalId": "KTOUR-129301",
+      "source": "KTOUR",
+      "title": "성산일출봉",
+      "contentType": "TOURIST_ATTRACTION",
+      "areaCode": "39",
+      "sigunguCode": "4",
+      "address": "제주특별자치도 서귀포시 성산읍",
+      "latitude": 33.4584,
+      "longitude": 126.9425,
+      "thumbnailUrl": "/mock/seongsan.jpg",
+      "tags": ["일출", "트레킹"],
+      "contextBadges": ["PHOTO", "WEATHER", "NEWS"]
+    },
+    {
+      "id": "place-1005",
+      "externalId": "KTOUR-130011",
+      "source": "KTOUR",
+      "title": "국립중앙박물관",
+      "contentType": "CULTURAL_FACILITY",
+      "areaCode": "1",
+      "sigunguCode": "20",
+      "address": "서울특별시 용산구 서빙고로",
+      "latitude": 37.524,
+      "longitude": 126.9803,
+      "thumbnailUrl": "/mock/museum.jpg",
+      "tags": ["박물관", "실내"],
+      "contextBadges": ["PHOTO"]
+    },
+    {
+      "id": "place-1006",
+      "externalId": "KTOUR-131220",
+      "source": "KTOUR",
+      "title": "한옥스테이 감",
+      "contentType": "LODGING",
+      "areaCode": "32",
+      "sigunguCode": "1",
+      "address": "경상북도 경주시 황남동",
+      "latitude": 35.8347,
+      "longitude": 129.2196,
+      "thumbnailUrl": "/mock/hanok-stay.jpg",
+      "tags": ["숙박", "한옥"],
+      "contextBadges": ["WEATHER"]
+    }
+  ],
+  "error": null,
+  "meta": {
+    "page": 1,
+    "size": 20,
+    "total": 6,
+    "hasNext": false
+  }
+}

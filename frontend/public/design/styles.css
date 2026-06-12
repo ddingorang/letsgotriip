@@ -1,0 +1,8 @@
+/* =====================================================
+   관통 여행 Design System — Root Styles Entry Point
+   Import this one file to get the full design system.
+   ===================================================== */
+
+@import './tokens/colors.css';
+@import './tokens/typography.css';
+@import './tokens/spacing.css';

@@ -1,0 +1,106 @@
+# Created: 2026-06-08 15:35:28
+spring:
+  application:
+    name: trip
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+
+  # MySQL
+  datasource:
+    url: jdbc:mysql://localhost:3307/trip_chat?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+    show-sql: true
+
+  data:
+    # MongoDB
+    mongodb:
+      uri: mongodb://localhost:27017/trip_chat
+    # Redis
+    redis:
+      host: localhost
+      port: 6379
+
+  # RabbitMQ
+  rabbitmq:
+    host: localhost
+    port: 5672        # AMQP 포트
+    stomp:
+      port: 61613     # STOMP 포트
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+  # Spring Batch
+  batch:
+    job:
+      enabled: false          # 앱 시작 시 자동 실행 방지
+    jdbc:
+      initialize-schema: always  # 배치 메타 테이블 자동 생성
+
+  # Spring AI (SSAFY GMS — OpenAI 호환 프록시)
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: https://gms.ssafy.io/gmsapi/api.openai.com/v1/
+      chat:
+        completions-path: chat/completions
+        options:
+          model: gpt-4o-mini
+
+# RabbitMQ Queue / Exchange / Routing Key
+rabbitmq:
+  queue:
+    name: chat.queue
+  exchange:
+    name: chat.exchange
+  routing:
+    key: chat.routing.key
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET}
+  accesstoken-expiration-time: 3600     # 1시간 (초)
+  overlap-window: PT5M                  # 5분
+  refresh-ttl: P7D                      # 7일
+
+server:
+  port: 9090
+
+# 채팅(WebSocket/RabbitMQ) 조건부 기동 — false면 RabbitMQ 없이 부팅 가능
+chat:
+  enabled: ${CHAT_ENABLED:true}
+
+# 프론트엔드 (OAuth 콜백 리다이렉트)
+app:
+  frontend:
+    oauth-callback-url: ${FE_OAUTH_CALLBACK_URL:http://localhost:5173/oauth/callback}
+
+# OpenAI (Whisper STT — preprocessing 도메인)
+openai:
+  api:
+    key: ${OPENAI_API_KEY}
+    url: https://gms.ssafy.io/gmsapi/api.openai.com/v1/audio/transcriptions
+
+# 한국관광공사 API
+tour:
+  api:
+    base-url: https://apis.data.go.kr/B551011/KorService2
+    key: ${TOUR_API_KEY}

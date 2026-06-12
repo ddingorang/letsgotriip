@@ -1,0 +1,126 @@
+<!-- @dsCard group="App" viewport="390x844" name="리뷰 화면" subtitle="리뷰 목록 + 리뷰 작성" -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: var(--font-sans); background: var(--surface-subtle); width: 390px; min-height: 844px; }
+.status-bar { height: 54px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 20px 10px; background: #fff; }
+.status-time { font: var(--weight-semibold) 15px/1 var(--font-sans); color: var(--text-primary); }
+.status-icons { display: flex; gap: 6px; align-items: center; }
+.nav-bar { height: 52px; display: flex; align-items: center; padding: 0 20px; gap: 8px; background: #fff; border-bottom: 1px solid var(--border-subtle); }
+.nav-back { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: var(--text-primary); cursor: pointer; }
+.nav-title { flex: 1; text-align: center; font: var(--weight-semibold) var(--text-lg)/1 var(--font-sans); color: var(--text-primary); }
+.nav-write { font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); color: var(--color-primary-500); cursor: pointer; }
+
+/* SUMMARY */
+.summary { background: #fff; padding: 20px; display: flex; gap: 20px; border-bottom: 8px solid var(--surface-subtle); }
+.score-big { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.score-num { font: var(--weight-extrabold) 52px/1 var(--font-sans); color: var(--text-primary); letter-spacing: -0.04em; }
+.stars-big { display: flex; gap: 3px; }
+.score-count { font: var(--type-caption); color: var(--text-tertiary); }
+.score-bars { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.bar-row { display: flex; align-items: center; gap: 8px; }
+.bar-star { font: var(--weight-medium) var(--text-xs)/1 var(--font-sans); color: var(--text-secondary); width: 22px; text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; height: 6px; background: var(--surface-subtle); border-radius: var(--radius-full); overflow: hidden; }
+.bar-fill { height: 100%; background: var(--color-warning); border-radius: var(--radius-full); }
+.bar-count { font: var(--weight-medium) var(--text-xs)/1 var(--font-sans); color: var(--text-tertiary); width: 28px; text-align: right; flex-shrink: 0; }
+
+/* TAGS */
+.tag-section { background: #fff; padding: 14px 20px; border-bottom: 8px solid var(--surface-subtle); display: flex; gap: 8px; flex-wrap: wrap; }
+.review-tag { display: inline-flex; align-items: center; gap: 5px; padding: 7px 13px; border-radius: var(--radius-full); font: var(--weight-medium) var(--text-sm)/1 var(--font-sans); background: var(--surface-subtle); color: var(--text-secondary); border: 1.5px solid var(--border-default); }
+.review-tag.hot { background: var(--color-primary-50); color: var(--color-primary-500); border-color: var(--color-primary-300); }
+
+/* REVIEW CARDS */
+.reviews { padding: 16px 20px 100px; display: flex; flex-direction: column; gap: 1px; background: var(--surface-subtle); }
+.review-card { background: #fff; padding: 18px 20px; }
+.review-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.reviewer-avatar { width: 38px; height: 38px; border-radius: var(--radius-full); background: var(--color-primary-100); display: flex; align-items: center; justify-content: center; color: var(--color-primary-600); font: var(--weight-bold) var(--text-sm)/1 var(--font-sans); flex-shrink: 0; }
+.reviewer-info { flex: 1; }
+.reviewer-name { font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); color: var(--text-primary); }
+.reviewer-meta { font: var(--type-caption); color: var(--text-tertiary); margin-top: 3px; }
+.review-stars { display: flex; gap: 2px; color: var(--color-warning); font-size: 14px; }
+.review-text { font: var(--type-body); color: var(--text-primary); line-height: var(--leading-loose); margin-bottom: 12px; }
+.review-photos { display: flex; gap: 6px; margin-bottom: 12px; }
+.review-photo { width: 72px; height: 72px; border-radius: var(--radius-sm); background: var(--surface-subtle); display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+.review-helpful { display: flex; align-items: center; gap: 6px; }
+.helpful-btn { display: flex; align-items: center; gap: 5px; font: var(--weight-medium) var(--text-xs)/1 var(--font-sans); color: var(--text-tertiary); padding: 5px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer; }
+.helpful-btn.active { color: var(--color-primary-500); border-color: var(--color-primary-300); background: var(--color-primary-50); }
+
+/* WRITE FAB */
+.write-fab { position: fixed; bottom: 24px; right: 20px; display: flex; align-items: center; gap: 8px; background: var(--color-primary-500); color: #fff; padding: 14px 20px; border-radius: var(--radius-full); font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); box-shadow: 0 4px 16px rgba(255,98,0,.4); cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="status-bar">
+  <span class="status-time">9:41</span>
+  <div class="status-icons"><svg width="17" height="12" viewBox="0 0 17 12" fill="var(--text-primary)"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="1" width="3" height="11" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg><svg width="25" height="12" viewBox="0 0 25 12" fill="var(--text-primary)"><rect x="0" y="1" width="21" height="10" rx="2" stroke="var(--text-primary)" stroke-width="1.5" fill="none"/><rect x="22" y="4" width="3" height="4" rx="1"/><rect x="1.5" y="2.5" width="16" height="7" rx="1.2"/></svg></div>
+</div>
+<div class="nav-bar">
+  <div class="nav-back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></div>
+  <div class="nav-title">리뷰 1,240개</div>
+  <div class="nav-write">리뷰 쓰기</div>
+</div>
+
+<div class="summary">
+  <div class="score-big">
+    <div class="score-num">4.9</div>
+    <div class="stars-big">★★★★★</div>
+    <div class="score-count">1,240개</div>
+  </div>
+  <div class="score-bars">
+    <div class="bar-row"><span class="bar-star">5★</span><div class="bar-track"><div class="bar-fill" style="width:88%"></div></div><span class="bar-count">1,091</span></div>
+    <div class="bar-row"><span class="bar-star">4★</span><div class="bar-track"><div class="bar-fill" style="width:8%"></div></div><span class="bar-count">99</span></div>
+    <div class="bar-row"><span class="bar-star">3★</span><div class="bar-track"><div class="bar-fill" style="width:2%"></div></div><span class="bar-count">25</span></div>
+    <div class="bar-row"><span class="bar-star">2★</span><div class="bar-track"><div class="bar-fill" style="width:1%"></div></div><span class="bar-count">12</span></div>
+    <div class="bar-row"><span class="bar-star">1★</span><div class="bar-track"><div class="bar-fill" style="width:1%"></div></div><span class="bar-count">13</span></div>
+  </div>
+</div>
+
+<div class="tag-section">
+  <div class="review-tag hot">청결 최고 (324)</div>
+  <div class="review-tag hot">위치 편리 (298)</div>
+  <div class="review-tag">조식 맛있음 (201)</div>
+  <div class="review-tag">친절한 직원 (187)</div>
+  <div class="review-tag">뷰 훌륭 (155)</div>
+</div>
+
+<div class="reviews">
+  <div class="review-card">
+    <div class="review-header">
+      <div class="reviewer-avatar">김</div>
+      <div class="reviewer-info"><div class="reviewer-name">김여행</div><div class="reviewer-meta">2026.06.10 · 2박</div></div>
+      <div class="review-stars">★★★★★</div>
+    </div>
+    <div class="review-text">뷰가 정말 대박이에요! 객실 창문 바로 앞에 해운대 해수욕장이 펼쳐져 있고, 일출이 너무 아름다웠습니다. 조식도 종류가 다양하고 맛있었어요. 다음에 부산 방문할 때도 꼭 여기서 숙박하고 싶습니다.</div>
+    <div class="review-photos">
+      <div class="review-photo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+      <div class="review-photo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+      <div class="review-photo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+    </div>
+    <div class="review-helpful">
+      <div class="helpful-btn active"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>도움됨 42</div>
+    </div>
+  </div>
+  <div class="review-card">
+    <div class="review-header">
+      <div class="reviewer-avatar" style="background:var(--color-neutral-100);color:var(--text-secondary)">이</div>
+      <div class="reviewer-info"><div class="reviewer-name">이관통</div><div class="reviewer-meta">2026.05.28 · 3박</div></div>
+      <div class="review-stars" style="color:var(--color-warning)">★★★★☆</div>
+    </div>
+    <div class="review-text">전반적으로 만족스러운 숙박이었습니다. 다만 성수기라 그런지 체크인이 조금 늦었고, 주차 공간이 협소했던 점은 아쉬웠어요. 수영장과 피트니스 센터는 정말 훌륭했습니다.</div>
+    <div class="review-helpful">
+      <div class="helpful-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>도움됨 18</div>
+    </div>
+  </div>
+</div>
+
+<div class="write-fab">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+  리뷰 작성
+</div>
+</body>
+</html>

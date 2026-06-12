@@ -1,0 +1,89 @@
+<!-- @dsCard group="App" viewport="700x500" name="앱 UI 킷 인덱스" subtitle="관통 여행 앱 전체 화면 목록" -->
+<!-- @startingPoint section="App" subtitle="관통 여행 전체 화면 인덱스" viewport="700x500" -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); background: var(--surface-subtle); padding: 28px; }
+.header { margin-bottom: 24px; }
+.brand { font: var(--weight-extrabold) 26px/1 var(--font-sans); color: var(--color-primary-500); letter-spacing: -0.03em; margin-bottom: 4px; }
+.sub { font: var(--type-body-sm); color: var(--text-secondary); }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.screen-card { background: var(--surface-bg); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); cursor: pointer; text-decoration: none; transition: box-shadow var(--duration-fast); }
+.screen-card:hover { box-shadow: var(--shadow-md); }
+.screen-preview { height: 160px; background: linear-gradient(135deg, var(--color-primary-50) 0%, #fff 100%); display: flex; align-items: center; justify-content: center; border-bottom: 1px solid var(--border-subtle); }
+.screen-preview .icon { color: var(--color-primary-400); }
+.screen-info { padding: 12px; }
+.screen-num { font: var(--weight-semibold) 10px/1 var(--font-sans); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.screen-name { font: var(--weight-bold) var(--text-sm)/1 var(--font-sans); color: var(--text-primary); margin-bottom: 3px; }
+.screen-desc { font: var(--type-caption); color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="brand">관통여행 UI Kit</div>
+  <div class="sub">14개 화면 · iOS 390×844 기준</div>
+</div>
+<div class="grid">
+  <a class="screen-card" href="01_home.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></div>
+    <div class="screen-info"><div class="screen-num">01</div><div class="screen-name">홈</div><div class="screen-desc">메인 홈 + 추천 여행지</div></div>
+  </a>
+  <a class="screen-card" href="02_search.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>
+    <div class="screen-info"><div class="screen-num">02</div><div class="screen-name">검색</div><div class="screen-desc">검색 결과 + 필터</div></div>
+  </a>
+  <a class="screen-card" href="03_detail.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg></div>
+    <div class="screen-info"><div class="screen-num">03</div><div class="screen-name">상세</div><div class="screen-desc">숙소 상세 + 편의시설</div></div>
+  </a>
+  <a class="screen-card" href="04_payment.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
+    <div class="screen-info"><div class="screen-num">04</div><div class="screen-name">결제</div><div class="screen-desc">예약 정보 + 결제 수단</div></div>
+  </a>
+  <a class="screen-card" href="05_mypage.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+    <div class="screen-info"><div class="screen-num">05</div><div class="screen-name">마이페이지</div><div class="screen-desc">내 정보 + 예약 내역</div></div>
+  </a>
+  <a class="screen-card" href="06_review.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/></svg></div>
+    <div class="screen-info"><div class="screen-num">06</div><div class="screen-name">리뷰</div><div class="screen-desc">리뷰 목록 + 평점</div></div>
+  </a>
+  <a class="screen-card" href="07_confirmation.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+    <div class="screen-info"><div class="screen-num">07</div><div class="screen-name">예약 완료</div><div class="screen-desc">예약 확인 + 티켓</div></div>
+  </a>
+  <a class="screen-card" href="08_ai_input.html">
+    <div class="screen-preview" style="background:linear-gradient(135deg,#1a1a2e,#0f3460)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(247,143,87,0.8)" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></div>
+    <div class="screen-info"><div class="screen-num">08</div><div class="screen-name">AI 추천 입력</div><div class="screen-desc">여행 조건 설정</div></div>
+  </a>
+  <a class="screen-card" href="09_ai_result.html">
+    <div class="screen-preview" style="background:linear-gradient(135deg,#1a1a2e,#0f3460)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(247,143,87,0.8)" stroke-width="1.5"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg></div>
+    <div class="screen-info"><div class="screen-num">09</div><div class="screen-name">AI 추천 결과</div><div class="screen-desc">일정 초안 + 계획 담기</div></div>
+  </a>
+  <a class="screen-card" href="10_plan_edit.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg></div>
+    <div class="screen-info"><div class="screen-num">10</div><div class="screen-name">계획 편집</div><div class="screen-desc">일자별 장소 추가·순서 변경</div></div>
+  </a>
+  <a class="screen-card" href="11_community.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+    <div class="screen-info"><div class="screen-num">11</div><div class="screen-name">커뮤니티</div><div class="screen-desc">여행 후기 게시판 + 핫플</div></div>
+  </a>
+  <a class="screen-card" href="12_companion.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+    <div class="screen-info"><div class="screen-num">12</div><div class="screen-name">동행 모집</div><div class="screen-desc">동행 구인 목록 + 신청</div></div>
+  </a>
+  <a class="screen-card" href="13_badges.html">
+    <div class="screen-preview" style="background:linear-gradient(135deg,#1a1a2e,#0f3460)"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(247,143,87,0.8)" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+    <div class="screen-info"><div class="screen-num">13</div><div class="screen-name">뱃지·퀘스트</div><div class="screen-desc">게임화 — 레벨 + 뱃지 컬렉션</div></div>
+  </a>
+  <a class="screen-card" href="14_checklist.html">
+    <div class="screen-preview"><svg class="icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+    <div class="screen-info"><div class="screen-num">14</div><div class="screen-name">체크리스트</div><div class="screen-desc">여행 준비 항목 관리 + 알림</div></div>
+  </a>
+</div>
+</body>
+</html>

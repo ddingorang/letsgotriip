@@ -1,0 +1,122 @@
+<script setup>
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
+
+const ticketDetails = [
+  { label: '체크인',  value: '2026.06.15 (토)\n15:00 이후' },
+  { label: '체크아웃', value: '2026.06.17 (월)\n11:00 이전' },
+  { label: '객실',    value: '오션뷰 디럭스' },
+  { label: '인원',    value: '성인 2명' }
+];
+
+const notices = [
+  '체크인 시 예약자 본인 신분증을 지참해 주세요.',
+  '취소는 체크인 3일 전까지 무료 취소 가능합니다.',
+  '문의: 관통여행 고객센터 1588-0000 (24시간)'
+];
+</script>
+
+<template>
+  <div class="confirmation-view">
+    <div class="success-top">
+      <div class="success-icon">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="success-title">예약이 완료되었어요!</div>
+      <div class="success-sub">예약 확인 이메일을 발송했습니다</div>
+      <div class="booking-no">예약번호 BK202406150023</div>
+    </div>
+
+    <div class="ticket-wrap">
+      <div class="ticket">
+        <div class="ticket-top">
+          <div class="ticket-badge">
+            <span class="badge-dot"></span>
+            예약 확정
+          </div>
+          <div class="ticket-name">해운대 오션뷰 호텔</div>
+          <div class="ticket-sub">부산 해운대구 해운대해변로 234</div>
+          <div class="notch"></div>
+          <div class="notch right"></div>
+        </div>
+        <div class="ticket-details">
+          <div v-for="item in ticketDetails" :key="item.label" class="ticket-detail-item">
+            <div class="ticket-detail-label">{{ item.label }}</div>
+            <div class="ticket-detail-value" style="white-space: pre-line">{{ item.value }}</div>
+          </div>
+        </div>
+        <div class="ticket-total">
+          <div class="ticket-total-label">결제 완료</div>
+          <div class="ticket-total-value">₩358,000</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="action-btn-primary" @click="router.push('/')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        예약 상세 보기
+      </button>
+      <div class="action-row">
+        <button class="action-btn-outline">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          티켓 출력
+        </button>
+        <button class="action-btn-outline">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          공유하기
+        </button>
+      </div>
+    </div>
+
+    <div class="notice">
+      <div class="notice-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        안내사항
+      </div>
+      <div class="notice-list">
+        <div v-for="item in notices" :key="item" class="notice-item">{{ item }}</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.confirmation-view { background: var(--surface-subtle); min-height: 100%; display: flex; flex-direction: column; }
+
+.success-top { background: linear-gradient(160deg, var(--color-primary-500) 0%, #FF9A00 100%); padding: 40px 20px 60px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+.success-icon { width: 80px; height: 80px; background: rgba(255,255,255,0.2); border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,255,255,0.4); }
+.success-title { font: var(--weight-bold) 26px/var(--leading-tight) var(--font-sans); color: #fff; letter-spacing: -0.02em; }
+.success-sub { font: var(--weight-medium) var(--text-base)/var(--leading-normal) var(--font-sans); color: rgba(255,255,255,0.85); }
+.booking-no { background: rgba(255,255,255,0.2); border-radius: var(--radius-full); padding: 8px 18px; font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); color: #fff; }
+
+.ticket-wrap { margin: -30px 20px 0; position: relative; }
+.ticket { background: var(--surface-bg); border-radius: var(--radius-xl); overflow: hidden; box-shadow: var(--shadow-lg); }
+.ticket-top { padding: 20px; border-bottom: 1px dashed var(--border-default); position: relative; }
+.ticket-badge { display: inline-flex; align-items: center; gap: 5px; font: var(--weight-semibold) var(--text-xs)/1 var(--font-sans); background: var(--color-primary-50); color: var(--color-primary-600); padding: 4px 9px; border-radius: var(--radius-full); margin-bottom: 10px; }
+.badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-primary-500); display: inline-block; }
+.ticket-name { font: var(--weight-bold) var(--text-xl)/1 var(--font-sans); color: var(--text-primary); margin-bottom: 5px; letter-spacing: -0.02em; }
+.ticket-sub { font: var(--type-body-sm); color: var(--text-secondary); }
+.notch { position: absolute; bottom: -16px; left: -16px; width: 32px; height: 32px; background: var(--surface-subtle); border-radius: var(--radius-full); }
+.notch.right { left: auto; right: -16px; }
+.ticket-details { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ticket-detail-item { display: flex; flex-direction: column; gap: 4px; }
+.ticket-detail-label { font: var(--type-caption); color: var(--text-tertiary); }
+.ticket-detail-value { font: var(--weight-semibold) var(--text-sm)/var(--leading-snug) var(--font-sans); color: var(--text-primary); }
+.ticket-total { padding: 16px 20px; background: var(--color-primary-50); display: flex; justify-content: space-between; align-items: center; }
+.ticket-total-label { font: var(--weight-semibold) var(--text-base)/1 var(--font-sans); color: var(--text-primary); }
+.ticket-total-value { font: var(--weight-extrabold) var(--text-2xl)/1 var(--font-sans); color: var(--color-primary-500); }
+
+.actions { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.action-btn-primary { height: 54px; background: var(--color-primary-500); color: #fff; border: none; border-radius: var(--radius-md); font: var(--weight-bold) var(--text-lg)/1 var(--font-sans); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.action-btn-outline { height: 50px; background: transparent; color: var(--text-primary); border: 1.5px solid var(--border-default); border-radius: var(--radius-md); font: var(--weight-semibold) var(--text-base)/1 var(--font-sans); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.action-row { display: flex; gap: 10px; }
+.action-row .action-btn-outline { flex: 1; height: 50px; }
+
+.notice { margin: 0 20px 20px; background: var(--surface-subtle); border-radius: var(--radius-md); padding: 14px; }
+.notice-title { font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.notice-list { display: flex; flex-direction: column; gap: 5px; }
+.notice-item { font: var(--type-caption); color: var(--text-tertiary); padding-left: 10px; position: relative; }
+.notice-item::before { content: '·'; position: absolute; left: 0; }
+</style>

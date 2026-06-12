@@ -1,0 +1,77 @@
+<!-- @dsCard group="Components" viewport="700x240" name="Badges & Tags" subtitle="배지, 태그, 상태 칩" -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: #fff; padding: 24px; }
+  .section { margin-bottom: 20px; }
+  .section-label { font: var(--weight-semibold) 11px/1 var(--font-sans); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font: var(--weight-semibold) var(--text-xs)/1 var(--font-sans);
+    padding: 4px 8px; border-radius: var(--radius-full);
+    white-space: nowrap;
+  }
+  .badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font: var(--weight-medium) var(--text-sm)/1 var(--font-sans);
+    padding: 7px 12px; border-radius: var(--radius-full);
+    border: 1.5px solid transparent; cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-default);
+    white-space: nowrap;
+  }
+  .tag-default  { background: var(--surface-subtle); color: var(--text-secondary); border-color: var(--border-default); }
+  .tag-active   { background: var(--color-primary-50); color: var(--color-primary-500); border-color: var(--color-primary-400); }
+</style>
+</head>
+<body>
+  <div class="section">
+    <div class="section-label">Status Badges</div>
+    <div class="row">
+      <span class="badge" style="background:var(--color-primary-50);color:var(--color-primary-600)"><span class="badge-dot" style="background:var(--color-primary-500)"></span>예약 완료</span>
+      <span class="badge" style="background:#E8F5E9;color:#2E7D32"><span class="badge-dot" style="background:var(--color-success)"></span>운행 중</span>
+      <span class="badge" style="background:#FFF8E1;color:#F57F17"><span class="badge-dot" style="background:var(--color-warning)"></span>대기 중</span>
+      <span class="badge" style="background:#FFEBEE;color:#C62828"><span class="badge-dot" style="background:var(--color-error)"></span>취소됨</span>
+      <span class="badge" style="background:var(--surface-subtle);color:var(--text-secondary)"><span class="badge-dot" style="background:var(--text-tertiary)"></span>종료</span>
+      <span class="badge" style="background:var(--color-neutral-800);color:#fff">NEW</span>
+      <span class="badge" style="background:var(--color-primary-500);color:#fff">HOT</span>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-label">Filter Tags</div>
+    <div class="row">
+      <span class="tag tag-active">전체</span>
+      <span class="tag tag-default">기차</span>
+      <span class="tag tag-default">버스</span>
+      <span class="tag tag-default">항공</span>
+      <span class="tag tag-default">숙소</span>
+      <span class="tag tag-default">액티비티</span>
+      <span class="tag tag-default">패키지</span>
+    </div>
+  </div>
+  <div class="section" style="margin-bottom:0">
+    <div class="section-label">Info Chips</div>
+    <div class="row">
+      <span class="tag tag-default" style="border-radius:var(--radius-xs)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        서울특별시
+      </span>
+      <span class="tag tag-default" style="border-radius:var(--radius-xs)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        06/15 ~ 06/17
+      </span>
+      <span class="tag tag-default" style="border-radius:var(--radius-xs)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        성인 2명
+      </span>
+    </div>
+  </div>
+</body>
+</html>
