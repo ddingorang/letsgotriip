@@ -93,6 +93,10 @@ app:
   frontend:
     oauth-callback-url: ${FE_OAUTH_CALLBACK_URL:http://localhost:5173/oauth/callback}
     login-url: ${FE_LOGIN_URL:http://localhost:5173/login}
+  upload:
+    dir: ${UPLOAD_DIR:uploads/community}
+    url-prefix: ${UPLOAD_URL_PREFIX:/uploads/community}
+    base-dir: ${UPLOAD_BASE_DIR:uploads}
 
 # OpenAI (Whisper STT — preprocessing 도메인)
 openai:

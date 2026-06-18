@@ -55,6 +55,13 @@ public class SecurityConfig {
                         // 비회원 공개 조회 (탐색 도메인)
                         .requestMatchers(HttpMethod.GET, "/api/festivals/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/attractions/**").permitAll()
+                        // 커뮤니티 비회원 공개 조회
+                        .requestMatchers(HttpMethod.GET, "/community/posts", "/community/posts/*", "/community/posts/*/comments").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/community/hotplaces", "/community/hotplaces/*").permitAll()
+                        // 동행 비회원 공개 조회
+                        .requestMatchers(HttpMethod.GET, "/companion/posts", "/companion/posts/*").permitAll()
+                        // 업로드 파일 공개 접근
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         // API 문서
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated()

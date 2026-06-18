@@ -6,13 +6,15 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 
 @Configuration
 @EnableJpaRepositories(basePackages = {
-        "com.trip.user.repository",          // UserRepository
+        "com.trip.user.repository",          // UserRepository, AlbumRepository, AlbumPhotoRepository
         "com.trip.chat.repository",          // ChatRoomRepository, ChatRoomMembershipRepository
         "com.trip.festival.repository",      // FestivalRepository
         "com.trip.preprocessing.repository", // UserAnalysisDataRepository
         "com.trip.attraction.repository",    // AttractionRepository
         "com.trip.plan.repository",          // PlanRepository
-        "com.trip.recommend.repository"      // RecommendationRepository
+        "com.trip.recommend.repository",     // RecommendationRepository
+        "com.trip.community.repository",     // PostRepository, CommentRepository, HotPlaceRepository, ...
+        "com.trip.companion.repository"      // CompanionPostRepository, CompanionApplicationRepository
 })
 @EnableMongoRepositories(basePackages = {
         "com.trip.chat.repository.mongo"     // ChatMessageRepository

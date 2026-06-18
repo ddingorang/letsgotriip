@@ -6,7 +6,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -14,10 +17,13 @@ import java.util.List;
  * dev: Vite(5173)가 Origin 헤더를 그대로 전달하므로 프록시 경유여도 CORS 매칭이 필요하다.
  */
 @Configuration
-public class WebConfig {
+public class WebConfig implements WebMvcConfigurer {
 
     @Value("${app.frontend.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}")
     private List<String> allowedOrigins;
+
+    @Value("${app.upload.base-dir:uploads}")
+    private String uploadBaseDir;
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -30,5 +36,12 @@ public class WebConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    @Override
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        String absolutePath = Paths.get(uploadBaseDir).toAbsolutePath().toString();
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:" + absolutePath + "/");
     }
 }

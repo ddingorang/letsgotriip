@@ -66,7 +66,25 @@ public enum ResponseCode {
     RECO_FORBIDDEN(HttpStatus.FORBIDDEN, "RECO403", "해당 추천 결과에 접근 권한이 없습니다."),
     RECO_IN_PROGRESS(HttpStatus.CONFLICT, "RECO409", "이미 추천 요청이 진행 중입니다. 잠시 후 다시 시도해주세요."),
     RECO_EMPTY_RESULT(HttpStatus.UNPROCESSABLE_ENTITY, "RECO422", "AI가 유효한 일정을 생성하지 못했습니다. 다른 조건으로 다시 시도해주세요."),
-    AI_GENERATION_FAILED(HttpStatus.BAD_GATEWAY, "RECO502", "AI 추천 생성에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    AI_GENERATION_FAILED(HttpStatus.BAD_GATEWAY, "RECO502", "AI 추천 생성에 실패했습니다. 잠시 후 다시 시도해주세요."),
+
+    // Community Error
+    POST_NOT_FOUND(HttpStatus.NOT_FOUND, "POST404", "존재하지 않는 게시글입니다."),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMENT404", "존재하지 않는 댓글입니다."),
+    HOTPLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "HOTPLACE404", "존재하지 않는 핫플입니다."),
+
+    // File Error
+    FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE500", "파일 업로드에 실패했습니다."),
+
+    // Album Error
+    ALBUM_NOT_FOUND(HttpStatus.NOT_FOUND, "ALBUM404", "존재하지 않는 앨범입니다."),
+
+    // Companion Error
+    COMPANION_POST_NOT_FOUND(HttpStatus.NOT_FOUND, "COMPANION404", "존재하지 않는 동행 게시글입니다."),
+    COMPANION_APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "COMPANION_APP404", "존재하지 않는 신청입니다."),
+    COMPANION_ALREADY_APPLIED(HttpStatus.CONFLICT, "COMPANION409", "이미 신청한 동행입니다."),
+    COMPANION_POST_CLOSED(HttpStatus.BAD_REQUEST, "COMPANION400", "모집이 마감된 동행입니다."),
+    COMPANION_SELF_APPLY(HttpStatus.BAD_REQUEST, "COMPANION4001", "본인 게시글에는 신청할 수 없습니다.");
 
     private final HttpStatus httpStatus;
     private final String code; // 클라이언트 식별용 코드 (예: "USER404"

@@ -1,0 +1,246 @@
+// Created: 2026-06-15 23:43:19
+package com.trip.companion.service;
+
+import com.trip.chat.entity.ChatRoom;
+import com.trip.chat.entity.ChatRoomMembership;
+import com.trip.chat.repository.ChatRoomMembershipRepository;
+import com.trip.chat.repository.ChatRoomRepository;
+import com.trip.companion.dto.*;
+import com.trip.companion.entity.CompanionApplication;
+import com.trip.companion.entity.CompanionPost;
+import com.trip.companion.entity.enums.CompanionStatus;
+import com.trip.companion.repository.CompanionApplicationRepository;
+import com.trip.companion.repository.CompanionPostRepository;
+import com.trip.community.dto.CursorPageResponse;
+import com.trip.global.error.GeneralException;
+import com.trip.global.error.ResponseCode;
+import com.trip.user.entity.User;
+import com.trip.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class CompanionService {
+
+    private final CompanionPostRepository companionPostRepository;
+    private final CompanionApplicationRepository companionApplicationRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final ChatRoomMembershipRepository chatRoomMembershipRepository;
+    private final UserRepository userRepository;
+
+    // ─── 게시글 ───────────────────────────────────────────────
+
+    @Transactional
+    public CompanionPostResponse createPost(Long userId, CompanionPostCreateRequest request) {
+        User author = findUser(userId);
+
+        CompanionPost post = CompanionPost.builder()
+                .author(author)
+                .title(request.title())
+                .travelDate(request.travelDate())
+                .region(request.region())
+                .duration(request.duration())
+                .maxMembers(request.maxMembers())
+                .estimatedCost(request.estimatedCost())
+                .description(request.description())
+                .build();
+
+        companionPostRepository.save(post);
+
+        // 채팅방 생성 및 모임장 멤버십 등록
+        String chatRoomTitle = request.title().length() > 18
+                ? request.title().substring(0, 18)
+                : request.title();
+
+        ChatRoom chatRoom = ChatRoom.builder()
+                .title(chatRoomTitle)
+                .maxParticipants(request.maxMembers())
+                .participationCount(1)
+                .build();
+
+        chatRoomRepository.save(chatRoom);
+
+        ChatRoomMembership hostMembership = ChatRoomMembership.builder()
+                .userId(userId)
+                .chatRoom(chatRoom)
+                .isHost(true)
+                .isBanned(false)
+                .build();
+
+        chatRoomMembershipRepository.save(hostMembership);
+
+        post.assignChatRoom(chatRoom);
+
+        return CompanionPostResponse.of(post, 1);
+    }
+
+    public CursorPageResponse<CompanionPostSummaryResponse> getPosts(Long cursor, int size) {
+        PageRequest pageable = PageRequest.of(0, size + 1);
+
+        List<CompanionPost> posts = cursor == null
+                ? companionPostRepository.findAllByDeletedFalseOrderByIdDesc(pageable)
+                : companionPostRepository.findAllByDeletedFalseAndIdLessThanOrderByIdDesc(cursor, pageable);
+
+        boolean hasNext = posts.size() > size;
+        List<CompanionPost> content = hasNext ? posts.subList(0, size) : posts;
+
+        List<CompanionPostSummaryResponse> responses = content.stream()
+                .map(CompanionPostSummaryResponse::of)
+                .toList();
+
+        Long nextCursor = hasNext ? content.get(content.size() - 1).getId() : null;
+        return new CursorPageResponse<>(responses, nextCursor, hasNext);
+    }
+
+    public CompanionPostResponse getPost(Long postId) {
+        CompanionPost post = findPost(postId);
+        int currentMembers = post.getChatRoom() != null
+                ? chatRoomMembershipRepository.findByChatRoomId(post.getChatRoom().getId()).size()
+                : 0;
+        return CompanionPostResponse.of(post, currentMembers);
+    }
+
+    @Transactional
+    public CompanionPostResponse updatePost(Long postId, Long userId, CompanionPostUpdateRequest request) {
+        CompanionPost post = findPost(postId);
+        verifyAuthor(post, userId);
+
+        post.update(request.title(), request.travelDate(), request.region(),
+                request.duration(), request.maxMembers(), request.estimatedCost(), request.description());
+
+        int currentMembers = post.getChatRoom() != null
+                ? chatRoomMembershipRepository.findByChatRoomId(post.getChatRoom().getId()).size()
+                : 0;
+        return CompanionPostResponse.of(post, currentMembers);
+    }
+
+    @Transactional
+    public void deletePost(Long postId, Long userId) {
+        CompanionPost post = findPost(postId);
+        verifyAuthor(post, userId);
+        post.delete();
+    }
+
+    @Transactional
+    public void closePost(Long postId, Long userId) {
+        CompanionPost post = findPost(postId);
+        verifyAuthor(post, userId);
+        post.close();
+    }
+
+    // ─── 동행 신청 ────────────────────────────────────────────
+
+    @Transactional
+    public CompanionApplicationResponse apply(Long postId, Long userId) {
+        CompanionPost post = findPost(postId);
+        User applicant = findUser(userId);
+
+        if (post.getAuthor().getId().equals(userId)) {
+            throw new GeneralException(ResponseCode.COMPANION_SELF_APPLY);
+        }
+        if (post.getStatus() != CompanionStatus.OPEN) {
+            throw new GeneralException(ResponseCode.COMPANION_POST_CLOSED);
+        }
+        if (companionApplicationRepository.existsByCompanionPostAndApplicant(post, applicant)) {
+            throw new GeneralException(ResponseCode.COMPANION_ALREADY_APPLIED);
+        }
+
+        CompanionApplication application = CompanionApplication.builder()
+                .companionPost(post)
+                .applicant(applicant)
+                .build();
+
+        companionApplicationRepository.save(application);
+        return CompanionApplicationResponse.of(application);
+    }
+
+    public List<CompanionApplicationResponse> getApplications(Long postId, Long userId) {
+        CompanionPost post = findPost(postId);
+        verifyAuthor(post, userId);
+
+        return companionApplicationRepository.findAllByCompanionPost(post).stream()
+                .map(CompanionApplicationResponse::of)
+                .toList();
+    }
+
+    @Transactional
+    public CompanionApplicationResponse approveApplication(Long postId, Long applicationId, Long userId) {
+        CompanionPost post = findPost(postId);
+        verifyAuthor(post, userId);
+
+        CompanionApplication application = findApplication(applicationId, post);
+        application.approve();
+
+        if (post.getChatRoom() != null) {
+            Long applicantId = application.getApplicant().getId();
+            boolean alreadyMember = chatRoomMembershipRepository
+                    .findByUserIdAndChatRoom(applicantId, post.getChatRoom())
+                    .isPresent();
+
+            if (!alreadyMember) {
+                ChatRoomMembership membership = ChatRoomMembership.builder()
+                        .userId(applicantId)
+                        .chatRoom(post.getChatRoom())
+                        .isHost(false)
+                        .isBanned(false)
+                        .build();
+                chatRoomMembershipRepository.save(membership);
+                post.getChatRoom().setParticipationCount(post.getChatRoom().getParticipationCount() + 1);
+            }
+        }
+
+        return CompanionApplicationResponse.of(application);
+    }
+
+    @Transactional
+    public CompanionApplicationResponse rejectApplication(Long postId, Long applicationId, Long userId) {
+        CompanionPost post = findPost(postId);
+        verifyAuthor(post, userId);
+
+        CompanionApplication application = findApplication(applicationId, post);
+        application.reject();
+        return CompanionApplicationResponse.of(application);
+    }
+
+    @Transactional
+    public void cancelApplication(Long postId, Long applicationId, Long userId) {
+        CompanionPost post = findPost(postId);
+        CompanionApplication application = findApplication(applicationId, post);
+
+        if (!application.getApplicant().getId().equals(userId)) {
+            throw new GeneralException(ResponseCode._FORBIDDEN);
+        }
+
+        companionApplicationRepository.delete(application);
+    }
+
+    // ─── 내부 헬퍼 ───────────────────────────────────────────
+
+    private CompanionPost findPost(Long postId) {
+        return companionPostRepository.findById(postId)
+                .filter(p -> !p.isDeleted())
+                .orElseThrow(() -> new GeneralException(ResponseCode.COMPANION_POST_NOT_FOUND));
+    }
+
+    private CompanionApplication findApplication(Long applicationId, CompanionPost post) {
+        return companionApplicationRepository.findByIdAndCompanionPost(applicationId, post)
+                .orElseThrow(() -> new GeneralException(ResponseCode.COMPANION_APPLICATION_NOT_FOUND));
+    }
+
+    private User findUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new GeneralException(ResponseCode.USER_NOT_FOUND));
+    }
+
+    private void verifyAuthor(CompanionPost post, Long userId) {
+        if (!post.getAuthor().getId().equals(userId)) {
+            throw new GeneralException(ResponseCode._FORBIDDEN);
+        }
+    }
+}
