@@ -70,6 +70,15 @@ const mypageIcon = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" 
   background: var(--color-white);
   border-top: 1px solid var(--color-line-light);
   flex-shrink: 0;
+  /* 명시적 최상위 레이어 — 페이지의 positioned 요소(FAB 등)가 네비 위로 새지 않도록 */
+  position: relative;
+  z-index: 100;
+}
+
+/* 위로 튀어나온 중앙 AI 버튼이 콘텐츠를 덮어도 항상 깔끔하게 위에 보이도록 */
+.nav-ai {
+  position: relative;
+  z-index: 1;
 }
 
 .nav-item {

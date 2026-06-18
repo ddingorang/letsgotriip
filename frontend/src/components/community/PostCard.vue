@@ -1,10 +1,10 @@
 # Created: 2026-06-16 13:25:41
 <template>
   <article class="post-card" @click="$emit('click')">
-    <div class="post-image" v-if="post.imageUrl || true">
+    <div class="post-image">
       <div class="img-area">
-        <div v-if="post.imageUrl" class="img-wrapper">
-          <img :src="post.imageUrl" :alt="post.title" />
+        <div v-if="!imgFailed" class="img-wrapper">
+          <img :src="displayImage" :alt="post.title" @error="imgFailed = true" />
         </div>
         <div v-else class="img-placeholder">
           <span class="img-caption">{{ post.location }}</span>
@@ -62,11 +62,22 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, computed } from 'vue'
+
+const props = defineProps({
   post: { type: Object, required: true },
 })
 
 defineEmits(['click', 'like', 'bookmark'])
+
+// 게시물 사진 — 업로드 이미지가 없으면 id 기반 결정적 여행 사진(picsum)을 채움
+const imgFailed = ref(false)
+const displayImage = computed(() => {
+  const u = props.post.imageUrl
+  if (u) return u
+  const seed = props.post.id ?? props.post.title ?? 'triip'
+  return `https://picsum.photos/seed/triip-${seed}/640/440`
+})
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''

@@ -445,7 +445,7 @@ onMounted(() => {
   font-size: 13px;
   color: var(--color-ink-muted);
 }
-.bottom-spacer { height: 16px; }
+.bottom-spacer { height: calc(28px + var(--safe-bottom)); }
 
 /* ====== 핫플 ====== */
 .hp-pane { background: var(--color-white); }
