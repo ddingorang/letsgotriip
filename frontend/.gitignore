@@ -1,75 +1,24 @@
-# Dependencies and local build state
-node_modules/
-dist/
-.vite/
-
-# Local env and credentials
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-*.p12
-*.pfx
-*.crt
-*.csr
-*.keystore
-*.jks
-id_rsa*
-id_ed25519*
-
-# Confidential or personal local material
-personal/
-private/
-confidential/
-secret/
-secrets/
-local/
-tmp/
-temp/
-drafts/
-대외비/
-개인/
-비밀/
-*personal*
-*private*
-*confidential*
-*secret*
-*credential*
-*credentials*
-*password*
-*token*
-*대외비*
-*개인*
-*비밀*
-
-# Documents and source bundles
-*.pdf
-*.doc
-*.docx
-*.xls
-*.xlsx
-*.ppt
-*.pptx
-*.hwp
-*.hwpx
-*.zip
-*.7z
-*.rar
-*.tar
-*.tar.gz
-*.tgz
-
-# OS/editor noise
-.DS_Store
-Thumbs.db
-desktop.ini
-*.swp
-*.swo
-*.bak
-*.tmp
+# Logs
+logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-.omc/
-public/design/.omc/
-.claude/settings.local.json
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

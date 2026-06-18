@@ -22,7 +22,7 @@ public class AuthController {
     private final CookieUtil cookieUtil;
 
     @PostMapping("signup")
-    public ResponseEntity<SignupResponseDto> signup(@RequestBody final SignupRequestDto signupRequestDto) {
+    public ResponseEntity<SignupResponseDto> signup(@Valid @RequestBody final SignupRequestDto signupRequestDto) {
 
         return ResponseEntity.ok(authService.signup(signupRequestDto));
     }

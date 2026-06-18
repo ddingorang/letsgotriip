@@ -1,13 +1,17 @@
 package com.trip.global.error.exception.handler;
 
 import jakarta.persistence.OptimisticLockException;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.stream.Collectors;
 
 import com.trip.global.error.ErrorResponse;
 import com.trip.global.error.GeneralException;
@@ -58,6 +62,42 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(
                         ResponseCode._BAD_REQUEST.getCode(), // "400"
                         e.getMessage()                       // 예외 메시지 그대로
+                ));
+    }
+
+    // @Valid 검증 실패 (@RequestBody DTO) → 400, 필드별 에러 메시지 반환
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
+
+        final String message = e.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .collect(Collectors.joining(", "));
+
+        log.warn("Validation failed: {}", message);
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        ResponseCode._BAD_REQUEST.getCode(),
+                        ResponseCode._BAD_REQUEST.getMessage(message)
+                ));
+    }
+
+    // @Validated 검증 실패 (메서드 파라미터/경로 변수 등) → 400
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
+
+        final String message = e.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.joining(", "));
+
+        log.warn("Constraint violation: {}", message);
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        ResponseCode._BAD_REQUEST.getCode(),
+                        ResponseCode._BAD_REQUEST.getMessage(message)
                 ));
     }
 

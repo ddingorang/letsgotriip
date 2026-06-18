@@ -70,14 +70,22 @@ public class User extends BaseEntity {
     // 게임포인트
     // 게임 통계
 
+    /** 프로필 이미지를 지정하지 않은 경우 사용할 기본 이미지 URL */
+    public static final String DEFAULT_PROFILE_IMAGE_URL = "/images/default-profile.png";
+
     public static User of(SignupRequestDto dto, String encodedPassword) {
+
+        final String profileImageUrl =
+                (dto.profileImageUrl() == null || dto.profileImageUrl().isBlank())
+                        ? DEFAULT_PROFILE_IMAGE_URL
+                        : dto.profileImageUrl();
 
         return User.builder()
                 .nickname(dto.nickname())
                 .email(dto.email())
                 .password(encodedPassword)
                 .userRole(UserRole.USER)
-                .profileImageUrl(dto.profileImageUrl())
+                .profileImageUrl(profileImageUrl)
                 .status(true)
                 .inActiveDate(null)
                 .build();

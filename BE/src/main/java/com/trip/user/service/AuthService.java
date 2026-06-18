@@ -47,7 +47,12 @@ public class AuthService {
             final User savedUser = userRepository.save(user);
             return new SignupResponseDto(savedUser.getId(), savedUser.getEmail());
         } catch (DataIntegrityViolationException e) {
-            throw new UserHandler(ResponseCode.USER_ALREADY_EXISTS);
+            // 동시 가입 race로 email UNIQUE 제약을 위반한 경우에만 409로 처리한다.
+            // 그 외(NOT NULL 등) 제약 위반은 "이미 존재"로 가리지 않고 그대로 노출시킨다.
+            if (userRepository.existsByEmail(email)) {
+                throw new UserHandler(ResponseCode.USER_ALREADY_EXISTS);
+            }
+            throw e;
         }
     }
 
@@ -61,6 +66,9 @@ public class AuthService {
 
         // 비밀번호가 일치하지 않으면 예외 던짐
         if (!passwordEncoder.matches(password, user.getPassword())) throw new UserHandler(ResponseCode.USER_PASSWORD_MISMATCH);
+
+        // 비활성화(삭제 요청) 회원은 로그인 불가
+        if (!user.isStatus()) throw new UserHandler(ResponseCode.USER_NOT_FOUND);
 
         // 로그인에 성공하면 AccessToken을 생성, RefreshToken을 해시로 변환.
         // RefreshToken을 생성해서 Redis에 저장하고, 클라이언트에는 쿠키로 보내준다.
