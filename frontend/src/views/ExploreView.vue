@@ -266,18 +266,24 @@ function locParams() {
   }
 }
 
-// 현재 위치 확보 — 성공 시 거리순 + 근처 목록 재조회
+// 현재 위치 확보 — 성공 시 거리순 + 근처 목록 조회. 실패/미지원 시 전체 목록 폴백.
 function locateUser(forceSort = false) {
-  if (!navigator.geolocation) return
+  if (!navigator.geolocation) {
+    if (!store.attractions.length) loadAttractions()   // 위치 미지원 → 전체
+    return
+  }
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       userLoc.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       if (forceSort || sortMode.value === 'default') sortMode.value = 'distance'
-      // 위치 확보 → BE 좌표 검색으로 근처 목록 재조회 (검색 중이 아닐 때)
+      // 위치 확보 → BE 좌표 검색으로 근처 목록 조회 (검색 중이 아닐 때)
       if (!searchQuery.value.trim()) loadAttractions()
     },
-    () => {},   // 거부/실패 시 기본순 유지
-    { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+    () => {
+      // 거부/실패 → 위치 없이 전체 목록(아직 안 불러왔으면)
+      if (!store.attractions.length) loadAttractions()
+    },
+    { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
   )
 }
 
@@ -366,10 +372,12 @@ function formatFestDate(raw) {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
-  store.list({ size: PAGE_SIZE })            // default: 전체 (matches selectedCategory 'all')
+  // 위치 우선 — 진입 즉시 내 주변부터. 위치 확보까지 스켈레톤(빈결과 깜빡임 방지),
+  // 성공 시 근처 목록, 거부/실패/미지원 시 전체 목록으로 폴백(locateUser 내부에서 처리).
+  store.loading = true
   festivalStore.loadFestivals()              // festival section (non-blocking)
   store.loadAreas()                          // area list for potential future use
-  locateUser()                               // 현재 위치 확보 → 기본 거리순 정렬
+  locateUser()
 })
 </script>
 
