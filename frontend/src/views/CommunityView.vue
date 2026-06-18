@@ -1,82 +1,80 @@
+# Created: 2026-06-18 12:42:02
 <script setup>
-import { ref } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { fetchPosts } from '../api/community.js';
 
 const router = useRouter();
 
-const activeTab = ref(0);
-const tabs = ['전체', '여행 후기', '여행 팁', '핫플 공유', '동행 후기'];
-
-const hotPlaces = [
-  {
-    id: 1,
-    badge: 'HOT',
-    name: '오션뷰 루프탑 카페',
-    sub: '해운대 · 조회 2,340',
-    icon: 'location',
-  },
-  {
-    id: 2,
-    badge: 'NEW',
-    name: '감성 돼지국밥 골목',
-    sub: '서면 · 조회 1,890',
-    icon: 'food',
-  },
-  {
-    id: 3,
-    badge: 'HOT',
-    name: '광안리 야경 스팟',
-    sub: '수영구 · 조회 1,540',
-    icon: 'flag',
-  },
+const TABS = [
+  { label: '전체', category: null },
+  { label: '후기', category: 'REVIEW' },
+  { label: '질문', category: 'QUESTION' },
+  { label: '꿀팁', category: 'TIP' },
+  { label: '맛집', category: 'RESTAURANT' },
+  { label: '동행구함', category: 'COMPANION' },
 ];
 
-const posts = [
-  {
-    id: 1,
-    avatarChar: '김',
-    avatarStyle: 'background:var(--color-primary-100);color:var(--color-primary-600)',
-    user: '김관통',
-    meta: '2시간 전',
-    region: '부산',
-    title: '부산 2박 3일 커플 여행 완벽 후기 🌊',
-    body: '해운대에서 시작해 광안리, 감천문화마을까지 알차게 다녀왔어요. 특히 해운대 야경은 정말 인생 뷰였고, 밀면도 진짜 맛있었습니다!',
-    photos: 3,
-    likes: 142,
-    liked: true,
-    comments: 28,
-    tags: ['#여행후기', '#커플여행'],
-  },
-  {
-    id: 2,
-    avatarChar: '이',
-    avatarStyle: 'background:var(--color-neutral-100);color:var(--text-secondary)',
-    user: '이여행러',
-    meta: '5시간 전',
-    region: '제주',
-    title: '제주 올레길 완주 도전기 — 11코스 후기',
-    body: '드디어 11코스를 완주했습니다! 총 18.4km, 5시간 30분 소요. 서귀포 해안을 따라 걷는 코스인데 정말 힐링 그 자체예요.',
-    photos: 0,
-    likes: 89,
-    liked: false,
-    comments: 14,
-    tags: ['#올레길', '#제주'],
-  },
-  {
-    id: 3,
-    avatarChar: '박',
-    avatarStyle: 'background:#E8F5E9;color:#2E7D32',
-    user: '박솔로',
-    meta: '어제',
-    region: '경주',
-    title: '경주 혼여 꿀팁 모음 — 이건 꼭 가세요',
-    body: '경주 첫 방문이라면 이 루트대로 하세요. 불국사 → 석굴암 → 첨성대 → 동궁과 월지 야경. 하루에 다 볼 수 있어요!',
-    photos: 0,
-    likes: 203,
-    liked: false,
-    comments: 41,
-    tags: ['#혼여', '#경주꿀팁'],
-  },
+const CATEGORY_LABEL = {
+  REVIEW: '후기',
+  QUESTION: '질문',
+  TIP: '꿀팁',
+  RESTAURANT: '맛집',
+  COMPANION: '동행구함',
+};
+
+const activeTab = ref(0);
+const posts = ref([]);
+const loading = ref(false);
+const hasNext = ref(false);
+const nextCursor = ref(null);
+
+async function loadPosts(reset = false) {
+  if (loading.value) return;
+  loading.value = true;
+  if (reset) {
+    posts.value = [];
+    nextCursor.value = null;
+  }
+  try {
+    const data = await fetchPosts({
+      category: TABS[activeTab.value].category,
+      cursor: nextCursor.value,
+      size: 20,
+    });
+    posts.value = reset ? data.content : [...posts.value, ...data.content];
+    hasNext.value = data.hasNext;
+    nextCursor.value = data.nextCursor;
+  } catch (e) {
+    console.error('게시글 로드 실패', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(activeTab, () => loadPosts(true));
+onMounted(() => loadPosts(true));
+
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return '방금 전';
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}일 전`;
+  return new Date(dateStr).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+}
+
+function avatarChar(nickname) {
+  return nickname ? nickname[0] : '?';
+}
+
+const hotPlaces = [
+  { id: 1, badge: 'HOT', name: '오션뷰 루프탑 카페', sub: '해운대 · 조회 2,340', icon: 'location' },
+  { id: 2, badge: 'NEW', name: '감성 돼지국밥 골목', sub: '서면 · 조회 1,890', icon: 'food' },
+  { id: 3, badge: 'HOT', name: '광안리 야경 스팟', sub: '수영구 · 조회 1,540', icon: 'flag' },
 ];
 </script>
 
@@ -94,13 +92,13 @@ const posts = [
 
     <div class="cat-tabs">
       <div
-        v-for="(tab, i) in tabs"
+        v-for="(tab, i) in TABS"
         :key="i"
         class="cat-tab"
         :class="{ active: activeTab === i }"
         @click="activeTab = i"
       >
-        {{ tab }}
+        {{ tab.label }}
       </div>
     </div>
 
@@ -136,36 +134,54 @@ const posts = [
         </div>
       </div>
 
-      <div class="post-list">
+      <!-- 로딩 (최초) -->
+      <div v-if="loading && posts.length === 0" class="empty-state">
+        <div class="loading-spinner"></div>
+      </div>
+
+      <!-- 게시글 없음 -->
+      <div v-else-if="!loading && posts.length === 0" class="empty-state">
+        <p class="empty-text">아직 게시글이 없습니다.<br>첫 번째 글을 작성해보세요!</p>
+      </div>
+
+      <div v-else class="post-list">
         <div v-for="post in posts" :key="post.id" class="post-item">
           <div class="post-header">
-            <div class="post-avatar" :style="post.avatarStyle">{{ post.avatarChar }}</div>
+            <div class="post-avatar">{{ avatarChar(post.authorNickname) }}</div>
             <div>
-              <div class="post-user">{{ post.user }}</div>
-              <div class="post-meta">{{ post.meta }}</div>
+              <div class="post-user">{{ post.authorNickname }}</div>
+              <div class="post-meta">{{ timeAgo(post.createdAt) }}</div>
             </div>
-            <div class="post-region">{{ post.region }}</div>
+            <div class="post-region">{{ CATEGORY_LABEL[post.category] }}</div>
           </div>
           <div class="post-title">{{ post.title }}</div>
-          <div class="post-body">{{ post.body }}</div>
-          <div v-if="post.photos > 0" class="post-photos">
-            <div v-for="n in post.photos" :key="n" class="post-photo">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <div v-if="post.thumbnailUrl" class="post-photos">
+            <div class="post-photo">
+              <img :src="post.thumbnailUrl" alt="썸네일" class="post-thumb" />
             </div>
           </div>
           <div class="post-footer">
-            <div class="post-action" :class="{ liked: post.liked }">
-              <svg v-if="post.liked" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              {{ post.likes }}
+            <div class="post-action">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              {{ post.likeCount }}
             </div>
             <div class="post-action">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              {{ post.comments }}
+              {{ post.commentCount }}
             </div>
-            <div v-for="tag in post.tags" :key="tag" class="post-tag">{{ tag }}</div>
+            <div class="post-action">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              {{ post.viewCount }}
+            </div>
           </div>
         </div>
+      </div>
+
+      <!-- 더 보기 -->
+      <div v-if="hasNext" class="load-more-wrap">
+        <button class="load-more-btn" :disabled="loading" @click="loadPosts(false)">
+          {{ loading ? '불러오는 중...' : '더 보기' }}
+        </button>
       </div>
     </div>
 
@@ -205,6 +221,11 @@ const posts = [
 .section-title { font: var(--weight-bold) var(--text-lg)/1 var(--font-sans); color: var(--text-primary); }
 .sort-btn { display: flex; align-items: center; gap: 4px; font: var(--weight-medium) var(--text-sm)/1 var(--font-sans); color: var(--text-secondary); }
 
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; }
+.empty-text { text-align: center; font: var(--type-body-sm); color: var(--text-tertiary); line-height: var(--leading-normal); }
+.loading-spinner { width: 32px; height: 32px; border: 3px solid var(--color-primary-100); border-top-color: var(--color-primary-500); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .post-list { display: flex; flex-direction: column; gap: 1px; background: var(--border-subtle); }
 .post-item { background: var(--surface-bg); padding: 16px 20px; cursor: pointer; }
 .post-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -212,14 +233,16 @@ const posts = [
 .post-user { font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); color: var(--text-primary); }
 .post-meta { font: var(--type-caption); color: var(--text-tertiary); margin-top: 2px; }
 .post-region { margin-left: auto; font: var(--weight-medium) var(--text-xs)/1 var(--font-sans); color: var(--color-primary-500); background: var(--color-primary-50); padding: 3px 8px; border-radius: var(--radius-full); }
-.post-title { font: var(--weight-bold) var(--text-base)/var(--leading-snug) var(--font-sans); color: var(--text-primary); margin-bottom: 5px; }
-.post-body { font: var(--type-body-sm); color: var(--text-secondary); line-height: var(--leading-normal); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 10px; }
+.post-title { font: var(--weight-bold) var(--text-base)/var(--leading-snug) var(--font-sans); color: var(--text-primary); margin-bottom: 10px; }
 .post-photos { display: flex; gap: 6px; margin-bottom: 10px; }
-.post-photo { width: 72px; height: 60px; border-radius: var(--radius-sm); background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-100)); display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+.post-photo { width: 72px; height: 60px; border-radius: var(--radius-sm); overflow: hidden; background: var(--color-neutral-100); }
+.post-thumb { width: 100%; height: 100%; object-fit: cover; }
 .post-footer { display: flex; align-items: center; gap: 14px; }
 .post-action { display: flex; align-items: center; gap: 4px; font: var(--weight-medium) var(--text-xs)/1 var(--font-sans); color: var(--text-tertiary); }
-.post-action.liked { color: var(--color-error); }
-.post-tag { font: var(--weight-medium) var(--text-xs)/1 var(--font-sans); background: var(--surface-subtle); color: var(--text-secondary); padding: 3px 8px; border-radius: var(--radius-full); }
+
+.load-more-wrap { display: flex; justify-content: center; padding: 20px; }
+.load-more-btn { padding: 10px 28px; border: 1px solid var(--border-subtle); border-radius: var(--radius-full); font: var(--weight-medium) var(--text-sm)/1 var(--font-sans); color: var(--text-secondary); background: var(--surface-bg); cursor: pointer; }
+.load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .fab {
   position: fixed;

@@ -14,6 +14,9 @@ export default defineConfig({
       // 주의: '/login' 전체를 프록시하면 SPA의 /login 라우트 직접 진입이 백엔드로 가버린다.
       // OAuth 인가 코드 콜백 경로만 프록시한다.
       '/login/oauth2': { target: BACKEND, changeOrigin: true },
+      '/community': { target: BACKEND, changeOrigin: true },
+      '/companion': { target: BACKEND, changeOrigin: true },
+      '/uploads': { target: BACKEND, changeOrigin: true },
     },
   },
 });
