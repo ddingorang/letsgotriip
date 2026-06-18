@@ -19,22 +19,24 @@
           <input v-model="form.title" class="field-input" placeholder="예) 제주 3박 4일 동행 구해요" />
         </div>
 
-        <!-- 여행 지역 + 날짜 -->
-        <div class="row-two">
-          <div class="field">
-            <label class="field-label">여행 지역 <span class="req">*</span></label>
-            <div class="input-icon-wrap">
-              <input v-model="form.location" class="field-input" placeholder="제주" />
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
-            </div>
+        <!-- 여행 지역 -->
+        <div class="field">
+          <label class="field-label">여행 지역 <span class="req">*</span></label>
+          <div class="input-icon-wrap">
+            <input v-model="form.location" class="field-input" placeholder="제주" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
           </div>
-          <div class="field">
-            <label class="field-label">날짜 <span class="req">*</span></label>
-            <div class="input-icon-wrap">
-              <input v-model="form.dateRange" class="field-input" placeholder="6.12-6.15" />
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-            </div>
+        </div>
+
+        <!-- 여행 날짜 -->
+        <div class="field">
+          <label class="field-label">여행 날짜 <span class="req">*</span></label>
+          <div class="date-range-row">
+            <input v-model="form.startDate" type="date" class="field-input date-input" />
+            <span class="date-sep">~</span>
+            <input v-model="form.endDate" type="date" class="field-input date-input" :min="form.startDate" />
           </div>
+          <p v-if="computedDuration" class="duration-hint">{{ computedDuration }}</p>
         </div>
 
         <!-- 최대 인원 -->
@@ -78,6 +80,9 @@
           </div>
         </div>
 
+        <!-- Error message -->
+        <p v-if="submitError" class="submit-error">{{ submitError }}</p>
+
         <!-- Info banner -->
         <div class="info-banner">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
@@ -91,27 +96,54 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const router = useRouter()
 const companionStore = useCompanionStore()
+const authStore = useAuthStore()
 
 const personOptions = ['2명', '3명', '4명', '5명', '6명+']
 const availableTags = ['#20대', '#30대', '#뚜벅이', '#드라이브', '#맛집투어', '#혼행환영', '#가족여행']
 
+const submitting = ref(false)
 const form = ref({
   title: '',
   location: '',
-  dateRange: '',
+  startDate: '',
+  endDate: '',
   maxCount: null,
   description: '',
   tags: [],
 })
 
+const computedDuration = computed(() => {
+  if (!form.value.startDate || !form.value.endDate) return ''
+  const start = new Date(form.value.startDate)
+  const end = new Date(form.value.endDate)
+  const nights = Math.round((end - start) / (1000 * 60 * 60 * 24))
+  if (nights < 0) return ''
+  if (nights === 0) return '당일'
+  return `${nights}박 ${nights + 1}일`
+})
+
+// 종료일이 시작일보다 앞서면 자동 보정
+watch(() => form.value.startDate, (newStart) => {
+  if (form.value.endDate && form.value.endDate < newStart) {
+    form.value.endDate = newStart
+  }
+})
+
 const submitError = ref('')
-const isValid = computed(() => form.value.title && form.value.location && form.value.dateRange && form.value.maxCount)
+const isValid = computed(() =>
+  form.value.title &&
+  form.value.location &&
+  form.value.startDate &&
+  form.value.endDate &&
+  form.value.maxCount
+)
 
 function toggleTag(tag) {
   const idx = form.value.tags.indexOf(tag)
@@ -132,43 +164,21 @@ async function submit() {
   const payload = {
     title: form.value.title,
     region: form.value.location,
-    travelDate: form.value.dateRange,
-    duration: null,
+    travelDate: form.value.startDate,
+    duration: computedDuration.value || '미정',
     maxMembers: parseMax(form.value.maxCount),
-    estimatedCost: null,
+    estimatedCost: 0,
     description: form.value.description,
   }
   try {
     const created = await companionStore.create(payload)
-    // Navigate to applicant management for the newly created post
     if (created?.id) {
       router.push({ name: 'companion-applicants', params: { id: created.id } })
     } else {
       router.back()
     }
   } catch {
-    // BE companion create has a known server-side bug being fixed separately.
-    // Show the error but also insert a local fallback so the UI responds.
     submitError.value = companionStore.error || '등록에 실패했어요. 잠시 후 다시 시도해 주세요.'
-    const fallbackId = Date.now()
-    companionStore.companions.unshift({
-      id: fallbackId,
-      title: form.value.title,
-      location: form.value.location,
-      dateRange: form.value.dateRange,
-      status: '모집중',
-      currentCount: 1,
-      maxCount: parseMax(form.value.maxCount),
-      author: { nickname: '나', tripCount: 1 },
-      period: '-',
-      estimatedCost: '-',
-      tags: form.value.tags,
-      intro: form.value.description,
-      isOwner: true,
-      pendingCount: 0,
-      approvedCount: 0,
-    })
-    router.push({ name: 'companion-applicants', params: { id: fallbackId } })
   }
 }
 </script>
@@ -263,6 +273,26 @@ async function submit() {
 .field-textarea:focus { border-color: var(--color-peach); }
 .field-textarea::placeholder { color: var(--color-ink-muted); }
 
+.date-input { color-scheme: light; }
+
+.date-range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.date-range-row .field-input { flex: 1; }
+.date-sep {
+  font-size: 16px;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.duration-hint {
+  font-size: 12.5px;
+  color: var(--color-peach);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
 .chips-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-btn {
   padding: 7px 16px;
@@ -291,4 +321,13 @@ async function submit() {
   border: 1px solid #c8e0c8;
 }
 .info-text { font-size: 13px; color: var(--color-ink-secondary); line-height: 1.55; letter-spacing: -0.2px; }
+
+.submit-error {
+  font-size: 13px;
+  color: #e53e3e;
+  padding: 10px 14px;
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: var(--radius-md);
+}
 </style>

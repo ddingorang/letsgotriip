@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public record CommentResponse(
         Long id,
         String content,
+        Long authorId,
         String authorNickname,
         String authorProfileImageUrl,
         int likeCount,
@@ -19,6 +20,7 @@ public record CommentResponse(
         return new CommentResponse(
                 comment.getId(),
                 comment.getContent(),
+                comment.getAuthor().getId(),
                 comment.getAuthor().getNickname(),
                 comment.getAuthor().getProfileImageUrl(),
                 comment.getLikeCount(),

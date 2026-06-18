@@ -287,6 +287,9 @@ const filteredHotplaces = computed(() => {
 onMounted(() => {
   postsStore.fetchPosts(true)
   notifStore.load()
+  companionStore.fetchCompanions()
+  companionStore.fetchMyRooms()
+  hotplaceStore.getList()
 })
 </script>
 

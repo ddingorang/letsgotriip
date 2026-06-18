@@ -17,14 +17,17 @@ public record CompanionPostResponse(
         int estimatedCost,
         String description,
         CompanionStatus status,
+        Long authorId,
         String authorNickname,
         String authorProfileImageUrl,
         Long chatRoomId,
         int currentMembers,
+        int pendingCount,
+        int approvedCount,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
-    public static CompanionPostResponse of(CompanionPost post, int currentMembers) {
+    public static CompanionPostResponse of(CompanionPost post, int currentMembers, int pendingCount, int approvedCount) {
         return new CompanionPostResponse(
                 post.getId(),
                 post.getTitle(),
@@ -35,10 +38,13 @@ public record CompanionPostResponse(
                 post.getEstimatedCost(),
                 post.getDescription(),
                 post.getStatus(),
+                post.getAuthor().getId(),
                 post.getAuthor().getNickname(),
                 post.getAuthor().getProfileImageUrl(),
                 post.getChatRoom() != null ? post.getChatRoom().getId() : null,
                 currentMembers,
+                pendingCount,
+                approvedCount,
                 post.getCreatedAt(),
                 post.getUpdatedAt()
         );

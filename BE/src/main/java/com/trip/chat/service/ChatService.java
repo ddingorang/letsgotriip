@@ -12,6 +12,7 @@ import com.trip.chat.dto.MessageSendRequestDto;
 import com.trip.chat.dto.converter.MessageDtoConverter;
 import com.trip.chat.entity.ChatMessage;
 import com.trip.chat.repository.mongo.ChatMessageRepository;
+import com.trip.user.repository.UserRepository;
 
 import static com.trip.chat.dto.converter.MessageDtoIdInjector.withGeneratedMessageId;
 
@@ -24,13 +25,18 @@ public class ChatService {
     private final RabbitTemplate rabbitTemplate;
     private final ChatMessageRepository chatMessageRepository;
     private final SimpMessagingTemplate messagingTemplate; // TODO: 롤백 대상 - RabbitMQ Consumer 방식으로 전환 시 제거
+    private final UserRepository userRepository;
 
     public void sendMessage(final MessageSendRequestDto messageSendRequest, final Long senderId) {
 
         log.info("[1/3] 메시지 전송 프로세스 시작. senderId: {}, chatRoomId: {}", senderId, messageSendRequest.chatRoomId());
 
+        String senderNickname = userRepository.findById(senderId)
+                .map(u -> u.getNickname())
+                .orElse("알 수 없음");
+
         // 클라이언트 요청 DTO에 서버 생성 값(TSID, senderId, timestamp 등) 주입
-        final MessageResponseDto messageDtoWithId = withGeneratedMessageId(messageSendRequest, senderId);
+        final MessageResponseDto messageDtoWithId = withGeneratedMessageId(messageSendRequest, senderId, senderNickname);
         log.info("[2/3] 메시지 ID 생성 완료. messageTSID: {}", messageDtoWithId.messageTSID());
 
         // MongoDB에 채팅 메시지 영구 저장

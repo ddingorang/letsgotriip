@@ -135,6 +135,13 @@
                 </svg>
                 답글
               </button>
+              <button v-if="isMyComment(comment)" class="comment-action delete-action" @click="deleteComment(comment.id)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                </svg>
+                삭제
+              </button>
             </div>
           </div>
         </div>
@@ -144,27 +151,44 @@
     </div>
 
     <div class="comment-input-bar">
-      <div class="input-wrap">
-        <input ref="commentInputRef" v-model="newComment" class="comment-input" placeholder="댓글을 입력하세요" @keydown.enter="submitComment" />
-      </div>
-      <button class="send-btn" :disabled="!newComment.trim()" @click="submitComment">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13" />
-          <polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </svg>
+      <template v-if="authStore.isAuthenticated">
+        <div class="input-wrap">
+          <input ref="commentInputRef" v-model="newComment" class="comment-input" placeholder="댓글을 입력하세요" @keydown.enter.prevent="(e) => !e.isComposing && submitComment()" />
+        </div>
+        <button class="send-btn" :disabled="!newComment.trim() || submitting" @click="submitComment">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </template>
+      <button v-else class="login-prompt" @click="$router.push({ path: '/login', query: { redirect: $route.fullPath } })">
+        댓글을 작성하려면 로그인하세요
       </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePostsStore } from '@/stores/posts.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const route = useRoute()
 const router = useRouter()
 const postsStore = usePostsStore()
+const authStore = useAuthStore()
+
+function isMyComment(comment) {
+  const myId = authStore.user?.userId
+  return myId != null && Number(comment.authorId) === Number(myId)
+}
+
+async function deleteComment(commentId) {
+  if (!confirm('댓글을 삭제하시겠어요?')) return
+  await postsStore.deleteComment(route.params.id, commentId)
+}
 
 const post = computed(() => postsStore.currentPost)
 const comments = computed(() => postsStore.comments)
@@ -173,10 +197,13 @@ const liked = ref(false)
 const bookmarked = ref(false)
 const menuOpen = ref(false)
 const newComment = ref('')
+const submitting = ref(false)
 const commentInputRef = ref(null)
 const dropdownRef = ref(null)
 
-const likeCount = computed(() => (post.value?.likeCount ?? 0) + (liked.value ? 1 : 0))
+watch(post, (p) => { if (p) liked.value = !!p.likedByMe }, { immediate: true })
+
+const likeCount = computed(() => post.value?.likeCount ?? 0)
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''
@@ -188,8 +215,9 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}일 전`
 }
 
-function likePost() {
-  liked.value = !liked.value
+async function likePost() {
+  if (!post.value?.id) return
+  liked.value = await postsStore.likePost(post.value.id)
 }
 
 function bookmarkPost() {
@@ -207,9 +235,14 @@ function focusComment() {
 }
 
 async function submitComment() {
-  if (!newComment.value.trim()) return
-  await postsStore.addComment(route.params.id, newComment.value.trim())
-  newComment.value = ''
+  if (!newComment.value.trim() || submitting.value) return
+  submitting.value = true
+  try {
+    await postsStore.addComment(route.params.id, newComment.value.trim())
+    newComment.value = ''
+  } finally {
+    submitting.value = false
+  }
 }
 
 function editPost() {
@@ -585,6 +618,10 @@ onBeforeUnmount(() => {
   letter-spacing: -0.2px;
 }
 
+.delete-action {
+  color: var(--color-error, #e53e3e);
+}
+
 .bottom-spacer {
   height: 16px;
 }
@@ -634,6 +671,14 @@ onBeforeUnmount(() => {
 
 .send-btn:disabled {
   background: var(--color-line);
+}
+
+.login-prompt {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.2px;
 }
 
 .fade-enter-active,

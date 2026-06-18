@@ -20,6 +20,15 @@ public class CompanionController {
 
     private final CompanionService companionService;
 
+    // ─── 내 참여 방 ───────────────────────────────────────────
+
+    @GetMapping("/my")
+    public ResponseEntity<List<MyCompanionRoomResponse>> getMyRooms(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(companionService.getMyRooms(principal.userId()));
+    }
+
     // ─── 게시글 ───────────────────────────────────────────────
 
     @PostMapping
