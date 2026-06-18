@@ -92,30 +92,15 @@
         </div>
       </div>
 
-      <!-- Map view -->
+      <!-- Map view (실제 카카오 지도) -->
       <div v-if="hpView === 'map'" class="map-wrap">
-        <div class="map-bg">
-          <div class="map-road h-road" style="top: 32%" />
-          <div class="map-road h-road thin" style="top: 58%" />
-          <div class="map-road v-road" style="left: 42%" />
-          <div class="map-road v-road thin" style="left: 68%" />
-          <div class="map-block" style="top:8%;left:10%;width:22%;height:18%;background:#d8e8d0" />
-          <div class="map-block" style="top:38%;left:55%;width:28%;height:14%;background:#dde8d8" />
-          <div class="map-block water" style="top:68%;left:0%;width:35%;height:28%" />
-
-          <button
-            v-for="hp in filteredHotplaces"
-            :key="hp.id"
-            :class="['pin-btn', { selected: selectedHp?.id === hp.id }]"
-            :style="{ left: hp.x + '%', top: hp.y + '%' }"
-            @click="selectedHp = selectedHp?.id === hp.id ? null : hp"
-          >
-            <svg width="30" height="38" viewBox="0 0 30 38" :fill="selectedHp?.id === hp.id ? '#e0743a' : '#f78f57'">
-              <path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 23 15 23S30 25.5 30 15C30 6.716 23.284 0 15 0z" />
-              <circle cx="15" cy="15" r="6" fill="white" />
-            </svg>
-            <span v-if="selectedHp?.id === hp.id" class="pin-label">{{ hp.name }}</span>
-          </button>
+        <TripMap
+          :places="mappableHotplaces"
+          :selected-id="selectedHp?.id"
+          @select="onHpSelect"
+        />
+        <div v-if="!mappableHotplaces.length" class="map-empty">
+          지도에 표시할 핫플이 아직 없어요
         </div>
 
         <Transition name="slide-up">
@@ -140,6 +125,13 @@
 
       <!-- List view -->
       <div v-else class="hp-list">
+        <div v-if="!filteredHotplaces.length" class="hp-empty">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
+          </svg>
+          <span>아직 등록된 핫플이 없어요</span>
+          <button class="hp-empty-btn" @click="$router.push('/hotplace/register')">핫플 등록하기</button>
+        </div>
         <div
           v-for="hp in filteredHotplaces"
           :key="hp.id"
@@ -247,6 +239,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import PostCard from '@/components/community/PostCard.vue'
+import TripMap from '@/components/common/TripMap.vue'
 import { usePostsStore } from '@/stores/posts.js'
 import { useHotplaceStore } from '@/stores/hotplace.js'
 import { useCompanionStore } from '@/stores/companion.js'
@@ -283,6 +276,15 @@ const filteredHotplaces = computed(() => {
   if (hpCat.value === '전체') return hotplaceStore.hotplaces
   return hotplaceStore.hotplaces.filter((h) => h.category === hpCat.value)
 })
+// 지도용 — 좌표(lat/lng)가 있는 핫플만
+const mappableHotplaces = computed(() =>
+  filteredHotplaces.value.filter(
+    (h) => Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lng)),
+  ),
+)
+function onHpSelect(place) {
+  selectedHp.value = selectedHp.value?.id === place.id ? null : place
+}
 
 onMounted(() => {
   postsStore.fetchPosts(true)
@@ -494,6 +496,42 @@ onMounted(() => {
   flex: 1;
   position: relative;
   overflow: hidden;
+}
+
+.map-empty {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: var(--color-white);
+  border: 1px solid var(--color-line-light);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-full);
+  padding: 8px 16px;
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.hp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 56px 20px;
+  color: var(--color-ink-muted);
+  font-size: 14px;
+}
+
+.hp-empty-btn {
+  margin-top: 4px;
+  padding: 11px 22px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .map-bg {
   width: 100%;
