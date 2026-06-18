@@ -282,6 +282,7 @@ onMounted(() => {
   postsStore.fetchPosts(true)
   companionStore.fetchCompanions()
   companionStore.fetchMyRooms()
+  hotplaceStore.getList()
 })
 </script>
 

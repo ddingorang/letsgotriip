@@ -35,7 +35,7 @@ function loadKakao() {
       return
     }
     const s = document.createElement('script')
-    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`
     s.onload = () => window.kakao.maps.load(() => resolve(window.kakao))
     s.onerror = () => reject(new Error('Kakao 지도 SDK 로드 실패(도메인 등록 확인)'))
     document.head.appendChild(s)
