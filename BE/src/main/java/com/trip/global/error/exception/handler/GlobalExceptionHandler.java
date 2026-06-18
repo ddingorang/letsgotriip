@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -29,6 +30,18 @@ import com.trip.global.error.ResponseCode;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    // 인증 쿠키(refreshToken, sessionId) 누락 → 401
+    @ExceptionHandler(MissingRequestCookieException.class)
+    public ResponseEntity<ErrorResponse> handleMissingCookie(MissingRequestCookieException e) {
+        log.warn("Missing required cookie: {}", e.getCookieName());
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(
+                        ResponseCode._UNAUTHORIZED.getCode(),
+                        ResponseCode._UNAUTHORIZED.getMessage()
+                ));
+    }
 
     // IllegalArgumentException: 잘못된 인자가 전달됐을 때 (예: 음수 나이)
     // IllegalStateException: 객체 상태가 올바르지 않을 때 (예: 이미 시작된 게임 재시작)

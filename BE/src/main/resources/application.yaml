@@ -92,6 +92,7 @@ chat:
 app:
   frontend:
     oauth-callback-url: ${FE_OAUTH_CALLBACK_URL:http://localhost:5173/oauth/callback}
+    login-url: ${FE_LOGIN_URL:http://localhost:5173/login}
 
 # OpenAI (Whisper STT — preprocessing 도메인)
 openai:
