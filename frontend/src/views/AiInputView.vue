@@ -4,156 +4,84 @@
     <header class="ai-header">
       <div class="ai-hero-glow" />
       <div class="ai-hero-glow2" />
+      <button class="back-btn" @click="$router.back()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 12H5M12 5l-7 7 7 7" />
+        </svg>
+      </button>
       <div class="ai-badge">
         <span class="ai-badge-dot" />
-        AI 분석 준비 완료
+        조건 확인
       </div>
-      <h1 class="ai-title">어떤 여행을<br />원하시나요?</h1>
-      <p class="ai-sub">조건을 입력하면 AI가 최적의 일정을 만들어 드려요</p>
+      <h1 class="ai-title">이렇게 일정을<br />만들까요?</h1>
+      <p class="ai-sub">조건을 확인하고 AI 일정 생성을 시작하세요</p>
     </header>
 
     <div class="scroll-content">
-      <!-- 지역 -->
-      <div class="form-card">
-        <div class="form-card-title">
-          <span class="form-card-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <!-- 선택 조건 요약 -->
+      <div class="summary-card">
+        <div class="summary-row">
+          <span class="summary-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <circle cx="12" cy="11" r="3" />
             </svg>
           </span>
-          어디로 가고 싶으세요?
+          <span class="summary-label">지역</span>
+          <span class="summary-val">{{ areaName }}</span>
         </div>
-        <div v-if="areasLoading" class="region-loading">지역 목록을 불러오는 중...</div>
-        <div v-else class="region-grid">
-          <button
-            v-for="area in areas"
-            :key="area.code"
-            class="region-btn"
-            :class="{ selected: selectedAreaCode === area.code }"
-            @click="selectedAreaCode = area.code"
-          >{{ area.name }}</button>
-        </div>
-      </div>
-
-      <!-- 날짜 -->
-      <div class="form-card">
-        <div class="form-card-title">
-          <span class="form-card-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div class="summary-row">
+          <span class="summary-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2" />
               <line x1="16" y1="2" x2="16" y2="6" />
               <line x1="8" y1="2" x2="8" y2="6" />
               <line x1="3" y1="10" x2="21" y2="10" />
             </svg>
           </span>
-          언제 떠나세요?
+          <span class="summary-label">일정</span>
+          <span class="summary-val">{{ conditions?.startDate }} ~ {{ conditions?.endDate }}</span>
         </div>
-        <div class="date-row">
-          <div class="date-picker">
-            <div class="date-picker-label">출발일</div>
-            <input
-              v-model="startDate"
-              type="date"
-              class="date-input"
-              :min="todayStr"
-            />
-            <div class="date-picker-value">{{ formatDisplay(startDate) }}</div>
-          </div>
-          <div class="date-arrow">→</div>
-          <div class="date-picker">
-            <div class="date-picker-label">도착일</div>
-            <div class="date-picker-value">{{ formatDisplay(endDate) }}</div>
-          </div>
-        </div>
-        <div class="night-row">
-          <span class="night-label">숙박 일수</span>
-          <div class="night-ctrl">
-            <button class="night-btn" :disabled="nights <= 1" @click="nights > 1 && nights--">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            </button>
-            <span class="night-val">{{ nights }}박</span>
-            <button class="night-btn" :disabled="nights >= 7" @click="nights < 7 && nights++">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 동행인 -->
-      <div class="form-card">
-        <div class="form-card-title">
-          <span class="form-card-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div class="summary-row">
+          <span class="summary-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
           </span>
-          누구와 함께 가나요?
+          <span class="summary-label">동행</span>
+          <span class="summary-val">{{ companionLabel }}</span>
         </div>
-        <div class="people-grid">
-          <button
-            v-for="c in companionTypes"
-            :key="c.key"
-            class="people-btn"
-            :class="{ selected: selectedCompanion === c.key }"
-            @click="selectedCompanion = c.key"
-          >
-            <span class="people-icon" v-html="c.icon" />
-            <span class="people-text">
-              <span class="people-name">{{ c.label }}</span>
-              <span class="people-sub">{{ c.sub }}</span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 예산 -->
-      <div class="form-card">
-        <div class="form-card-title">
-          <span class="form-card-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div v-if="conditions?.budget" class="summary-row">
+          <span class="summary-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="1" x2="12" y2="23" />
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
           </span>
-          예산이 얼마나 되세요?
+          <span class="summary-label">예산</span>
+          <span class="summary-val">{{ conditions.budget.toLocaleString() }}원 이하</span>
         </div>
-        <div class="budget-options">
-          <button
-            v-for="opt in budgetOptions"
-            :key="opt.label"
-            class="budget-chip"
-            :class="{ selected: selectedBudget === opt.label }"
-            @click="selectedBudget = opt.label"
-          >{{ opt.label }}</button>
-        </div>
-      </div>
-
-      <!-- 테마 -->
-      <div class="form-card">
-        <div class="form-card-title">
-          <span class="form-card-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div v-if="conditions?.themes?.length" class="summary-row themes-row">
+          <span class="summary-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
           </span>
-          어떤 여행을 원하세요?
-          <span class="title-hint">(복수 선택)</span>
-        </div>
-        <div class="theme-grid">
-          <button
-            v-for="t in themes"
-            :key="t.key"
-            class="theme-btn"
-            :class="{ selected: selectedThemes.includes(t.key) }"
-            @click="toggleTheme(t.key)"
-          >
-            <span class="theme-icon">{{ t.icon }}</span>
-            <span class="theme-label">{{ t.label }}</span>
-          </button>
+          <span class="summary-label">테마</span>
+          <div class="theme-chips">
+            <span v-for="t in conditions.themes" :key="t" class="theme-chip">{{ themeLabel(t) }}</span>
+          </div>
         </div>
       </div>
+
+      <!-- 조건 수정 안내 -->
+      <button class="edit-btn" @click="$router.back()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+        조건 수정하기
+      </button>
 
       <div class="bottom-spacer" />
     </div>
@@ -203,154 +131,59 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRecommendStore } from '@/stores/recommend.js'
-import { http } from '@/api/http.js'
 
 const router = useRouter()
 const recommendStore = useRecommendStore()
 
-// ── 지역 ──────────────────────────────────────────────────────────────────────
-const areas = ref([])
-const areasLoading = ref(true)
-const selectedAreaCode = ref('')
+// ── 조건 읽기: AiPlanInputView가 history.state.conditions로 전달 ──────────────
+const conditions = ref(null)
 
-onMounted(async () => {
-  try {
-    const { data } = await http.get('/api/attractions/areas')
-    areas.value = (Array.isArray(data) ? data : []).slice(0, 8)
-    if (areas.value.length) selectedAreaCode.value = areas.value[0].code
-  } catch {
-    // fallback static list
-    areas.value = [
-      { code: '1', name: '서울' },
-      { code: '6', name: '부산' },
-      { code: '4', name: '대구' },
-      { code: '2', name: '인천' },
-      { code: '5', name: '광주' },
-      { code: '3', name: '대전' },
-      { code: '7', name: '울산' },
-      { code: '39', name: '제주도' },
-    ]
-    selectedAreaCode.value = areas.value[0].code
-  } finally {
-    areasLoading.value = false
+onMounted(() => {
+  const state = history.state?.conditions
+  if (state) {
+    conditions.value = state
   }
 })
 
-// ── 날짜 ──────────────────────────────────────────────────────────────────────
-// Use local year/month/day to avoid UTC off-by-one in KST early morning
-const fmtDate = (d) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-const todayStr = fmtDate(new Date())
-
-function defaultStart() {
-  const d = new Date()
-  d.setDate(d.getDate() + 7)
-  return fmtDate(d)
+// ── 표시용 헬퍼 ───────────────────────────────────────────────────────────────
+const areaCodeNames = {
+  '1': '서울', '6': '부산', '4': '대구', '2': '인천',
+  '5': '광주', '3': '대전', '7': '울산', '39': '제주도',
 }
+const areaName = computed(() => areaCodeNames[conditions.value?.areaCode] ?? conditions.value?.areaCode ?? '-')
 
-const startDate = ref(defaultStart())
-const nights = ref(2)
-
-const endDate = computed(() => {
-  const d = new Date(startDate.value)
-  d.setDate(d.getDate() + nights.value)
-  return fmtDate(d)
-})
-
-function formatDisplay(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const month = d.getMonth() + 1
-  const day = d.getDate()
-  const weekdays = ['일', '월', '화', '수', '목', '금', '토']
-  const wd = weekdays[d.getDay()]
-  return `${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')} (${wd})`
+const companionApiToLabel = {
+  SOLO: '혼자', COUPLE: '커플', FAMILY: '가족', FRIENDS: '친구',
 }
+const companionLabel = computed(() => companionApiToLabel[conditions.value?.companions] ?? conditions.value?.companions ?? '-')
 
-// ── 동행인 ────────────────────────────────────────────────────────────────────
-const companionTypes = [
-  {
-    key: 'solo',
-    apiVal: 'SOLO',
-    label: '혼자',
-    sub: '솔로 여행',
-    icon: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
-  },
-  {
-    key: 'couple',
-    apiVal: 'COUPLE',
-    label: '커플',
-    sub: '2명',
-    icon: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
-  },
-  {
-    key: 'family',
-    apiVal: 'FAMILY',
-    label: '가족',
-    sub: '아이 포함',
-    icon: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>`,
-  },
-  {
-    key: 'friend',
-    apiVal: 'FRIENDS',
-    label: '친구',
-    sub: '3명 이상',
-    icon: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="7" r="4"/><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/></svg>`,
-  },
-]
-const selectedCompanion = ref('couple')
-
-// ── 예산 ──────────────────────────────────────────────────────────────────────
-const budgetOptions = [
-  { label: '10만원 이하',  value: 100_000   },
-  { label: '10~30만원',   value: 300_000   },
-  { label: '30~50만원',   value: 500_000   },
-  { label: '50만원 이상', value: 1_000_000 },
-  { label: '상관없음',    value: null       },
-]
-const selectedBudget = ref('10~30만원')
-
-// ── 테마 ──────────────────────────────────────────────────────────────────────
-const themes = [
-  { key: 'sea',      icon: '🌊', label: '바다/해변' },
-  { key: 'mountain', icon: '🏔️', label: '산/자연'   },
-  { key: 'food',     icon: '🍽️', label: '맛집 투어' },
-  { key: 'history',  icon: '🏛️', label: '역사/문화' },
-  { key: 'activity', icon: '🎢', label: '액티비티'  },
-  { key: 'shopping', icon: '🛍️', label: '쇼핑'      },
-]
-const selectedThemes = ref(['sea', 'food'])
-
-function toggleTheme(key) {
-  const idx = selectedThemes.value.indexOf(key)
-  if (idx === -1) selectedThemes.value.push(key)
-  else selectedThemes.value.splice(idx, 1)
+const themeLabelMap = {
+  sea: '바다/해변', mountain: '산/자연', food: '맛집 투어',
+  history: '역사/문화', activity: '액티비티', shopping: '쇼핑',
 }
+function themeLabel(key) { return themeLabelMap[key] ?? key }
 
 // ── 에러 ──────────────────────────────────────────────────────────────────────
 const localError = ref('')
 
-// ── 제출 ──────────────────────────────────────────────────────────────────────
+// ── 생성 ──────────────────────────────────────────────────────────────────────
 async function handleGenerate() {
-  if (!selectedAreaCode.value) {
-    localError.value = '지역을 선택해 주세요.'
+  if (!conditions.value?.areaCode) {
+    localError.value = '조건을 먼저 설정해 주세요. 이전 화면으로 돌아가 지역을 선택해 주세요.'
     return
   }
   localError.value = ''
   recommendStore.error = null
 
-  const companion = companionTypes.find(c => c.key === selectedCompanion.value)
-  const budgetOpt = budgetOptions.find(o => o.label === selectedBudget.value)
-
   const payload = {
-    areaCode: selectedAreaCode.value,
-    startDate: startDate.value,
-    endDate: endDate.value,
-    companions: companion?.apiVal,
-    themes: selectedThemes.value.length ? selectedThemes.value : undefined,
+    areaCode: conditions.value.areaCode,
+    startDate: conditions.value.startDate,
+    endDate: conditions.value.endDate,
+    companions: conditions.value.companions,
+    themes: conditions.value.themes?.length ? conditions.value.themes : undefined,
+    periodValid: conditions.value.periodValid ?? true,
   }
-  if (budgetOpt?.value != null) payload.budget = budgetOpt.value
+  if (conditions.value.budget != null) payload.budget = conditions.value.budget
 
   try {
     await recommendStore.generate(payload)
@@ -377,6 +210,18 @@ async function handleGenerate() {
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.back-btn {
+  position: absolute;
+  top: 52px;
+  left: 16px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ai-hero-glow {
@@ -437,6 +282,7 @@ async function handleGenerate() {
   margin-bottom: 8px;
   position: relative;
   z-index: 1;
+  padding-left: 4px;
 }
 
 .ai-sub {
@@ -462,26 +308,28 @@ async function handleGenerate() {
   flex-shrink: 0;
 }
 
-/* ── Form cards ──────────────────────────────────────────────────────────── */
-.form-card {
+/* ── Summary card ────────────────────────────────────────────────────────── */
+.summary-card {
   background: var(--color-white);
   border-radius: var(--radius-lg);
   padding: 16px;
   box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.form-card-title {
+.summary-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.3px;
-  margin-bottom: 14px;
+  gap: 10px;
 }
 
-.form-card-icon {
+.themes-row {
+  align-items: flex-start;
+}
+
+.summary-icon {
   width: 26px;
   height: 26px;
   background: var(--color-peach-light);
@@ -493,261 +341,54 @@ async function handleGenerate() {
   flex-shrink: 0;
 }
 
-.title-hint {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--color-ink-muted);
-}
-
-/* ── Region grid ─────────────────────────────────────────────────────────── */
-.region-loading {
-  font-size: 13px;
-  color: var(--color-ink-muted);
-}
-
-.region-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.region-btn {
-  padding: 10px 4px;
-  background: var(--color-surface);
-  border-radius: var(--radius-sm);
-  border: 1.5px solid transparent;
+.summary-label {
   font-size: 12.5px;
-  font-weight: 500;
-  color: var(--color-ink-secondary);
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.region-btn.selected {
-  background: var(--color-peach-light);
-  border-color: var(--color-peach);
-  color: var(--color-peach-pressed);
-  font-weight: 700;
-}
-
-/* ── Date ────────────────────────────────────────────────────────────────── */
-.date-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.date-picker {
-  flex: 1;
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  border: 1.5px solid var(--color-line-light);
-  position: relative;
-}
-
-.date-picker-label {
-  font-size: 11px;
   color: var(--color-ink-muted);
-  margin-bottom: 4px;
   font-weight: 500;
+  width: 44px;
+  flex-shrink: 0;
 }
 
-.date-picker-value {
-  font-size: 13px;
+.summary-val {
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-ink);
   letter-spacing: -0.2px;
+  flex: 1;
 }
 
-.date-input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  width: 100%;
-  cursor: pointer;
-}
-
-.date-arrow {
-  color: var(--color-ink-muted);
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.night-row {
+.theme-chips {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.night-label {
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--color-ink-secondary);
-}
-
-.night-ctrl {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.night-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-line);
-  background: var(--color-white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--color-ink);
-  transition: all 0.15s;
-}
-
-.night-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.night-val {
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--color-ink);
-  min-width: 36px;
-  text-align: center;
-}
-
-/* ── People grid ─────────────────────────────────────────────────────────── */
-.people-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-.people-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  border: 1.5px solid transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.15s;
-}
-
-.people-btn.selected {
-  background: var(--color-peach-light);
-  border-color: var(--color-peach);
-}
-
-.people-icon {
-  width: 32px;
-  height: 32px;
-  background: var(--color-white);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-ink-secondary);
-  flex-shrink: 0;
-}
-
-.people-btn.selected .people-icon {
-  background: var(--color-peach-light);
-  color: var(--color-peach);
-}
-
-.people-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.people-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.2px;
-}
-
-.people-sub {
-  font-size: 11px;
-  color: var(--color-ink-muted);
-}
-
-/* ── Budget chips ────────────────────────────────────────────────────────── */
-.budget-options {
-  display: flex;
-  gap: 8px;
   flex-wrap: wrap;
-}
-
-.budget-chip {
-  padding: 8px 14px;
-  border-radius: var(--radius-full);
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--color-surface);
-  color: var(--color-ink-secondary);
-  border: 1.5px solid var(--color-line);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.budget-chip.selected {
-  background: var(--color-peach-light);
-  border-color: var(--color-peach);
-  color: var(--color-peach-pressed);
-  font-weight: 700;
-}
-
-/* ── Theme grid ──────────────────────────────────────────────────────────── */
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.theme-btn {
-  padding: 12px 8px;
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  border: 1.5px solid transparent;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: 6px;
-  cursor: pointer;
-  transition: all 0.15s;
+  flex: 1;
 }
 
-.theme-btn.selected {
+.theme-chip {
   background: var(--color-peach-light);
-  border-color: var(--color-peach);
-}
-
-.theme-icon {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.theme-label {
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--color-ink-secondary);
-  text-align: center;
-}
-
-.theme-btn.selected .theme-label {
   color: var(--color-peach-pressed);
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+/* ── Edit button ─────────────────────────────────────────────────────────── */
+.edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--color-line);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  transition: all 0.15s;
 }
 
 /* ── Bottom CTA ──────────────────────────────────────────────────────────── */

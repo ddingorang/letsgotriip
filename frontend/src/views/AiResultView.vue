@@ -211,6 +211,10 @@ async function handleSavePlan() {
   try {
     await recommendStore.savePlan(rec.value.id)
     saveDone.value = true
+    // Navigate to plan hub after a brief moment so user sees the "저장됨" state
+    setTimeout(() => {
+      router.replace('/plan')
+    }, 800)
   } catch {
     // error shown via store.error
   } finally {

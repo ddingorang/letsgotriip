@@ -1,6 +1,8 @@
 // Created: 2026-06-16 14:01:32
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { companionApi } from '@/api/index.js'
+import { http } from '@/api/http.js'
 
 export const useCompanionStore = defineStore('companion', () => {
   const myRooms = ref([
@@ -56,19 +58,175 @@ export const useCompanionStore = defineStore('companion', () => {
     ],
   })
 
-  function approveApplicant(id) {
-    const a = applicants.value.find(a => a.id === id)
-    if (a) a.status = 'approved'
+  const loading = ref(false)
+  const error = ref(null)
+
+  // ── helpers ───────────────────────────────────────────────────────────────────
+
+  function normalizeItem(item) {
+    // Map BE field names → store shape used by the views
+    return {
+      id: item.id,
+      title: item.title ?? '',
+      location: item.region ?? item.location ?? '',
+      dateRange: item.travelDate ?? item.dateRange ?? '',
+      status: item.status ?? '모집중',
+      currentCount: item.currentMembers ?? item.currentCount ?? 1,
+      maxCount: item.maxMembers ?? item.maxCount ?? 4,
+      thumbnail: item.thumbnail ?? null,
+      author: item.author ?? { nickname: item.authorNickname ?? '-', role: '방장', tripCount: 0 },
+      period: item.duration ?? item.period ?? '-',
+      estimatedCost: item.estimatedCost != null
+        ? `${Number(item.estimatedCost).toLocaleString()}원`
+        : (item.estimatedCostStr ?? '-'),
+      tags: item.tags ?? [],
+      intro: item.description ?? item.intro ?? '',
+      isOwner: item.isOwner ?? false,
+      pendingCount: item.pendingCount ?? 0,
+      approvedCount: item.approvedCount ?? 0,
+    }
   }
 
-  function rejectApplicant(id) {
-    const a = applicants.value.find(a => a.id === id)
-    if (a) a.status = 'rejected'
+  // ── actions ───────────────────────────────────────────────────────────────────
+
+  async function getList(params) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await companionApi.getList(params)
+      const items = Array.isArray(data) ? data : (data?.content ?? [])
+      companions.value = items.map(normalizeItem)
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '목록을 불러오지 못했어요.'
+      // keep mock fallback intact
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function getDetail(id) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await companionApi.getDetail(id)
+      const normalized = normalizeItem(data)
+      const idx = companions.value.findIndex(c => c.id === normalized.id)
+      if (idx !== -1) companions.value[idx] = normalized
+      else companions.value.unshift(normalized)
+      return normalized
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '상세 정보를 불러오지 못했어요.'
+      // fallback: return existing cached item if present
+      return companions.value.find(c => c.id === Number(id)) ?? null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function create(payload) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await companionApi.create(payload)
+      const normalized = normalizeItem(data)
+      companions.value.unshift(normalized)
+      return normalized
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '등록에 실패했어요.'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function join(id) {
+    loading.value = true
+    error.value = null
+    try {
+      await companionApi.join(id)
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '신청에 실패했어요.'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // ── applicant normalization ───────────────────────────────────────────────────
+
+  // Map BE CompanionApplicationResponse fields → view shape
+  function normalizeApplicant(item) {
+    return {
+      id: item.id,
+      nickname: item.applicantNickname ?? item.nickname ?? '-',
+      ageGroup: item.ageGroup ?? '-',
+      tripCount: item.tripCount ?? 0,
+      mannerScore: item.mannerScore ?? null,
+      message: item.message ?? '',
+      // BE status enum: PENDING / APPROVED / REJECTED → lowercase for views
+      status: (item.status ?? 'PENDING').toLowerCase(),
+      applicantId: item.applicantId ?? null,
+      profileImageUrl: item.applicantProfileImageUrl ?? item.profileImageUrl ?? null,
+    }
+  }
+
+  // ── applicant management (BE) ─────────────────────────────────────────────────
+
+  async function getApplications(postId) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await http.get(`/api/companion/posts/${postId}/applications`)
+      const list = Array.isArray(data) ? data : (data?.content ?? [])
+      applicants.value = list.map(normalizeApplicant)
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '신청자 목록을 불러오지 못했어요.'
+      // keep existing mock applicants as fallback
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function approveApplicant(postId, applicationId) {
+    try {
+      const { data } = await http.patch(
+        `/api/companion/posts/${postId}/applications/${applicationId}/approve`
+      )
+      const normalized = normalizeApplicant(data)
+      const idx = applicants.value.findIndex(a => a.id === applicationId)
+      if (idx !== -1) applicants.value[idx] = normalized
+    } catch (e) {
+      // optimistic local fallback
+      const a = applicants.value.find(a => a.id === applicationId)
+      if (a) a.status = 'approved'
+      error.value = e.response?.data?.message ?? e.message ?? '승인에 실패했어요.'
+    }
+  }
+
+  async function rejectApplicant(postId, applicationId) {
+    try {
+      const { data } = await http.patch(
+        `/api/companion/posts/${postId}/applications/${applicationId}/reject`
+      )
+      const normalized = normalizeApplicant(data)
+      const idx = applicants.value.findIndex(a => a.id === applicationId)
+      if (idx !== -1) applicants.value[idx] = normalized
+    } catch (e) {
+      // optimistic local fallback
+      const a = applicants.value.find(a => a.id === applicationId)
+      if (a) a.status = 'rejected'
+      error.value = e.response?.data?.message ?? e.message ?? '거절에 실패했어요.'
+    }
   }
 
   function getById(id) {
     return companions.value.find(c => c.id === Number(id))
   }
 
-  return { myRooms, companions, applicants, messages, approveApplicant, rejectApplicant, getById }
+  return {
+    myRooms, companions, applicants, messages,
+    loading, error,
+    getList, getDetail, create, join,
+    getApplications, approveApplicant, rejectApplicant, getById,
+  }
 })

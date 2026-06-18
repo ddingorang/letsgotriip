@@ -58,36 +58,39 @@ export const recommendApi = {
   savePlan: (id) => http.post(`/api/recommendations/${id}/save-plan`),
 }
 
-// ── Hotplace (BE: /community/hotplaces — no /api prefix) ───────────────────────
-// GET /community/hotplaces            (Page)
-// GET /community/hotplaces/{id}
+// NOTE: BE serves these at /community/* and /companion/* (no /api prefix), but the
+// SPA also uses /community and /companion as page routes. To avoid the dev proxy
+// hijacking page navigations, the FE calls them under /api/* and the vite proxy
+// rewrites /api away before forwarding to the BE (see vite.config.js).
+
+// ── Hotplace (BE: /community/hotplaces) ───────────────────────────────────────
 export const hotplaceApi = {
-  getList: (params) => http.get('/community/hotplaces', { params }),
-  getDetail: (id) => http.get(`/community/hotplaces/${id}`),
+  getList: (params) => http.get('/api/community/hotplaces', { params }),
+  getDetail: (id) => http.get(`/api/community/hotplaces/${id}`),
   // BE has no /area endpoint; fall back to the list endpoint with params
-  getByArea: (params) => http.get('/community/hotplaces', { params }),
+  getByArea: (params) => http.get('/api/community/hotplaces', { params }),
 }
 
-// ── Community (BE: /community — no /api prefix) ────────────────────────────────
+// ── Community (BE: /community) ────────────────────────────────────────────────
 export const communityApi = {
-  getPosts: (params) => http.get('/community/posts', { params }),
-  getPost: (id) => http.get(`/community/posts/${id}`),
-  createPost: (data) => http.post('/community/posts', data),
-  updatePost: (id, data) => http.patch(`/community/posts/${id}`, data),
-  deletePost: (id) => http.delete(`/community/posts/${id}`),
-  likePost: (id) => http.post(`/community/posts/${id}/likes`),
-  getComments: (postId) => http.get(`/community/posts/${postId}/comments`),
-  createComment: (postId, data) => http.post(`/community/posts/${postId}/comments`, data),
+  getPosts: (params) => http.get('/api/community/posts', { params }),
+  getPost: (id) => http.get(`/api/community/posts/${id}`),
+  createPost: (data) => http.post('/api/community/posts', data),
+  updatePost: (id, data) => http.patch(`/api/community/posts/${id}`, data),
+  deletePost: (id) => http.delete(`/api/community/posts/${id}`),
+  likePost: (id) => http.post(`/api/community/posts/${id}/likes`),
+  getComments: (postId) => http.get(`/api/community/posts/${postId}/comments`),
+  createComment: (postId, data) => http.post(`/api/community/posts/${postId}/comments`, data),
   likeComment: (postId, commentId) =>
-    http.post(`/community/posts/${postId}/comments/${commentId}/likes`),
+    http.post(`/api/community/posts/${postId}/comments/${commentId}/likes`),
 }
 
-// ── Companion (BE: /companion/posts — no /api prefix) ──────────────────────────
+// ── Companion (BE: /companion/posts) ──────────────────────────────────────────
 export const companionApi = {
-  getList: (params) => http.get('/companion/posts', { params }),
-  getDetail: (id) => http.get(`/companion/posts/${id}`),
-  create: (data) => http.post('/companion/posts', data),
-  join: (id) => http.post(`/companion/posts/${id}/applications`),
+  getList: (params) => http.get('/api/companion/posts', { params }),
+  getDetail: (id) => http.get(`/api/companion/posts/${id}`),
+  create: (data) => http.post('/api/companion/posts', data),
+  join: (id) => http.post(`/api/companion/posts/${id}/applications`),
 }
 
 export default http

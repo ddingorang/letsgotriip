@@ -2,6 +2,7 @@
 package com.trip.community.dto;
 
 import com.trip.community.entity.enums.HotPlaceCategory;
+import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
@@ -10,7 +11,7 @@ public record HotPlaceCreateRequest(
         String address,
         Double latitude,
         Double longitude,
-        HotPlaceCategory category,
+        @NotNull HotPlaceCategory category,
         String description,
         List<String> imageUrls
 ) {}

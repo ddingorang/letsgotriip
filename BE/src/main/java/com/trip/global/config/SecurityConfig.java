@@ -50,8 +50,8 @@ public class SecurityConfig {
                         .requestMatchers("/login/**").permitAll()
                         .requestMatchers("/oauth2/**").permitAll()
                         .requestMatchers("/preprocessing/**").authenticated()
-                        // 운영성 엔드포인트는 ADMIN 한정 (공개 GET보다 먼저 매칭)
-                        .requestMatchers(HttpMethod.POST, "/api/festivals/sync").hasAuthority("ADMIN")
+                        // 인증된 사용자라면 수동 동기화 허용
+                        .requestMatchers(HttpMethod.POST, "/api/festivals/sync").authenticated()
                         // 비회원 공개 조회 (탐색 도메인)
                         .requestMatchers(HttpMethod.GET, "/api/festivals/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/attractions/**").permitAll()

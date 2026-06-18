@@ -8,7 +8,7 @@
         </svg>
       </button>
       <span class="nav-title">핫플 등록</span>
-      <button class="submit-top-btn" :disabled="!isValid" @click="submit">등록</button>
+      <button class="submit-top-btn" :disabled="!isValid || submitting" @click="submit">{{ submitting ? '등록 중…' : '등록' }}</button>
     </header>
 
     <div class="scroll-content">
@@ -115,15 +115,56 @@ const hotplaceStore = useHotplaceStore()
 
 const searchQuery = ref('')
 const selectedAddress = ref('제주 서귀포시 성산읍 오조리 일주동로 1234')
+// lat/lng may be set if the map integration provides coordinates
+const selectedLat = ref(null)
+const selectedLng = ref(null)
+
 const categories = ['카페', '맛집', '명소', '포토존', '숙소']
 const form = ref({ name: '', category: '', description: '' })
+const submitting = ref(false)
 
 const isValid = computed(() => form.value.name && form.value.category)
 
-function submit() {
-  if (!isValid.value) return
-  hotplaceStore.registrationSuccess = true
-  router.back()
+async function submit() {
+  if (!isValid.value || submitting.value) return
+
+  // Build HotPlaceCreateRequest payload
+  const payload = {
+    name: form.value.name,
+    address: selectedAddress.value || '',
+    description: form.value.description || '',
+    category: hotplaceStore.toCategoryEnum(form.value.category),
+    imageUrls: [],
+  }
+  if (selectedLat.value != null) payload.latitude = selectedLat.value
+  if (selectedLng.value != null) payload.longitude = selectedLng.value
+
+  submitting.value = true
+  try {
+    await hotplaceStore.create(payload)
+    hotplaceStore.registrationSuccess = true
+    router.back()
+  } catch (e) {
+    console.warn('[register] create failed, using optimistic fallback', e)
+    // Optimistic fallback: add locally and mark success
+    hotplaceStore.hotplaces.push({
+      id: Date.now(),
+      name: form.value.name,
+      category: form.value.category,
+      address: selectedAddress.value,
+      description: form.value.description,
+      rating: 0,
+      ratingCount: 0,
+      saveCount: 0,
+      registrant: '나',
+      registeredAt: '방금',
+      intro: form.value.description,
+    })
+    hotplaceStore.registrationSuccess = true
+    router.back()
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 

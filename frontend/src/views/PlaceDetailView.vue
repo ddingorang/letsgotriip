@@ -111,14 +111,12 @@
       <div class="map-section">
         <h2 class="section-title">위치</h2>
         <div class="mini-map">
-          <div class="mini-map-bg" />
-          <div class="map-pin-center">
-            <div class="center-pin">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--color-peach)" stroke="none">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-              </svg>
-            </div>
-          </div>
+          <TripMap
+            v-if="place?.lat && place?.lng"
+            :places="[place]"
+            :numbered="false"
+          />
+          <div v-else class="mini-map-bg" />
         </div>
         <div v-if="place?.lat && place?.lng" class="coords-hint">
           {{ place.lat.toFixed(4) }}° N, {{ place.lng.toFixed(4) }}° E
@@ -171,6 +169,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { usePlanStore } from '@/stores/plan.js'
 import { useAuthStore } from '@/stores/auth.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const route = useRoute()
 const router = useRouter()

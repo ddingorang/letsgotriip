@@ -37,28 +37,13 @@
       </button>
     </div>
 
-    <!-- ── Map placeholder ───────────────────────────────────────────────── -->
+    <!-- ── Map (Leaflet + OpenStreetMap) ─────────────────────────────────── -->
     <div class="map-container">
-      <div class="map-placeholder">
-        <div class="map-bg" />
-        <div
-          v-for="(place, idx) in displayedPlaces"
-          :key="place.id || place.contentId"
-          class="map-pin"
-          :style="pinPosition(idx)"
-          @click="selectPlace(place)"
-        >
-          <div class="pin-bubble" :class="{ selected: selectedPlace?.contentId === place.contentId }">
-            <span>{{ idx + 1 }}</span>
-          </div>
-        </div>
-        <button class="location-btn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 1v4M12 19v4M1 12h4M19 12h4" />
-          </svg>
-        </button>
-      </div>
+      <TripMap
+        :places="displayedPlaces"
+        :selected-id="selectedPlace?.contentId"
+        @select="selectPlace"
+      />
     </div>
 
     <!-- ── Bottom sheet ──────────────────────────────────────────────────── -->
@@ -176,6 +161,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { useFestivalStore } from '@/stores/festival.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const store = useAttractionStore()
 const festivalStore = useFestivalStore()

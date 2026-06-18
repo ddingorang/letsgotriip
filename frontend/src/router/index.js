@@ -15,6 +15,8 @@ const router = createRouter({
 
     // /plan tab — requiresAuth so unauthenticated users go to login first
     { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue'), meta: { requiresAuth: true } },
+    // Plan 동선 리포트 — full-screen, no bottom nav
+    { path: '/plan/:id/report', name: 'plan-report', component: () => import('@/views/PlanReportView.vue'), meta: { tabBar: false, requiresAuth: true } },
 
     // ── Community ─────────────────────────────────────────────────────────────
     { path: '/community', name: 'community', component: () => import('@/views/CommunityView.vue') },
@@ -50,6 +52,9 @@ const router = createRouter({
     { path: '/survey', name: 'survey', component: () => import('@/views/PreferenceSurveyView.vue'), meta: { tabBar: false } },
 
     // ── AI ────────────────────────────────────────────────────────────────────
+    // Step 1: condition input → /ai/plan
+    { path: '/ai/plan', name: 'ai-plan-input', component: () => import('@/views/AiPlanInputView.vue'), meta: { requiresAuth: true } },
+    // Step 2: confirm & generate → /ai
     { path: '/ai', name: 'ai-input', component: () => import('@/views/AiInputView.vue'), meta: { requiresAuth: true } },
     { path: '/ai/result', name: 'ai-result', component: () => import('@/views/AiResultView.vue'), meta: { tabBar: false, requiresAuth: true } },
 

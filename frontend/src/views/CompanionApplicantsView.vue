@@ -45,8 +45,8 @@
         <p class="applicant-msg">{{ applicant.message }}</p>
 
         <div v-if="applicant.status === 'pending'" class="action-row">
-          <button class="reject-btn" @click="companionStore.rejectApplicant(applicant.id)">거절</button>
-          <button class="approve-btn" @click="companionStore.approveApplicant(applicant.id)">
+          <button class="reject-btn" @click="handleReject(applicant.id)">거절</button>
+          <button class="approve-btn" @click="handleApprove(applicant.id)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             승인
           </button>
@@ -57,16 +57,32 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 
 const route = useRoute()
 const companionStore = useCompanionStore()
 
-const comp = computed(() => companionStore.getById(route.params.id))
+const postId = computed(() => route.params.id)
+const comp = computed(() => companionStore.getById(postId.value))
 const pending = computed(() => companionStore.applicants.filter((a) => a.status === 'pending'))
 const approved = computed(() => companionStore.applicants.filter((a) => a.status === 'approved'))
+
+onMounted(async () => {
+  await companionStore.getApplications(postId.value)
+})
+
+async function handleApprove(applicationId) {
+  await companionStore.approveApplicant(postId.value, applicationId)
+  // refresh list so counts and statuses are up-to-date
+  await companionStore.getApplications(postId.value)
+}
+
+async function handleReject(applicationId) {
+  await companionStore.rejectApplicant(postId.value, applicationId)
+  await companionStore.getApplications(postId.value)
+}
 </script>
 
 <style scoped>

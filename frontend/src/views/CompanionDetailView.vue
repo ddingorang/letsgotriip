@@ -120,10 +120,11 @@
 
     <!-- Bottom CTA -->
     <div class="cta-bar">
+      <div v-if="applyError" class="apply-error">{{ applyError }}</div>
       <!-- Visitor: not applied -->
       <template v-if="!comp.isOwner && !isApplied">
         <div class="seats-left">남은 자리 {{ comp.maxCount - comp.currentCount }}명</div>
-        <button class="cta-main" @click="apply">참여 신청하기</button>
+        <button class="cta-main" :disabled="companionStore.loading" @click="apply">참여 신청하기</button>
       </template>
 
       <!-- Visitor: applied (pending) -->
@@ -149,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 
@@ -165,11 +166,23 @@ const comp = computed(() => companionStore.getById(route.params.id) ?? {
 })
 
 const isApplied = ref(false)
+const applyError = ref('')
 
-function apply() {
-  isApplied.value = true
+onMounted(async () => {
+  await companionStore.getDetail(route.params.id)
+})
+
+async function apply() {
+  applyError.value = ''
+  try {
+    await companionStore.join(comp.value.id)
+    isApplied.value = true
+  } catch {
+    applyError.value = companionStore.error || '신청에 실패했어요.'
+  }
 }
 function cancelApply() {
+  // Cancellation endpoint not yet in BE; optimistic local only
   isApplied.value = false
 }
 function share() {
@@ -359,6 +372,7 @@ function share() {
   left: 0;
   right: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 12px 20px calc(12px + var(--safe-bottom));
@@ -408,5 +422,13 @@ function share() {
   justify-content: center;
   flex-shrink: 0;
   color: var(--color-ink);
+}
+.apply-error {
+  width: 100%;
+  font-size: 13px;
+  color: var(--color-error);
+  font-weight: 500;
+  text-align: center;
+  padding-bottom: 4px;
 }
 </style>
