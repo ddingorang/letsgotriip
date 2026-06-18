@@ -40,20 +40,7 @@ public class CompanionService {
     public CompanionPostResponse createPost(Long userId, CompanionPostCreateRequest request) {
         User author = findUser(userId);
 
-        CompanionPost post = CompanionPost.builder()
-                .author(author)
-                .title(request.title())
-                .travelDate(request.travelDate())
-                .region(request.region())
-                .duration(request.duration())
-                .maxMembers(request.maxMembers())
-                .estimatedCost(request.estimatedCost())
-                .description(request.description())
-                .build();
-
-        companionPostRepository.save(post);
-
-        // 채팅방 생성 및 모임장 멤버십 등록
+        // 채팅방 생성 및 모임장 멤버십 등록 (chat_room_id NOT NULL 이므로 post 저장 전에 먼저 생성)
         String chatRoomTitle = request.title().length() > 18
                 ? request.title().substring(0, 18)
                 : request.title();
@@ -66,6 +53,20 @@ public class CompanionService {
 
         chatRoomRepository.save(chatRoom);
 
+        CompanionPost post = CompanionPost.builder()
+                .author(author)
+                .title(request.title())
+                .travelDate(request.travelDate())
+                .region(request.region())
+                .duration(request.duration())
+                .maxMembers(request.maxMembers())
+                .estimatedCost(request.estimatedCost())
+                .description(request.description())
+                .chatRoom(chatRoom)
+                .build();
+
+        companionPostRepository.save(post);
+
         ChatRoomMembership hostMembership = ChatRoomMembership.builder()
                 .userId(userId)
                 .chatRoom(chatRoom)
@@ -74,8 +75,6 @@ public class CompanionService {
                 .build();
 
         chatRoomMembershipRepository.save(hostMembership);
-
-        post.assignChatRoom(chatRoom);
 
         return CompanionPostResponse.of(post, 1);
     }

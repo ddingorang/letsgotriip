@@ -10,7 +10,7 @@
           <span class="img-caption">{{ post.location }}</span>
         </div>
         <div class="img-gradient" />
-        <span class="category-badge">{{ post.category }}</span>
+        <span class="category-badge">{{ post.categoryLabel ?? post.category }}</span>
         <h2 class="post-title">{{ post.title }}</h2>
       </div>
     </div>
@@ -30,7 +30,7 @@
         <button class="follow-btn" @click.stop>팔로우</button>
       </div>
 
-      <p class="post-excerpt">{{ post.content?.slice(0, 80) }}...</p>
+      <p v-if="post.content" class="post-excerpt">{{ post.content.slice(0, 80) }}{{ post.content.length > 80 ? '...' : '' }}</p>
 
       <div class="tags-row">
         <span v-for="tag in post.tags" :key="tag" class="tag">{{ tag }}</span>
@@ -88,11 +88,18 @@ function timeAgo(dateStr) {
 
 .post-image {
   position: relative;
+  overflow: hidden;
 }
 
 .img-area {
   position: relative;
   height: 220px;
+  overflow: hidden;
+}
+
+.img-wrapper {
+  position: absolute;
+  inset: 0;
 }
 
 .img-wrapper img,
@@ -100,6 +107,7 @@ function timeAgo(dateStr) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
 .img-placeholder {

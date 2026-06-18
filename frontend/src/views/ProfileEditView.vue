@@ -8,7 +8,7 @@
         </svg>
       </button>
       <span class="nav-title">프로필 수정</span>
-      <button class="save-btn" @click="save">저장</button>
+      <button class="save-btn" :disabled="saving" @click="save">{{ saving ? '저장 중...' : '저장' }}</button>
     </header>
 
     <div class="scroll-content">
@@ -16,7 +16,8 @@
       <div class="avatar-section">
         <div class="avatar-wrap">
           <div class="avatar-circle">
-            <span class="avatar-text">프로필</span>
+            <img v-if="form.profileImageUrl" :src="form.profileImageUrl" alt="프로필 사진" class="avatar-img" />
+            <span v-else class="avatar-text">프로필</span>
           </div>
           <button class="camera-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -50,6 +51,9 @@
           />
         </div>
 
+        <!-- 오류 메시지 -->
+        <p v-if="error" class="error-msg">{{ error }}</p>
+
         <!-- 로그아웃 -->
         <button class="logout-row" @click="logout">
           <span class="logout-label">로그아웃</span>
@@ -64,17 +68,36 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { http } from '@/api/http.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const form = ref({
-  nickname: '김여행',
-  bio: '자연·미식을 좋아하는 탐험가 🌿',
+  nickname: authStore.user?.nickname ?? '',
+  profileImageUrl: authStore.user?.profileImageUrl ?? '',
+  bio: '',
 })
 
-function save() {
-  router.back()
+const saving = ref(false)
+const error = ref(null)
+
+async function save() {
+  if (saving.value) return
+  saving.value = true
+  error.value = null
+  try {
+    await http.patch('/users/me', {
+      nickname: form.value.nickname,
+      profileImageUrl: form.value.profileImageUrl || undefined,
+    })
+    await authStore.fetchMe()
+    router.back()
+  } catch (e) {
+    error.value = e?.response?.data?.message ?? '저장에 실패했어요. 다시 시도해주세요.'
+  } finally {
+    saving.value = false
+  }
 }
 
 function logout() {
@@ -142,6 +165,12 @@ function logout() {
   justify-content: center;
 }
 .avatar-text { font-size: 12px; font-weight: 500; color: var(--color-ink-muted); }
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
 .camera-btn {
   position: absolute;
   bottom: 0;
@@ -204,5 +233,17 @@ function logout() {
   font-size: 14.5px;
   color: var(--color-ink);
   letter-spacing: -0.3px;
+}
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.error-msg {
+  font-size: 13px;
+  color: var(--color-error, #d0392b);
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: #fff0f0;
+  border-radius: var(--radius-md);
 }
 </style>

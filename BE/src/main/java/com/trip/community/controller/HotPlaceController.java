@@ -11,6 +11,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -41,7 +42,7 @@ public class HotPlaceController {
     @PostMapping
     public ResponseEntity<HotPlaceResponse> register(
             @AuthenticationPrincipal UserPrincipal principal,
-            @RequestBody HotPlaceCreateRequest request
+            @Valid @RequestBody HotPlaceCreateRequest request
     ) {
         HotPlaceResponse response = hotPlaceService.register(principal.userId(), request);
         return ResponseEntity.created(URI.create("/community/hotplaces/" + response.id())).body(response);

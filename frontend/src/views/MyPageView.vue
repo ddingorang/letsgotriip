@@ -23,7 +23,8 @@
       <div class="profile-section">
         <div class="avatar-col">
           <div class="avatar-circle">
-            <span class="avatar-text">프로필</span>
+            <img v-if="authStore.user?.profileImageUrl" :src="authStore.user.profileImageUrl" :alt="authStore.user.nickname" class="avatar-img" />
+            <span v-else class="avatar-text">프로필</span>
           </div>
           <div class="camera-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -32,8 +33,8 @@
           </div>
         </div>
         <div class="profile-info">
-          <h2 class="profile-name">김여행</h2>
-          <p class="profile-bio">자연·미식을 좋아하는 탐험가 🌿</p>
+          <h2 class="profile-name">{{ authStore.user?.nickname ?? '프로필' }}</h2>
+          <p class="profile-bio">{{ authStore.user?.email ?? '' }}</p>
         </div>
       </div>
 
@@ -209,8 +210,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const mainTabs = ['내 계획', '앨범 ·', '뱃지 ·']
 const activeMain = ref(0)
@@ -320,6 +323,12 @@ const badges = ref([
   font-size: 11px;
   font-weight: 500;
   color: var(--color-ink-muted);
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 .camera-icon {
   width: 28px;

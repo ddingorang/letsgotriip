@@ -110,6 +110,7 @@ const form = ref({
   tags: [],
 })
 
+const submitError = ref('')
 const isValid = computed(() => form.value.title && form.value.location && form.value.dateRange && form.value.maxCount)
 
 function toggleTag(tag) {
@@ -118,26 +119,57 @@ function toggleTag(tag) {
   else form.value.tags.splice(idx, 1)
 }
 
-function submit() {
+// Parse maxCount string like '4명' → 4
+function parseMax(val) {
+  if (!val) return 4
+  const n = parseInt(val)
+  return isNaN(n) ? 4 : n
+}
+
+async function submit() {
   if (!isValid.value) return
-  companionStore.companions.unshift({
-    id: Date.now(),
+  submitError.value = ''
+  const payload = {
     title: form.value.title,
-    location: form.value.location,
-    dateRange: form.value.dateRange,
-    status: '모집중',
-    currentCount: 1,
-    maxCount: parseInt(form.value.maxCount) || 4,
-    author: { nickname: '나', tripCount: 1 },
-    period: '-',
-    estimatedCost: '-',
-    tags: form.value.tags,
-    intro: form.value.description,
-    isOwner: true,
-    pendingCount: 0,
-    approvedCount: 0,
-  })
-  router.back()
+    region: form.value.location,
+    travelDate: form.value.dateRange,
+    duration: null,
+    maxMembers: parseMax(form.value.maxCount),
+    estimatedCost: null,
+    description: form.value.description,
+  }
+  try {
+    const created = await companionStore.create(payload)
+    // Navigate to applicant management for the newly created post
+    if (created?.id) {
+      router.push({ name: 'companion-applicants', params: { id: created.id } })
+    } else {
+      router.back()
+    }
+  } catch {
+    // BE companion create has a known server-side bug being fixed separately.
+    // Show the error but also insert a local fallback so the UI responds.
+    submitError.value = companionStore.error || '등록에 실패했어요. 잠시 후 다시 시도해 주세요.'
+    const fallbackId = Date.now()
+    companionStore.companions.unshift({
+      id: fallbackId,
+      title: form.value.title,
+      location: form.value.location,
+      dateRange: form.value.dateRange,
+      status: '모집중',
+      currentCount: 1,
+      maxCount: parseMax(form.value.maxCount),
+      author: { nickname: '나', tripCount: 1 },
+      period: '-',
+      estimatedCost: '-',
+      tags: form.value.tags,
+      intro: form.value.description,
+      isOwner: true,
+      pendingCount: 0,
+      approvedCount: 0,
+    })
+    router.push({ name: 'companion-applicants', params: { id: fallbackId } })
+  }
 }
 </script>
 

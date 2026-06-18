@@ -8,8 +8,8 @@
           <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </button>
-      <h1 class="header-title">게시글 작성</h1>
-      <button class="submit-btn" :disabled="!isValid" @click="submitPost">등록</button>
+      <h1 class="header-title">{{ editId ? '게시글 수정' : '게시글 작성' }}</h1>
+      <button class="submit-btn" :disabled="!isValid" @click="submitPost">{{ editId ? '수정' : '등록' }}</button>
     </header>
 
     <div class="scroll-content">
@@ -68,14 +68,20 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { communityApi } from '@/api/index.js'
+import { usePostsStore } from '@/stores/posts.js'
 
+const route = useRoute()
 const router = useRouter()
+const postsStore = usePostsStore()
 const fileInput = ref(null)
 const previewUrl = ref(null)
 const tagInput = ref('')
+
+// edit mode: present when route has ?id=<postId>
+const editId = computed(() => route.query.id || null)
 
 const form = ref({
   category: '후기',
@@ -95,6 +101,15 @@ const categoryEnum = {
   질문: 'QUESTION',
   맛집: 'RESTAURANT',
 }
+// BE enum → Korean label (for prefilling category selector)
+const enumCategory = {
+  REVIEW: '후기',
+  TIP: '꿀팁',
+  COMPANION: '동행',
+  QUESTION: '질문',
+  RESTAURANT: '맛집',
+}
+
 const isValid = computed(() => form.value.title.trim() && form.value.content.trim())
 
 function triggerImageUpload() {
@@ -126,20 +141,51 @@ function removeTag(tag) {
 
 async function submitPost() {
   if (!isValid.value) return
-  // BE PostCreateRequest expects { title, content, category(enum), imageUrls(list) }
+  // BE PostCreateRequest / PostUpdateRequest: { title, content, category(enum), imageUrls(list) }
   const payload = {
     title: form.value.title,
     content: form.value.content,
     category: categoryEnum[form.value.category] ?? 'REVIEW',
     imageUrls: form.value.imageUrl ? [form.value.imageUrl] : [],
   }
-  try {
-    await communityApi.createPost(payload)
-    router.push('/community')
-  } catch {
-    router.push('/community')
+  if (editId.value) {
+    try {
+      await postsStore.updatePost(editId.value, payload)
+      router.push(`/community/${editId.value}`)
+    } catch {
+      alert('수정에 실패했어요. 다시 시도해주세요.')
+    }
+  } else {
+    try {
+      await communityApi.createPost(payload)
+      router.push('/community')
+    } catch {
+      router.push('/community')
+    }
   }
 }
+
+onMounted(async () => {
+  if (!editId.value) return
+  try {
+    await postsStore.fetchPost(editId.value)
+    const post = postsStore.currentPost
+    if (!post) return
+    form.value.title = post.title ?? ''
+    form.value.content = post.content ?? ''
+    form.value.category = enumCategory[post.category] ?? '후기'
+    form.value.location = post.location ?? ''
+    form.value.tags = post.tags ?? []
+    // prefill image preview with the first existing image URL (not a local blob)
+    const existingImage = post.imageUrls?.[0] ?? post.imageUrl ?? null
+    if (existingImage) {
+      previewUrl.value = existingImage
+      form.value.imageUrl = existingImage
+    }
+  } catch {
+    // silently fall through; form stays blank and user can re-enter
+  }
+})
 </script>
 
 <style scoped>

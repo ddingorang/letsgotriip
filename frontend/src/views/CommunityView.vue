@@ -261,7 +261,7 @@ const filterTabs = ['전체', '후기', '꿀팁', '동행']
 const activeFilter = ref('전체')
 const filteredPosts = computed(() => {
   if (activeFilter.value === '전체') return postsStore.posts
-  return postsStore.posts.filter((p) => p.category === activeFilter.value)
+  return postsStore.posts.filter((p) => (p.categoryLabel ?? p.category) === activeFilter.value)
 })
 function onScroll(e) {
   const el = e.target

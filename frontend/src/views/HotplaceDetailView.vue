@@ -3,7 +3,7 @@
   <div class="page">
     <!-- Photo hero -->
     <div class="hero">
-      <div class="hero-img" />
+      <div class="hero-img" :style="hp.imageUrl ? `background-image: url('${hp.imageUrl}'); background-size: cover; background-position: center;` : ''" />
       <div class="hero-overlay" />
       <div class="hero-top">
         <button class="ghost-btn" @click="$router.back()">
@@ -92,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHotplaceStore } from '@/stores/hotplace.js'
 
@@ -100,13 +100,26 @@ const route = useRoute()
 const router = useRouter()
 const hotplaceStore = useHotplaceStore()
 
-const hp = computed(() => hotplaceStore.getById(route.params.id) ?? {
-  id: route.params.id, name: '핫플레이스', category: '명소', location: '제주',
+const DEFAULT_HP = {
+  id: null, name: '핫플레이스', category: '명소', location: '제주',
   address: '주소 정보 없음', rating: 0, ratingCount: 0,
   intro: '소개 정보가 없습니다.', registrant: '익명', registeredAt: '-',
-})
+  imageUrl: null,
+}
 
+const hp = ref({ ...DEFAULT_HP, id: route.params.id })
+const loading = ref(true)
 const bookmarked = ref(false)
+
+onMounted(async () => {
+  try {
+    const detail = await hotplaceStore.getDetail(route.params.id)
+    if (detail) hp.value = detail
+    else hp.value = hotplaceStore.getById(route.params.id) ?? { ...DEFAULT_HP, id: route.params.id }
+  } finally {
+    loading.value = false
+  }
+})
 
 function share() {
   if (navigator.share) navigator.share({ title: hp.value.name, url: location.href })

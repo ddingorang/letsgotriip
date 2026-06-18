@@ -59,7 +59,7 @@
         </div>
 
         <div class="hero-bottom">
-          <span class="category-badge">{{ post?.category }}</span>
+          <span class="category-badge">{{ post?.categoryLabel ?? post?.category }}</span>
           <h1 class="hero-title">{{ post?.title }}</h1>
         </div>
       </div>
@@ -68,7 +68,8 @@
         <div class="author-row">
           <div class="author-left">
             <div class="avatar">
-              <div class="avatar-placeholder" />
+              <img v-if="post?.author?.avatarUrl" :src="post.author.avatarUrl" :alt="post.author.nickname" />
+              <div v-else class="avatar-placeholder" />
             </div>
             <div class="author-meta">
               <span class="author-name">{{ post?.author?.nickname }}</span>
@@ -216,10 +217,14 @@ function editPost() {
   router.push(`/community/write?id=${route.params.id}`)
 }
 
-function deletePost() {
+async function deletePost() {
   menuOpen.value = false
-  if (confirm('게시글을 삭제하시겠어요?')) {
+  if (!confirm('게시글을 삭제하시겠어요?')) return
+  try {
+    await postsStore.deletePost(route.params.id)
     router.push('/community')
+  } catch {
+    alert('삭제에 실패했어요. 다시 시도해주세요.')
   }
 }
 
@@ -448,6 +453,7 @@ onBeforeUnmount(() => {
   line-height: 2.02;
   letter-spacing: -0.2px;
   margin-bottom: 12px;
+  white-space: pre-wrap;
 }
 
 .tags-row {
@@ -560,6 +566,7 @@ onBeforeUnmount(() => {
   color: #333;
   line-height: 1.73;
   letter-spacing: -0.2px;
+  white-space: pre-wrap;
 }
 
 .comment-actions {
