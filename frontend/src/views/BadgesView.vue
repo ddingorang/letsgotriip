@@ -83,7 +83,7 @@
 
         <!-- Badges grid -->
         <div class="section-header" style="margin-top:8px">
-          <span class="section-title">획득한 뱃지 (8/24)</span>
+          <span class="section-title">획득한 뱃지 ({{ earnedCount }}/{{ badges.length }})</span>
         </div>
         <div class="badge-grid">
           <div v-for="badge in badges" :key="badge.id" class="badge-item">
@@ -116,10 +116,29 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useGamificationStore } from '@/stores/gamification.js'
+
+const gamiStore = useGamificationStore()
+onMounted(() => gamiStore.load())
 
 const activeTab = ref(0)
 const tabs = ['진행중 퀘스트', '뱃지 컬렉션', '완료 기록']
+
+// 게임화 API 뱃지 → 이 화면의 표시 shape로 매핑 (미로그인/로딩 시 빈 배열)
+const ICON_MAP = { star: 'star', location: 'location', map: 'location', people: 'people2', calendar: 'circle', check: 'star' }
+const UNLOCKED_BG = 'linear-gradient(135deg,#FFD700,#FFA500)'
+const LOCKED_BG = 'linear-gradient(135deg,#cfc8c2,#a8a09a)'
+const badges = computed(() =>
+  (gamiStore.summary?.badges ?? []).map((b) => ({
+    id: b.key,
+    earned: b.unlocked,
+    name: b.name,
+    iconType: ICON_MAP[b.iconType] ?? 'star',
+    bg: b.unlocked ? UNLOCKED_BG : LOCKED_BG,
+  })),
+)
+const earnedCount = computed(() => badges.value.filter((b) => b.earned).length)
 
 const levelStats = [
   { val: '12', label: '여행 횟수' },
@@ -178,16 +197,6 @@ const quests = [
   },
 ]
 
-const badges = [
-  { id: 1, earned: true,  bg: 'linear-gradient(135deg,#FFD700,#FFA500)', iconType: 'star',    name: '첫 여행' },
-  { id: 2, earned: true,  bg: 'linear-gradient(135deg,#29B6F6,#0277BD)', iconType: 'wave',    name: '해변탐험가' },
-  { id: 3, earned: true,  bg: 'linear-gradient(135deg,#66BB6A,#2E7D32)', iconType: 'location', name: '지도 마스터' },
-  { id: 4, earned: true,  bg: 'linear-gradient(135deg,#f78f57,#e0743a)', iconType: 'food',    name: '미식 여행자' },
-  { id: 5, earned: false, bg: 'linear-gradient(135deg,#CE93D8,#7B1FA2)', iconType: 'people2', name: '동행 매니저' },
-  { id: 6, earned: false, bg: 'linear-gradient(135deg,#FFB74D,#E65100)', iconType: 'star',    name: '전국 일주' },
-  { id: 7, earned: false, bg: 'linear-gradient(135deg,#80CBC4,#00695C)', iconType: 'circle',  name: 'AI 파워유저' },
-  { id: 8, earned: false, bg: 'linear-gradient(135deg,#EF9A9A,#C62828)', iconType: 'heart',   name: '찜 컬렉터' },
-]
 </script>
 
 <style scoped>

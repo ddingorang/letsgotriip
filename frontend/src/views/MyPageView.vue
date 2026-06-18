@@ -41,17 +41,17 @@
       <!-- Stats -->
       <div class="stats-row">
         <div class="stat">
-          <span class="stat-num">5</span>
+          <span class="stat-num">{{ gami?.stats?.plans ?? 0 }}</span>
           <span class="stat-label">여행 계획</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">38</span>
-          <span class="stat-label">다녀온 곳</span>
+          <span class="stat-num">{{ gami?.stats?.places ?? 0 }}</span>
+          <span class="stat-label">담은 곳</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">2</span>
+          <span class="stat-num">{{ gami?.stats?.badges ?? 0 }}</span>
           <span class="stat-label">뱃지</span>
         </div>
       </div>
@@ -63,14 +63,14 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--color-peach)" stroke="none">
               <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" />
             </svg>
-            <span class="challenge-title">이달의 챌린지 · 6월</span>
+            <span class="challenge-title">이달의 챌린지 · {{ gami?.challenge?.month ?? '' }}</span>
           </div>
-          <span class="challenge-phase">준비 중 · Phase 2</span>
+          <span class="challenge-phase">{{ gami?.challenge?.current ?? 0 }} / {{ gami?.challenge?.goal ?? 10 }}곳</span>
         </div>
         <div class="challenge-bar">
-          <div class="challenge-fill" style="width: 70%" />
+          <div class="challenge-fill" :style="{ width: (gami?.challenge?.percent ?? 0) + '%' }" />
         </div>
-        <p class="challenge-hint">3곳 더 방문하면 여행자 뱃지 획득!</p>
+        <p class="challenge-hint">{{ gami?.challenge?.hint ?? '계획을 만들어 챌린지를 시작해보세요!' }}</p>
       </div>
 
       <!-- Main tabs -->
@@ -188,15 +188,15 @@
 
       <!-- ③ 뱃지 -->
       <div v-show="activeMain === 2" class="tab-content">
-        <div class="badge-header">획득한 뱃지 <strong>2</strong> / 6</div>
+        <div class="badge-header">획득한 뱃지 <strong>{{ gami?.stats?.badges ?? 0 }}</strong> / {{ badgeList.length }}</div>
         <div class="badges-grid">
-          <div v-for="badge in badges" :key="badge.key" class="badge-item">
+          <div v-for="badge in badgeList" :key="badge.key" class="badge-item">
             <div :class="['badge-circle', badge.unlocked ? 'unlocked' : 'locked']">
-              <span v-if="badge.unlocked" v-html="badge.icon" />
+              <svg v-if="badge.unlocked" width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z"/></svg>
               <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
             </div>
             <span class="badge-name">{{ badge.name }}</span>
-            <span v-if="!badge.unlocked" class="badge-progress">{{ badge.progress }}</span>
+            <span v-if="!badge.unlocked" class="badge-progress">{{ badge.progressText }}</span>
           </div>
         </div>
       </div>
@@ -212,12 +212,19 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationStore } from '@/stores/notification.js'
+import { useGamificationStore } from '@/stores/gamification.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const notifStore = useNotificationStore()
+const gamiStore = useGamificationStore()
 
-onMounted(() => notifStore.load())
+const gami = computed(() => gamiStore.summary)
+
+onMounted(() => {
+  notifStore.load()
+  gamiStore.load()
+})
 
 const mainTabs = ['내 계획', '앨범 ·', '뱃지 ·']
 const activeMain = ref(0)
@@ -244,21 +251,8 @@ const albums = ref([
   { id: 4, title: '봄 벚꽃 모음', location: '벚꽃 앨범', photoCount: 12 },
 ])
 
-// 뱃지
-const badges = ref([
-  {
-    key: 'first', name: '첫 여행', unlocked: true,
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z"/></svg>`,
-  },
-  {
-    key: 'foodie', name: '미식가', unlocked: true,
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
-  },
-  { key: 'explorer', name: '탐험가', unlocked: false, progress: '3/5' },
-  { key: 'spots10', name: '10곳 달성', unlocked: false, progress: '7/10' },
-  { key: 'companion', name: '동행 에이커', unlocked: false, progress: '1/3' },
-  { key: 'photo', name: '사진가', unlocked: false, progress: '0/50' },
-])
+// 뱃지 — 게임화 API에서 (미로그인/로딩 시 빈 배열)
+const badgeList = computed(() => gami.value?.badges ?? [])
 </script>
 
 <style scoped>

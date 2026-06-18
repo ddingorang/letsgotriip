@@ -46,7 +46,7 @@
           <div class="banner-tags">
             <span class="banner-tag">총 {{ totalPlaces }}개 장소</span>
             <span class="banner-tag">{{ totalDays }}일 일정</span>
-            <span v-if="plan.destination" class="banner-tag">{{ plan.destination }}</span>
+            <span v-if="report?.totalDistanceKm" class="banner-tag">이동 {{ report.totalDistanceKm }}km</span>
           </div>
         </div>
         <div class="route-badge">
@@ -64,7 +64,7 @@
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        장소 간 이동 거리와 방문 시간을 고려한 최적 동선이에요
+        {{ hasSuggestion ? '더 짧은 동선을 찾았어요. 아래에서 적용해 보세요.' : '장소 간 좌표 거리로 계산한 동선이에요' }}
       </div>
 
       <!-- Scroll area -->
@@ -89,12 +89,12 @@
             <div class="stat-dot" />
             <div class="stat-item">
               <span class="stat-label">예상 이동</span>
-              <span class="stat-value">{{ estimatedDistance(day.places) }}</span>
+              <span class="stat-value">{{ estimatedDistance(day.dayNo) }}</span>
             </div>
             <div class="stat-dot" />
             <div class="stat-item">
               <span class="stat-label">소요 시간</span>
-              <span class="stat-value">{{ estimatedDuration(day.places) }}</span>
+              <span class="stat-value">{{ estimatedDuration(day.dayNo) }}</span>
             </div>
           </div>
 
@@ -122,8 +122,8 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     {{ place.visitTime }}
                   </div>
-                  <div v-if="idx < day.places.length - 1" class="travel-hint">
-                    다음 장소까지 약 {{ travelTime(idx, day.places) }}
+                  <div v-if="idx < day.places.length - 1 && travelTime(idx, day.dayNo)" class="travel-hint">
+                    다음 장소까지 {{ travelTime(idx, day.dayNo) }}
                   </div>
                 </div>
               </div>
@@ -142,9 +142,9 @@
 
       <!-- Bottom action bar -->
       <div class="bottom-bar">
-        <button class="btn-apply" @click="applyRoute">
+        <button class="btn-apply" :disabled="applying" @click="applyRoute">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-          대체 동선 적용
+          {{ applying ? '적용 중...' : (hasSuggestion ? '대체 동선 적용' : '확인') }}
         </button>
       </div>
     </template>
@@ -152,7 +152,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
 
@@ -162,10 +162,12 @@ const planStore = usePlanStore()
 
 const planId = route.params.id
 
+const applying = ref(false)
+
 onMounted(async () => {
-  // Always reload to get fresh data
   try {
     await planStore.loadPlan(planId)
+    await planStore.loadRouteReport(planId)   // 좌표 기반 거리·추천순서 (BE Haversine)
   } catch {
     // error shown via planStore.error
   }
@@ -176,41 +178,69 @@ const days = computed(() => plan.value?.days ?? [])
 const totalDays = computed(() => days.value.length)
 const totalPlaces = computed(() => days.value.reduce((acc, d) => acc + (d.places?.length ?? 0), 0))
 
-/**
- * Illustrative distance estimate: assumes ~3 km average gap between places.
- * Real distance would come from a routing BE endpoint.
- */
-function estimatedDistance(places) {
-  const n = places?.length ?? 0
-  if (n <= 1) return '–'
-  const km = (n - 1) * 3
-  return `약 ${km}km`
+// ── 동선 리포트(BE 실데이터) ───────────────────────────────────────────────
+const report = computed(() => planStore.routeReport)
+function dayReport(dayNo) {
+  return report.value?.days?.find((d) => d.dayNo === dayNo) ?? null
+}
+// 한 곳이라도 추천 순서가 현재와 다르면 "대체 동선 적용" 가능
+const hasSuggestion = computed(() =>
+  (report.value?.days ?? []).some((d) => d.reorderSuggested),
+)
+
+function estimatedDistance(dayNo) {
+  const r = dayReport(dayNo)
+  if (!r || r.placeCount <= 1) return '–'
+  return `약 ${r.distanceKm}km`
 }
 
-/**
- * Illustrative duration: ~30 min per place + 20 min travel between each.
- */
-function estimatedDuration(places) {
-  const n = places?.length ?? 0
-  if (n === 0) return '–'
-  const mins = n * 30 + (n - 1) * 20
+function estimatedDuration(dayNo) {
+  const r = dayReport(dayNo)
+  if (!r || r.placeCount === 0) return '–'
+  const mins = r.estimatedMinutes
   const h = Math.floor(mins / 60)
   const m = mins % 60
-  return h > 0 ? `약 ${h}시간 ${m > 0 ? m + '분' : ''}` : `약 ${m}분`
+  return h > 0 ? `약 ${h}시간${m > 0 ? ' ' + m + '분' : ''}` : `약 ${m}분`
 }
 
-/** Illustrative per-leg travel time */
-function travelTime(idx, places) {
-  if (!places || idx >= places.length - 1) return ''
-  return '약 20분'
+function travelTime(idx, dayNo) {
+  const r = dayReport(dayNo)
+  const leg = r?.legs?.[idx]
+  if (!leg) return ''
+  const mins = Math.max(1, Math.round((leg.distanceKm / 30) * 60))  // 30km/h 가정
+  return `${leg.distanceKm}km · 약 ${mins}분`
 }
 
 /**
- * "대체 동선 적용" — currently navigates back to the plan hub.
- * When the BE exposes an optimized-route apply endpoint, call it here first.
+ * "대체 동선 적용" — 최근접 이웃 추천 순서(suggestedOrder)로 각 일자의 장소를 재배치.
+ * 기존 PUT /api/plans/{id}/days/{dayNo}/places(replacePlaces)를 재사용.
  */
-function applyRoute() {
-  router.replace('/plan')
+async function applyRoute() {
+  if (applying.value) return
+  if (!hasSuggestion.value) {
+    router.replace('/plan')
+    return
+  }
+  applying.value = true
+  try {
+    for (const dr of report.value.days) {
+      if (!dr.reorderSuggested) continue
+      const day = days.value.find((d) => d.dayNo === dr.dayNo)
+      if (!day?.places?.length) continue
+      // suggestedOrder(placeId 목록) → 실제 place 객체 순서로 매핑
+      const byId = new Map(day.places.map((p) => [p.id, p]))
+      const reordered = dr.suggestedOrder.map((id) => byId.get(id)).filter(Boolean)
+      if (reordered.length === day.places.length) {
+        await planStore.replacePlaces(planId, dr.dayNo, reordered)
+      }
+    }
+    await planStore.loadRouteReport(planId).catch(() => {})
+    router.replace('/plan')
+  } catch {
+    // error in planStore.error
+  } finally {
+    applying.value = false
+  }
 }
 </script>
 

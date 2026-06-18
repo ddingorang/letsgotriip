@@ -32,6 +32,11 @@ export const noticeApi = {
   detail: (id) => http.get(`/api/notices/${id}`),
 }
 
+// ── Gamification (챌린지/뱃지, 인증 필요) ─────────────────────────────────────
+export const gamificationApi = {
+  summary: () => http.get('/api/gamification/summary'),
+}
+
 // ── Notifications (내 알림, 인증 필요) ────────────────────────────────────────
 // GET /api/notifications, GET /unread-count, PATCH /read-all, PATCH /{id}/read
 export const notificationApi = {

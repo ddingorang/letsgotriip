@@ -33,4 +33,13 @@ public interface PlanRepository extends JpaRepository<TripPlan, Long> {
            "LEFT JOIN FETCH p.days d " +
            "WHERE p.id = :id")
     Optional<TripPlan> findByIdWithDays(@Param("id") Long id);
+
+    // ── 게임화(챌린지/뱃지) 집계 ────────────────────────────────
+    long countByUserId(Long userId);
+
+    @Query("SELECT COUNT(pl) FROM TripPlan p JOIN p.days d JOIN d.places pl WHERE p.userId = :userId")
+    long countPlacesByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT COUNT(p) FROM TripPlan p WHERE p.userId = :userId AND p.endDate < CURRENT_DATE")
+    long countCompletedByUserId(@Param("userId") Long userId);
 }
