@@ -278,7 +278,11 @@ const filteredHotplaces = computed(() => {
   return hotplaceStore.hotplaces.filter((h) => h.category === hpCat.value)
 })
 
-onMounted(() => postsStore.fetchPosts(true))
+onMounted(() => {
+  postsStore.fetchPosts(true)
+  companionStore.fetchCompanions()
+  companionStore.fetchMyRooms()
+})
 </script>
 
 <style scoped>

@@ -201,6 +201,16 @@
         </div>
       </div>
 
+      <!-- Logout -->
+      <div class="logout-section">
+        <button class="logout-btn" @click="handleLogout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          로그아웃
+        </button>
+      </div>
+
       <div class="bottom-spacer" />
     </div>
 
@@ -214,6 +224,11 @@ import { useAuthStore } from '@/stores/auth.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+async function handleLogout() {
+  await authStore.logout()
+  router.push('/login')
+}
 
 const mainTabs = ['내 계획', '앨범 ·', '뱃지 ·']
 const activeMain = ref(0)
@@ -770,6 +785,23 @@ const badges = ref([
   font-size: 11.5px;
   color: var(--color-ink-muted);
 }
+
+.logout-section {
+  padding: 8px 20px 4px;
+  border-top: 1px solid var(--color-line-light);
+}
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.2px;
+}
+.logout-btn:active { opacity: 0.6; }
 
 .bottom-spacer { height: 24px; }
 </style>

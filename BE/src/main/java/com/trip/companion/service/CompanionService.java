@@ -8,6 +8,7 @@ import com.trip.chat.repository.ChatRoomRepository;
 import com.trip.companion.dto.*;
 import com.trip.companion.entity.CompanionApplication;
 import com.trip.companion.entity.CompanionPost;
+import com.trip.companion.entity.enums.ApplicationStatus;
 import com.trip.companion.entity.enums.CompanionStatus;
 import com.trip.companion.repository.CompanionApplicationRepository;
 import com.trip.companion.repository.CompanionPostRepository;
@@ -22,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -76,7 +79,7 @@ public class CompanionService {
 
         chatRoomMembershipRepository.save(hostMembership);
 
-        return CompanionPostResponse.of(post, 1);
+        return buildResponse(post);
     }
 
     public CursorPageResponse<CompanionPostSummaryResponse> getPosts(Long cursor, int size) {
@@ -98,11 +101,7 @@ public class CompanionService {
     }
 
     public CompanionPostResponse getPost(Long postId) {
-        CompanionPost post = findPost(postId);
-        int currentMembers = post.getChatRoom() != null
-                ? chatRoomMembershipRepository.findByChatRoomId(post.getChatRoom().getId()).size()
-                : 0;
-        return CompanionPostResponse.of(post, currentMembers);
+        return buildResponse(findPost(postId));
     }
 
     @Transactional
@@ -113,10 +112,7 @@ public class CompanionService {
         post.update(request.title(), request.travelDate(), request.region(),
                 request.duration(), request.maxMembers(), request.estimatedCost(), request.description());
 
-        int currentMembers = post.getChatRoom() != null
-                ? chatRoomMembershipRepository.findByChatRoomId(post.getChatRoom().getId()).size()
-                : 0;
-        return CompanionPostResponse.of(post, currentMembers);
+        return buildResponse(post);
     }
 
     @Transactional
@@ -253,5 +249,31 @@ public class CompanionService {
         if (!post.getAuthor().getId().equals(userId)) {
             throw new GeneralException(ResponseCode._FORBIDDEN);
         }
+    }
+
+    public List<MyCompanionRoomResponse> getMyRooms(Long userId) {
+        List<ChatRoomMembership> memberships = chatRoomMembershipRepository.findByUserId(userId);
+        List<Long> chatRoomIds = memberships.stream()
+                .map(m -> m.getChatRoom().getId())
+                .toList();
+        if (chatRoomIds.isEmpty()) return List.of();
+
+        Map<Long, Boolean> hostMap = memberships.stream()
+                .collect(Collectors.toMap(m -> m.getChatRoom().getId(), ChatRoomMembership::getIsHost));
+
+        return companionPostRepository.findAllByDeletedFalseAndChatRoomIdIn(chatRoomIds).stream()
+                .map(post -> MyCompanionRoomResponse.of(post, Boolean.TRUE.equals(hostMap.get(post.getChatRoom().getId()))))
+                .toList();
+    }
+
+    private CompanionPostResponse buildResponse(CompanionPost post) {
+        int currentMembers = post.getChatRoom() != null
+                ? chatRoomMembershipRepository.findByChatRoomId(post.getChatRoom().getId()).size()
+                : 0;
+        int pendingCount = companionApplicationRepository
+                .countByCompanionPostAndStatus(post, ApplicationStatus.PENDING);
+        int approvedCount = companionApplicationRepository
+                .countByCompanionPostAndStatus(post, ApplicationStatus.APPROVED);
+        return CompanionPostResponse.of(post, currentMembers, pendingCount, approvedCount);
     }
 }

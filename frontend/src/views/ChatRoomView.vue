@@ -71,7 +71,7 @@
         v-model="inputText"
         class="msg-input"
         placeholder="메시지 입력"
-        @keydown.enter="sendMessage"
+        @keydown.enter.prevent="(e) => !e.isComposing && sendMessage()"
       />
       <button class="send-btn" :class="{ active: inputText.trim() }" @click="sendMessage">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

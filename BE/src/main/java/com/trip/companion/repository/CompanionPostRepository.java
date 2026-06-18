@@ -12,4 +12,6 @@ public interface CompanionPostRepository extends JpaRepository<CompanionPost, Lo
     List<CompanionPost> findAllByDeletedFalseOrderByIdDesc(Pageable pageable);
 
     List<CompanionPost> findAllByDeletedFalseAndIdLessThanOrderByIdDesc(Long cursorId, Pageable pageable);
+
+    List<CompanionPost> findAllByDeletedFalseAndChatRoomIdIn(List<Long> chatRoomIds);
 }
