@@ -73,6 +73,12 @@ public enum ResponseCode {
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMENT404", "존재하지 않는 댓글입니다."),
     HOTPLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "HOTPLACE404", "존재하지 않는 핫플입니다."),
 
+    // Notice Error
+    NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTICE404", "존재하지 않는 공지입니다."),
+
+    // Notification Error
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTI404", "존재하지 않는 알림입니다."),
+
     // File Error
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE500", "파일 업로드에 실패했습니다."),
 

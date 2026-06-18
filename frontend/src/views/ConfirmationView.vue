@@ -60,7 +60,7 @@
             </svg>
             홈으로
           </button>
-          <button class="btn-outline">
+          <button class="btn-outline" @click="shareBooking">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="18" cy="5" r="3" />
               <circle cx="6" cy="12" r="3" />
@@ -68,7 +68,7 @@
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
               <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
             </svg>
-            공유하기
+            {{ shareLabel }}
           </button>
         </div>
       </div>
@@ -94,6 +94,29 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
+const shareLabel = ref('공유하기')
+
+async function shareBooking() {
+  const shareData = {
+    title: '관통여행 예약 확정',
+    text: '해운대 오션뷰 호텔 · 예약번호 BK202406150023 — 관통여행에서 예약했어요!',
+    url: window.location.origin,
+  }
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData)
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`)
+      shareLabel.value = '복사됨!'
+      setTimeout(() => (shareLabel.value = '공유하기'), 1500)
+    }
+  } catch {
+    // 사용자가 공유 시트를 취소한 경우 — 무시
+  }
+}
+
 const ticketDetails = [
   { label: '체크인',   value: '2026.06.15 (토)\n15:00 이후' },
   { label: '체크아웃', value: '2026.06.17 (월)\n11:00 이전' },

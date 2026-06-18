@@ -38,6 +38,7 @@ const router = createRouter({
 
     // ── MyPage ────────────────────────────────────────────────────────────────
     { path: '/mypage', name: 'mypage', component: () => import('@/views/MyPageView.vue'), meta: { requiresAuth: true } },
+    { path: '/notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/mypage/edit', name: 'profile-edit', component: () => import('@/views/ProfileEditView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/mypage/challenge', name: 'challenge-detail', component: () => import('@/views/ChallengeDetailView.vue'), meta: { tabBar: false } },
     { path: '/mypage/album/:id', name: 'album-detail', component: () => import('@/views/AlbumDetailView.vue'), meta: { tabBar: false } },

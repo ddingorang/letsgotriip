@@ -12,7 +12,14 @@
       <h1 class="home-title">오늘은 어디로<br />떠나볼까요?</h1>
       <div class="header-right">
         <button class="icon-btn" @click="$router.push('/mypage')">
-          <div class="profile-avatar" />
+          <img
+            v-if="avatarUrl"
+            :src="avatarUrl"
+            :alt="authStore.user?.nickname ?? '프로필'"
+            class="profile-avatar avatar-img"
+            @error="onAvatarError"
+          />
+          <div v-else class="profile-avatar" />
         </button>
       </div>
     </header>
@@ -59,17 +66,30 @@
 </template>
 
 <script setup>
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import PlaceCard from '@/components/common/PlaceCard.vue'
 import PostCard from '@/components/community/PostCard.vue'
 import { usePlacesStore } from '@/stores/places.js'
 import { usePostsStore } from '@/stores/posts.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const placesStore = usePlacesStore()
 const postsStore = usePostsStore()
+const authStore = useAuthStore()
 
 const places = computed(() => placesStore.places.slice(0, 5))
 const posts = computed(() => postsStore.posts)
+
+// 업로드한 프로필만 표시 — BE 기본값(/images/default-profile.png)은 실제 파일이 없어 깨지므로 placeholder 처리
+const avatarBroken = ref(false)
+const avatarUrl = computed(() => {
+  if (avatarBroken.value) return null
+  const u = authStore.user?.profileImageUrl
+  return u && !u.includes('default-profile') ? u : null
+})
+function onAvatarError() {
+  avatarBroken.value = true
+}
 
 const categories = [
   {
@@ -152,6 +172,12 @@ onMounted(async () => {
   height: 38px;
   border-radius: 50%;
   background: linear-gradient(135deg, #efe6e4, #e7e0d8);
+  overflow: hidden;
+}
+
+.avatar-img {
+  object-fit: cover;
+  display: block;
 }
 
 .search-bar {

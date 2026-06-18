@@ -78,6 +78,34 @@ public class AttractionTourApiClient {
     }
 
     // ──────────────────────────────────────────────
+    // locationBasedList2 — 좌표(내 위치) 기반 목록, 거리순
+    // ──────────────────────────────────────────────
+    public List<AttractionItem> fetchLocationBased(String mapX, String mapY, int radius,
+                                                   String contentTypeId, int pageNo, int numOfRows) {
+        AttractionTourApiResponse resp = restClient.get()
+                .uri(uriBuilder -> {
+                    var b = uriBuilder
+                            .path("/locationBasedList2")
+                            .queryParam("serviceKey",    props.getKey())
+                            .queryParam("numOfRows",     numOfRows)
+                            .queryParam("pageNo",        pageNo)
+                            .queryParam("MobileOS",      "ETC")
+                            .queryParam("MobileApp",     "TripApp")
+                            .queryParam("_type",         "json")
+                            .queryParam("mapX",          mapX)
+                            .queryParam("mapY",          mapY)
+                            .queryParam("radius",        radius)
+                            .queryParam("arrange",       "E");  // E = 거리순(이미지 포함)
+                    if (contentTypeId != null && !contentTypeId.isBlank()) b = b.queryParam("contentTypeId", contentTypeId);
+                    return b.build();
+                })
+                .retrieve()
+                .body(AttractionTourApiResponse.class);
+
+        return extractItems(resp, "locationBasedList2");
+    }
+
+    // ──────────────────────────────────────────────
     // detailCommon2 — 공통 정보 조회 (overview 포함)
     // ──────────────────────────────────────────────
     public AttractionItem fetchDetail(String contentId) {

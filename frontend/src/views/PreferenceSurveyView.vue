@@ -62,10 +62,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+// 취향 설문 저장 — BE 취향 엔드포인트가 없어 로컬에 보존(추후 BE 생기면 교체)
+const STORAGE_KEY = 'triip.preferences'
 
 const interests = [
   {
@@ -116,12 +119,40 @@ function toggleInterest(key) {
   else selectedInterests.value.splice(idx, 1)
 }
 
+function savePreferences() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        interests: selectedInterests.value,
+        companion: selectedCompanion.value,
+        savedAt: new Date().toISOString(),
+      }),
+    )
+  } catch {
+    // localStorage 비활성(사생활 모드 등) — 저장 생략
+  }
+}
+
 function skip() {
   router.push('/home')
 }
 function next() {
+  savePreferences()
   router.push('/home')
 }
+
+onMounted(() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
+    if (saved) {
+      if (Array.isArray(saved.interests)) selectedInterests.value = saved.interests
+      if (saved.companion) selectedCompanion.value = saved.companion
+    }
+  } catch {
+    // 무시
+  }
+})
 </script>
 
 <style scoped>

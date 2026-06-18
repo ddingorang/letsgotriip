@@ -12,7 +12,17 @@
     </div>
 
     <!-- No result — redirect should have fired, show fallback -->
-    <div v-else-if="!rec" class="empty-page">
+    <div v-else-if="!rec" class="empty-wrap">
+      <div class="nav-bar">
+        <button class="nav-btn" @click="goBack">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <span class="nav-title">AI 추천 결과</span>
+        <span style="width:36px" />
+      </div>
+      <div class="empty-page">
       <div class="empty-icon">
         <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -23,7 +33,8 @@
       </div>
       <p class="empty-title">추천 결과가 없어요</p>
       <p class="empty-sub">AI 추천을 먼저 실행해 주세요</p>
-      <button class="goto-ai-btn" @click="router.replace('/ai')">AI 추천 받기</button>
+      <button class="goto-ai-btn" @click="router.replace('/ai/plan')">AI 추천 받기</button>
+      </div>
     </div>
 
     <template v-else>
@@ -35,7 +46,7 @@
           </svg>
         </button>
         <span class="nav-title">AI 추천 결과</span>
-        <button class="nav-regen-btn" @click="router.push('/ai')">
+        <button class="nav-regen-btn" @click="router.push('/ai/plan')">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
@@ -136,7 +147,7 @@
 
       <!-- Bottom bar -->
       <div class="bottom-bar">
-        <button class="btn-retry" @click="router.push('/ai')">재생성</button>
+        <button class="btn-retry" @click="router.push('/ai/plan')">재생성</button>
         <button
           class="btn-save"
           :disabled="saveLoading || saveDone"
@@ -166,6 +177,11 @@ import { useRecommendStore } from '@/stores/recommend.js'
 
 const router = useRouter()
 const recommendStore = useRecommendStore()
+
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push('/home')
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const pageLoading = ref(false)
@@ -273,6 +289,13 @@ async function handleSavePlan() {
 }
 
 /* ── Empty page ──────────────────────────────────────────────────────────── */
+.empty-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .empty-page {
   flex: 1;
   display: flex;

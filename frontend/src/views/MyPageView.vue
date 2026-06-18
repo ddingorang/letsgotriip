@@ -5,11 +5,11 @@
       <!-- Top icons -->
       <div class="top-bar">
         <div style="flex:1" />
-        <button class="icon-btn bell-wrap">
+        <button class="icon-btn bell-wrap" @click="$router.push('/notifications')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          <span class="notif-dot" />
+          <span v-if="notifStore.hasUnread" class="notif-dot" />
         </button>
         <button class="icon-btn" @click="$router.push('/mypage/edit')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -208,12 +208,16 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationStore } from '@/stores/notification.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const notifStore = useNotificationStore()
+
+onMounted(() => notifStore.load())
 
 const mainTabs = ['내 계획', '앨범 ·', '뱃지 ·']
 const activeMain = ref(0)

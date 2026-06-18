@@ -55,6 +55,7 @@ public class SecurityConfig {
                         // 비회원 공개 조회 (탐색 도메인)
                         .requestMatchers(HttpMethod.GET, "/api/festivals/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/attractions/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/notices", "/api/notices/**").permitAll()
                         // 커뮤니티 비회원 공개 조회
                         .requestMatchers(HttpMethod.GET, "/community/posts", "/community/posts/*", "/community/posts/*/comments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces", "/community/hotplaces/*").permitAll()

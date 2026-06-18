@@ -40,8 +40,9 @@
     <!-- ── Map (Leaflet + OpenStreetMap) ─────────────────────────────────── -->
     <div class="map-container">
       <TripMap
-        :places="displayedPlaces"
+        :places="mapPlaces"
         :selected-id="selectedPlace?.contentId"
+        :center="mapCenter"
         @select="selectPlace"
       />
     </div>
@@ -51,16 +52,16 @@
       <div class="sheet-handle" @click="sheetExpanded = !sheetExpanded" />
       <div class="sheet-header">
         <h2 class="sheet-title">
-          주변 관광지
+          {{ sortMode === 'distance' ? '내 주변 관광지' : '관광지' }}
           <span class="count">{{ displayedPlaces.length }}</span>
         </h2>
-        <button class="sort-btn">
+        <button class="sort-btn" :class="{ active: sortMode === 'distance' }" @click="toggleSort">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="7" y1="12" x2="17" y2="12" />
             <line x1="10" y1="18" x2="14" y2="18" />
           </svg>
-          거리순
+          {{ sortLabel }}
         </button>
       </div>
 
@@ -125,7 +126,10 @@
               </div>
               <span v-else class="cat-badge">{{ place.category }}</span>
             </div>
-            <span class="place-addr">{{ place.address }}</span>
+            <span class="place-addr">
+              <span v-if="Number.isFinite(place._dist)" class="place-dist">{{ formatDist(place._dist) }}</span>
+              {{ place.address }}
+            </span>
           </div>
         </div>
       </div>
@@ -173,16 +177,35 @@ const selectedPlace = ref(null)
 const selectedCategory = ref('all')
 
 // ── Category chip definitions ─────────────────────────────────────────────────
-// contentTypeId mapping: 관광지=12, 문화시설=14, 음식점=39, 숙박=32, 전체=all
+// contentTypeId mapping: 관광지=12, 축제행사=15, 음식점=39, 숙박=32, 전체=all
 const CATEGORIES = [
-  { key: 'all',  label: '전체',    contentTypeId: null },
-  { key: '12',   label: '관광지',  contentTypeId: 12   },
-  { key: '14',   label: '문화시설', contentTypeId: 14  },
-  { key: '39',   label: '음식점',  contentTypeId: 39   },
-  { key: '32',   label: '숙박',    contentTypeId: 32   },
+  { key: 'all',  label: '전체',   contentTypeId: null },
+  { key: '12',   label: '관광지', contentTypeId: 12   },
+  { key: '15',   label: '축제',   contentTypeId: 15   },
+  { key: '39',   label: '음식점', contentTypeId: 39   },
+  { key: '32',   label: '숙박',   contentTypeId: 32   },
 ]
 
-// ── Filtered display list ─────────────────────────────────────────────────────
+const PAGE_SIZE = 30   // 거리순 정렬이 의미있도록 후보를 넉넉히 받음
+
+// ── 현재 위치 / 정렬 ─────────────────────────────────────────────────────────
+const userLoc = ref(null)              // { lat, lng }
+const sortMode = ref('default')        // 'default' | 'distance'
+
+// 두 좌표 사이 거리(km) — Haversine
+function distanceKm(a, b) {
+  const R = 6371
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180
+  const lat1 = (a.lat * Math.PI) / 180
+  const lat2 = (b.lat * Math.PI) / 180
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2)
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
+}
+
+// ── Filtered + sorted display list ────────────────────────────────────────────
 const displayedPlaces = computed(() => {
   let list = store.attractions
   const q = searchQuery.value.trim()
@@ -193,28 +216,80 @@ const displayedPlaces = computed(() => {
         (p.address && p.address.includes(q))
     )
   }
+  if (sortMode.value === 'distance' && userLoc.value) {
+    list = [...list]
+      .map((p) => ({
+        ...p,
+        _dist:
+          Number.isFinite(p.lat) && Number.isFinite(p.lng)
+            ? distanceKm(userLoc.value, p)
+            : Infinity,
+      }))
+      .sort((a, b) => a._dist - b._dist)
+  }
   return list
 })
 
-// ── Map pins (fixed positions cycling through 6 slots) ───────────────────────
-const PIN_POSITIONS = [
-  { top: '30%', left: '62%' },
-  { top: '55%', left: '28%' },
-  { top: '22%', left: '70%' },
-  { top: '45%', left: '45%' },
-  { top: '35%', left: '38%' },
-  { top: '60%', left: '22%' },
-]
+// 지도 중심 — 위치 권한 허용 시 현재 위치, 아니면 서울
+const mapCenter = computed(() =>
+  userLoc.value ? [userLoc.value.lat, userLoc.value.lng] : [37.5665, 126.978],
+)
 
-function pinPosition(idx) {
-  return PIN_POSITIONS[idx % PIN_POSITIONS.length]
+// 거리순일 땐 지도가 내 주변으로 줌되도록 가까운 곳만 핀 표시
+const mapPlaces = computed(() =>
+  sortMode.value === 'distance' && userLoc.value
+    ? displayedPlaces.value.slice(0, 8)
+    : displayedPlaces.value,
+)
+
+const sortLabel = computed(() =>
+  sortMode.value === 'distance' ? '거리순' : '기본순',
+)
+
+function toggleSort() {
+  if (sortMode.value === 'distance') {
+    sortMode.value = 'default'
+  } else if (userLoc.value) {
+    sortMode.value = 'distance'
+  } else {
+    locateUser(true)   // 위치 먼저 확보 후 거리순
+  }
+}
+
+// 위치가 있으면 BE 좌표(반경 20km) 검색 파라미터 — 검색어 없을 때만 사용
+function locParams() {
+  if (!userLoc.value) return {}
+  return {
+    mapX: String(userLoc.value.lng),
+    mapY: String(userLoc.value.lat),
+    radius: 20000,
+  }
+}
+
+// 현재 위치 확보 — 성공 시 거리순 + 근처 목록 재조회
+function locateUser(forceSort = false) {
+  if (!navigator.geolocation) return
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      userLoc.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      if (forceSort || sortMode.value === 'default') sortMode.value = 'distance'
+      // 위치 확보 → BE 좌표 검색으로 근처 목록 재조회 (검색 중이 아닐 때)
+      if (!searchQuery.value.trim()) loadAttractions()
+    },
+    () => {},   // 거부/실패 시 기본순 유지
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+  )
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
-  const params = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+  const params = {
+    size: PAGE_SIZE,
+    ...locParams(),
+    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+  }
   store.list(params)
 }
 
@@ -231,6 +306,7 @@ function onSearchInput() {
       const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
       const params = {
         keyword: q,
+        size: PAGE_SIZE,
         ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
       }
       store.list(params)
@@ -248,8 +324,17 @@ function clearSearch() {
 
 function loadAttractions() {
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
-  const params = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+  const params = {
+    size: PAGE_SIZE,
+    ...locParams(),
+    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+  }
   store.list(params)
+}
+
+function formatDist(km) {
+  if (!Number.isFinite(km)) return ''
+  return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`
 }
 
 function formatFestDate(raw) {
@@ -259,9 +344,10 @@ function formatFestDate(raw) {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
-  store.list({})                             // default: 전체 (matches selectedCategory 'all')
+  store.list({ size: PAGE_SIZE })            // default: 전체 (matches selectedCategory 'all')
   festivalStore.loadFestivals()              // festival section (non-blocking)
   store.loadAreas()                          // area list for potential future use
+  locateUser()                               // 현재 위치 확보 → 기본 거리순 정렬
 })
 </script>
 
@@ -463,6 +549,19 @@ onMounted(() => {
   gap: 4px;
   font-size: 13px;
   color: var(--color-ink-muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.sort-btn.active {
+  color: var(--color-peach);
+  font-weight: 600;
+}
+
+.place-dist {
+  color: var(--color-peach);
+  font-weight: 600;
+  margin-right: 2px;
 }
 
 /* ── Place grid / rows ────────────────────────────────────────────────────── */

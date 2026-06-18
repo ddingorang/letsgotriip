@@ -10,11 +10,11 @@
             <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
           </svg>
         </button>
-        <button class="icon-btn bell-wrap">
+        <button class="icon-btn bell-wrap" @click="$router.push('/notifications')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          <span class="notif-dot" />
+          <span v-if="notifStore.hasUnread" class="notif-dot" />
         </button>
       </div>
     </header>
@@ -245,16 +245,22 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import PostCard from '@/components/community/PostCard.vue'
 import { usePostsStore } from '@/stores/posts.js'
 import { useHotplaceStore } from '@/stores/hotplace.js'
 import { useCompanionStore } from '@/stores/companion.js'
+import { useNotificationStore } from '@/stores/notification.js'
 
 const postsStore = usePostsStore()
 const hotplaceStore = useHotplaceStore()
 const companionStore = useCompanionStore()
+const notifStore = useNotificationStore()
+const route = useRoute()
 
-const activeMain = ref(0)
+// 진입 쿼리(?tab=companion|hotplace)로 초기 탭 선택 — 0:공유게시판 1:핫플 2:동행
+const TAB_INDEX = { board: 0, hotplace: 1, companion: 2 }
+const activeMain = ref(TAB_INDEX[route.query.tab] ?? 0)
 
 // 공유게시판
 const filterTabs = ['전체', '후기', '꿀팁', '동행']
@@ -278,7 +284,10 @@ const filteredHotplaces = computed(() => {
   return hotplaceStore.hotplaces.filter((h) => h.category === hpCat.value)
 })
 
-onMounted(() => postsStore.fetchPosts(true))
+onMounted(() => {
+  postsStore.fetchPosts(true)
+  notifStore.load()
+})
 </script>
 
 <style scoped>
