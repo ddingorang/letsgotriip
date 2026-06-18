@@ -1,49 +1,60 @@
-# EnjoyTrip Vue
+# trip-fe
 
-Vue Router, Pinia, Axios를 사용하는 국내 여행 UI 프로토타입입니다. 장소 탐색, 일정 관리, 취향 추천, 핫플 검수, 여행 커뮤니티, 내 여행 기록 화면을 포함합니다.
+`gptgeminiclaude/FE`의 UI를 **기준(base)**으로 삼고, `springaitrip/frontend`의 기능을 흡수해 만든 통합 프론트엔드입니다. 데이터는 실제 Spring 백엔드(`springaitrip/BE`, 포트 9090)와 한국관광공사 TourAPI에 연동됩니다.
 
-## 기술 선택 이유
+## 스택
 
-현재 화면 규모만 보면 Vue 단일 컴포넌트 상태로도 동작하지만, 과제/협업 기준에서 `vue-router`, `pinia`, `axios` 사용 여부가 확인될 수 있어 세 계층을 명확히 분리했습니다.
-
-- `vue-router`: 메뉴 선택을 내부 변수만 바꾸는 방식에서 `/explore`, `/plan`, `/recommend` 같은 URL 기반 화면 전환으로 바꿔 직접 진입과 뒤로가기를 확인할 수 있게 했습니다.
-- `pinia`: 현재 메뉴, 배경 장면, 자세히 패널, 장소 목록처럼 여러 컴포넌트가 공유하는 UI 상태를 한 store에서 관리하게 했습니다.
-- `axios`: 아직 실제 백엔드가 없어도 API 연동 구조를 보여주기 위해 public mock JSON을 axios client로 읽고, 실패하면 로컬 데이터로 fallback하게 했습니다.
-
-## 화면별 유즈케이스와 API
-
-현재 Vue 화면은 7개 메뉴로 구성되어 있고, 실제 백엔드 연동 전에는 `public/mocks/tourism-places.json`만 Axios로 직접 읽습니다. 아래 API는 화면이 완성형으로 가기 위해 필요한 계약 기준입니다.
-
-| 화면 | 주요 유즈케이스 | 필요한 API | 현재 mock |
-|---|---|---|---|
-| 홈 `/` | 최근 본 장소 확인, 저장 장소 확인, 다음 작업으로 이동 | `GET /api/v1/users/me`, `GET /api/v1/tourism/places`, `GET /api/v1/trip-plans/recent` | 정적 화면 데이터 |
-| 장소탐색 `/explore` | 지역/유형/검색어로 장소 찾기, 장소 상세 확인, 여행 노트에 담기 | `GET /api/v1/tourism/areas`, `GET /api/v1/tourism/content-types`, `GET /api/v1/tourism/places`, `GET /api/v1/tourism/places/{placeId}`, `POST /api/v1/trip-plans/{planId}/items` | `public/mocks/tourism-places.json` |
-| 일정관리 `/plan` | 일정 목록 확인, 장소 추가, 동선 재정렬, 공유 링크 생성 | `GET /api/v1/trip-plans`, `GET /api/v1/trip-plans/{planId}`, `POST /api/v1/trip-plans`, `POST /api/v1/trip-plans/{planId}/items`, `PATCH /api/v1/trip-plans/{planId}/items/reorder`, `POST /api/v1/trip-plans/{planId}/share` | `mocks/trip-plans.json`, `mocks/trip-plan-detail.json` |
-| 취향추천 `/recommend` | 취향 조건 조정, 추천 후보 확인, 추천 근거 확인, 일정으로 복사 | `POST /api/v1/recommendations`, `GET /api/v1/recommendations/{recommendationId}`, `POST /api/v1/recommendations/{recommendationId}/copy-to-plan`, `GET /api/v1/trip-plans/{planId}/compare` | `mocks/recommendation.json`, `mocks/plan-compare.json` |
-| 핫플검수 `/hotplace` | 신규 제보 확인, 사진/좌표 검수, 중복 제보 병합 | `GET /api/v1/hotplaces`, `GET /api/v1/hotplaces/{hotplaceId}`, `POST /api/v1/hotplaces`, `POST /api/v1/hotplaces/{hotplaceId}/photos`, `PATCH /api/v1/hotplaces/{hotplaceId}/moderation` | `mocks/hotplaces.json` |
-| 여행톡 `/community` | 인기 글 확인, 여행글 작성, 공유 일정 확인, 댓글 관리 | `GET /api/v1/board/posts`, `GET /api/v1/board/posts/{postId}`, `POST /api/v1/board/posts`, `PATCH /api/v1/board/posts/{postId}`, `DELETE /api/v1/board/posts/{postId}`, `GET /api/v1/notices` | `mocks/board-posts.json`, `mocks/notices.json` |
-| 내여행 `/mypage` | 내 정보 확인, 취향 태그 수정, 저장 장소 정리, 내 일정 열기 | `POST /api/v1/auth/login`, `GET /api/v1/users/me`, `PATCH /api/v1/users/me`, `GET /api/v1/users/me/saved-places`, `GET /api/v1/users/me/trip-plans` | `mocks/user-me.json`, `mocks/auth-login.json`, `mocks/trip-plans.json` |
-
-## API 연동 우선순위
-
-1. `장소탐색`: 검색/필터/상세가 앱의 기본 흐름이라 `tourism` API를 가장 먼저 연결합니다.
-2. `일정관리`: 장소를 담은 뒤 실제 사용 흐름이 이어지려면 `trip-plans` CRUD와 정렬 API가 필요합니다.
-3. `내여행/auth`: 로그인 사용자 기준 저장 장소와 내 일정을 보여주기 위해 인증과 `me` API를 연결합니다.
-4. `취향추천`, `핫플검수`, `여행톡`: MVP 이후 추천/제보/커뮤니티 기능으로 확장합니다.
+Vue 3 · Vite · Pinia · vue-router 5 · axios · `@` → `src` alias
 
 ## 실행
 
 ```bash
+# 1) 백엔드 (별도 터미널) — springaitrip/BE 를 9090 포트로 구동
+#    (SETUP 은 ../springaitrip/SETUP.md 참고)
+
+# 2) 프론트엔드
 npm install
-npm run dev
+cp .env.example .env   # VITE_KOREA_TOURISM_API_KEY 등 확인
+npm run dev            # http://localhost:5173
 ```
 
-## 빌드
+백엔드가 꺼져 있어도 화면은 **mock/seed 폴백**으로 동작합니다(탐색·핫플·커뮤니티·동행 등). 로그인/AI추천/계획 등 실데이터 기능은 BE 구동이 필요합니다.
 
-```bash
-npm run build
-```
+### Dev 프록시 (`vite.config.js`)
 
-## 포함하지 않는 파일
+| 경로 | 대상 |
+|---|---|
+| `/api/tour/*` | `https://apis.data.go.kr` (TourAPI, rewrite로 prefix 제거) |
+| `/api`, `/auth`, `/users`, `/oauth2`, `/login/oauth2` | `http://localhost:9090` (Spring BE) |
 
-대외비/개인/비밀 이름 패턴, env/키 파일, `node_modules/`, `dist/`는 `.gitignore`로 제외합니다.
+> `/api/tour` 규칙은 반드시 `/api` 보다 먼저 와야 합니다(더 구체적인 규칙 우선).
+
+## 아키텍처
+
+- **앱 셸**: `App.vue`가 `<RouterView>` + 전역 `BottomNav`를 렌더. `route.meta.tabBar === false`인 라우트(로그인·결제·AI결과 등 풀스크린 플로우)에서는 BottomNav 숨김. 각 뷰는 자체 BottomNav를 갖지 않습니다.
+- **인증**: `stores/auth.js` — JWT accessToken(메모리) + refresh 쿠키. `api/http.js`가 401 발생 시 single-flight refresh → 재시도. 앱 시작 시 `bootstrap()`로 silent refresh. `meta.requiresAuth` 라우트는 전역 가드가 `/login?redirect=...`로 보냅니다. 카카오/구글 OAuth2 지원.
+- **API 레이어**: `api/index.js`의 도메인 모듈이 실제 BE 엔드포인트에 정렬됨.
+  - 실연동: `auth`, `users/me`, `/api/attractions`, `/api/festivals`, `/api/plans`, `/api/recommendations`
+  - mock 폴백(현재 BE 미제공): `hotplace`, `community`, `companion`
+- **TourAPI**: `api/festival.js`가 `/api/tour` 프록시로 축제 데이터를 직접 호출.
+
+## 주요 라우트
+
+| 경로 | 화면 | tabBar | 인증 |
+|---|---|---|---|
+| `/home` | 홈 | ✓ | |
+| `/explore` | 탐색(관광/축제 실데이터) | ✓ | |
+| `/ai`, `/ai/result` | AI 추천 입력 → 결과 → 계획저장 | ✓ / ✗ | ✓ |
+| `/plan` | 여행 계획 | ✓ | ✓ |
+| `/community` | 커뮤니티 | ✓ | |
+| `/mypage` | 마이페이지 | ✓ | ✓ |
+| `/badges`, `/checklist` | 뱃지 / 체크리스트 | ✓ | ✓ |
+| `/payment`, `/confirmation` | 결제 / 예약확정 | ✗ | |
+| `/login`, `/signup`, `/oauth/callback` | 인증 | ✗ | |
+
+핫플(`/hotplace/*`), 동행(`/companion/*`), 채팅(`/chat/*`) 등 FE 고유 화면도 포함합니다.
+
+## 출처
+
+- UI 기준: `gptgeminiclaude/FE`
+- 기능/백엔드 연동: `springaitrip/frontend` + `springaitrip/BE`

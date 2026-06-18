@@ -1,44 +1,84 @@
-import { createRouter, createWebHistory } from 'vue-router';
+// Created: 2026-06-16 14:08:18
+import { createRouter, createWebHistory } from 'vue-router'
 
-// meta.tabBar: false → 하단 탭바 숨김 (풀스크린 플로우 화면)
-// meta.requiresAuth: true → 비로그인 시 /login?redirect=<path> 으로 이동
-const routes = [
-  { path: '/', name: 'home', component: () => import('../views/HomeView.vue') },
-  { path: '/search', name: 'search', component: () => import('../views/SearchView.vue') },
-  { path: '/detail/:id?', name: 'detail', component: () => import('../views/DetailView.vue'), meta: { tabBar: false } },
-  { path: '/payment', name: 'payment', component: () => import('../views/PaymentView.vue'), meta: { tabBar: false } },
-  { path: '/confirmation', name: 'confirmation', component: () => import('../views/ConfirmationView.vue'), meta: { tabBar: false } },
-  { path: '/mypage', name: 'mypage', component: () => import('../views/MyPageView.vue'), meta: { requiresAuth: true } },
-  { path: '/review', name: 'review', component: () => import('../views/ReviewView.vue') },
-  { path: '/ai', name: 'ai-input', component: () => import('../views/AiInputView.vue'), meta: { requiresAuth: true } },
-  { path: '/ai/result', name: 'ai-result', component: () => import('../views/AiResultView.vue'), meta: { tabBar: false, requiresAuth: true } },
-  { path: '/plan', name: 'plan-edit', component: () => import('../views/PlanEditView.vue'), meta: { tabBar: false, requiresAuth: true } },
-  { path: '/community', name: 'community', component: () => import('../views/CommunityView.vue') },
-  { path: '/companion', name: 'companion', component: () => import('../views/CompanionView.vue') },
-  { path: '/badges', name: 'badges', component: () => import('../views/BadgesView.vue'), meta: { requiresAuth: true } },
-  { path: '/checklist', name: 'checklist', component: () => import('../views/ChecklistView.vue'), meta: { requiresAuth: true } },
-  // Auth screens — no tab bar
-  { path: '/login', name: 'login', component: () => import('../views/LoginView.vue'), meta: { tabBar: false } },
-  { path: '/signup', name: 'signup', component: () => import('../views/SignupView.vue'), meta: { tabBar: false } },
-  { path: '/oauth/callback', name: 'oauth-callback', component: () => import('../views/OAuthCallbackView.vue'), meta: { tabBar: false } },
-  { path: '/:pathMatch(.*)*', redirect: '/' }
-];
+// meta.tabBar: false  → global shell hides BottomNav (full-screen flows)
+// meta.requiresAuth   → global guard redirects to /login?redirect=<path>
 
-export const router = createRouter({
+const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  routes
-});
+  routes: [
+    { path: '/', redirect: '/home' },
 
-// Global auth guard
+    // ── Main tab views ────────────────────────────────────────────────────────
+    { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
+    { path: '/explore', name: 'explore', component: () => import('@/views/ExploreView.vue') },
+
+    // /plan tab — requiresAuth so unauthenticated users go to login first
+    { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue'), meta: { requiresAuth: true } },
+
+    // ── Community ─────────────────────────────────────────────────────────────
+    { path: '/community', name: 'community', component: () => import('@/views/CommunityView.vue') },
+    { path: '/community/write', name: 'post-write', component: () => import('@/views/PostWriteView.vue'), meta: { tabBar: false } },
+    { path: '/community/:id', name: 'post-detail', component: () => import('@/views/PostDetailView.vue'), meta: { tabBar: false } },
+
+    // ── Hotplace ──────────────────────────────────────────────────────────────
+    { path: '/hotplace/register', name: 'hotplace-register', component: () => import('@/views/HotplaceRegisterView.vue'), meta: { tabBar: false } },
+    { path: '/hotplace/:id', name: 'hotplace-detail', component: () => import('@/views/HotplaceDetailView.vue'), meta: { tabBar: false } },
+
+    // ── Companion ─────────────────────────────────────────────────────────────
+    { path: '/companion/write', name: 'companion-write', component: () => import('@/views/CompanionWriteView.vue'), meta: { tabBar: false } },
+    { path: '/companion/:id/applicants', name: 'companion-applicants', component: () => import('@/views/CompanionApplicantsView.vue'), meta: { tabBar: false } },
+    { path: '/companion/:id', name: 'companion-detail', component: () => import('@/views/CompanionDetailView.vue'), meta: { tabBar: false } },
+
+    // ── Chat ──────────────────────────────────────────────────────────────────
+    { path: '/chat', name: 'chat-list', component: () => import('@/views/ChatRoomListView.vue'), meta: { tabBar: false } },
+    { path: '/chat/:id', name: 'chat-room', component: () => import('@/views/ChatRoomView.vue'), meta: { tabBar: false } },
+
+    // ── MyPage ────────────────────────────────────────────────────────────────
+    { path: '/mypage', name: 'mypage', component: () => import('@/views/MyPageView.vue'), meta: { requiresAuth: true } },
+    { path: '/mypage/edit', name: 'profile-edit', component: () => import('@/views/ProfileEditView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    { path: '/mypage/challenge', name: 'challenge-detail', component: () => import('@/views/ChallengeDetailView.vue'), meta: { tabBar: false } },
+    { path: '/mypage/album/:id', name: 'album-detail', component: () => import('@/views/AlbumDetailView.vue'), meta: { tabBar: false } },
+    { path: '/place/:id', name: 'place-detail', component: () => import('@/views/PlaceDetailView.vue'), meta: { tabBar: false } },
+
+    // ── Auth ──────────────────────────────────────────────────────────────────
+    { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { tabBar: false } },
+    { path: '/signup', name: 'signup', component: () => import('@/views/SignupView.vue'), meta: { tabBar: false } },
+    { path: '/oauth/callback', name: 'oauth-callback', component: () => import('@/views/OAuthCallbackView.vue'), meta: { tabBar: false } },
+
+    // ── Preference survey ─────────────────────────────────────────────────────
+    { path: '/survey', name: 'survey', component: () => import('@/views/PreferenceSurveyView.vue'), meta: { tabBar: false } },
+
+    // ── AI ────────────────────────────────────────────────────────────────────
+    { path: '/ai', name: 'ai-input', component: () => import('@/views/AiInputView.vue'), meta: { requiresAuth: true } },
+    { path: '/ai/result', name: 'ai-result', component: () => import('@/views/AiResultView.vue'), meta: { tabBar: false, requiresAuth: true } },
+
+    // ── Payment / Confirmation ────────────────────────────────────────────────
+    { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue'), meta: { tabBar: false } },
+    { path: '/confirmation', name: 'confirmation', component: () => import('@/views/ConfirmationView.vue'), meta: { tabBar: false } },
+
+    // ── Badges / Checklist ────────────────────────────────────────────────────
+    { path: '/badges', name: 'badges', component: () => import('@/views/BadgesView.vue'), meta: { requiresAuth: true } },
+    { path: '/checklist', name: 'checklist', component: () => import('@/views/ChecklistView.vue'), meta: { requiresAuth: true } },
+  ],
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    return { top: 0 }
+  },
+})
+
+// ── Global auth guard ─────────────────────────────────────────────────────────
 router.beforeEach(async (to) => {
-  if (!to.meta.requiresAuth) return true;
+  if (!to.meta.requiresAuth) return true
 
   // Lazy import to avoid circular deps at module load time
-  const { useAuthStore } = await import('../stores/auth.js');
-  const auth = useAuthStore();
+  const { useAuthStore } = await import('@/stores/auth.js')
+  const auth = useAuthStore()
 
   if (!auth.isAuthenticated) {
-    return { path: '/login', query: { redirect: to.fullPath } };
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
-  return true;
-});
+  return true
+})
+
+export default router

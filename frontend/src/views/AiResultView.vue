@@ -1,258 +1,729 @@
-<script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { useRecommendStore } from '../stores/recommend.js';
-
-const router = useRouter();
-const recommendStore = useRecommendStore();
-
-// ── 초기 로드 ────────────────────────────────────────────────────────────────
-const loading = ref(false);
-const saveLoading = ref(false);
-const saveDone = ref(false);
-const savedPlanId = ref(null);
-
-onMounted(async () => {
-  if (recommendStore.current) return; // 스토어에 결과 있으면 그대로 사용
-
-  loading.value = true;
-  try {
-    await recommendStore.loadHistory();
-    if (recommendStore.history.length === 0) {
-      router.replace('/ai');
-      return;
-    }
-    const latest = recommendStore.history[0];
-    await recommendStore.load(latest.id);
-  } catch {
-    router.replace('/ai');
-  } finally {
-    loading.value = false;
-  }
-});
-
-// ── 편의 computed ─────────────────────────────────────────────────────────────
-const rec = computed(() => recommendStore.current);
-const draft = computed(() => rec.value?.draft ?? null);
-const days = computed(() => draft.value?.days ?? []);
-const isPartial = computed(() => rec.value?.status === 'PARTIAL');
-
-// ── 탭 ──────────────────────────────────────────────────────────────────────
-const activeTab = ref(0);
-const tabs = computed(() => days.value.map(d => `${d.dayNo}일차`));
-const activeDay = computed(() => days.value[activeTab.value] ?? null);
-
-// ── 내 계획에 담기 ─────────────────────────────────────────────────────────
-async function handleSavePlan() {
-  if (!rec.value) return;
-  saveLoading.value = true;
-  recommendStore.error = null;
-  try {
-    const plan = await recommendStore.savePlan(rec.value.id);
-    savedPlanId.value = plan?.id ?? null;
-    saveDone.value = true;
-  } catch {
-    // error displayed via store.error
-  } finally {
-    saveLoading.value = false;
-  }
-}
-</script>
-
 <template>
-  <div class="ai-result-view">
-
+  <div class="page">
     <!-- Loading skeleton -->
-    <div v-if="loading" class="skeleton-wrap">
-      <div class="skeleton-nav"></div>
-      <div class="skeleton-banner"></div>
-      <div class="skeleton-body"></div>
+    <div v-if="pageLoading" class="skeleton-wrap">
+      <div class="skeleton-nav" />
+      <div class="skeleton-banner" />
+      <div class="skeleton-body">
+        <div class="skeleton-line w60" />
+        <div class="skeleton-line w90" />
+        <div class="skeleton-line w75" />
+      </div>
     </div>
 
-    <template v-else-if="rec">
-      <!-- Custom nav -->
+    <!-- No result — redirect should have fired, show fallback -->
+    <div v-else-if="!rec" class="empty-page">
+      <div class="empty-icon">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M8 15s1.5 2 4 2 4-2 4-2" />
+          <line x1="9" y1="9" x2="9.01" y2="9" />
+          <line x1="15" y1="9" x2="15.01" y2="9" />
+        </svg>
+      </div>
+      <p class="empty-title">추천 결과가 없어요</p>
+      <p class="empty-sub">AI 추천을 먼저 실행해 주세요</p>
+      <button class="goto-ai-btn" @click="router.replace('/ai')">AI 추천 받기</button>
+    </div>
+
+    <template v-else>
+      <!-- Custom top nav -->
       <div class="nav-bar">
-        <div class="nav-back" @click="router.back()">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        </div>
-        <div class="nav-title">AI 추천 결과</div>
-        <div class="nav-regen" @click="router.push('/ai')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <button class="nav-btn" @click="router.back()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <span class="nav-title">AI 추천 결과</span>
+        <button class="nav-regen-btn" @click="router.push('/ai')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
           재생성
-        </div>
-        <div class="nav-share">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-        </div>
+        </button>
       </div>
 
-      <!-- Summary Banner -->
+      <!-- Summary banner -->
       <div class="summary-banner">
-        <div class="summary-info">
-          <div class="summary-label">
+        <div class="banner-glow" />
+        <div class="banner-info">
+          <div class="banner-label">
             AI가 생성한 최적 일정
             <span v-if="isPartial" class="partial-badge">일부 일정만 생성됐어요</span>
           </div>
-          <div class="summary-title">{{ draft?.totalSummary ?? '추천 일정' }}</div>
-          <div class="summary-tags">
-            <span class="summary-tag">{{ days.length }}일 일정</span>
-            <span v-if="rec.status" class="summary-tag">{{ rec.status }}</span>
+          <div class="banner-title">{{ draft?.totalSummary ?? '나만의 여행 일정' }}</div>
+          <div class="banner-tags">
+            <span class="banner-tag">{{ days.length }}일 일정</span>
+            <span v-if="rec.status && rec.status !== 'DONE'" class="banner-tag">{{ rec.status }}</span>
           </div>
         </div>
-        <div class="summary-score">
-          <div class="score-circle">
-            <div class="score-num">AI</div>
-            <div class="score-label">추천</div>
-          </div>
+        <div class="score-badge">
+          <span class="score-label-top">AI</span>
+          <span class="score-label-bot">추천</span>
         </div>
       </div>
 
-      <!-- Day Tabs -->
+      <!-- Day tabs -->
       <div class="day-tabs">
-        <div
+        <button
           v-for="(tab, i) in tabs"
           :key="tab"
           class="day-tab"
           :class="{ active: activeTab === i }"
           @click="activeTab = i"
-        >{{ tab }}</div>
+        >{{ tab }}</button>
       </div>
 
-      <div class="content">
-        <!-- Day Header -->
-        <div v-if="activeDay" class="day-header">
-          <div class="day-pill">{{ activeDay.dayNo }}일차</div>
-          <div class="day-summary">{{ activeDay.summary }}</div>
-        </div>
+      <!-- Scrollable day content -->
+      <div class="scroll-content">
+        <div v-if="activeDay">
+          <div class="day-header">
+            <span class="day-pill">{{ activeDay.dayNo }}일차</span>
+            <span class="day-summary">{{ activeDay.summary }}</span>
+          </div>
 
-        <!-- Timeline -->
-        <div v-if="activeDay && activeDay.places.length" class="timeline">
-          <div
-            v-for="(place, idx) in activeDay.places"
-            :key="place.contentId"
-            class="timeline-item"
-          >
-            <div class="timeline-dot">
-              <div class="dot-circle">
-                <div class="dot-num">{{ idx + 1 }}</div>
+          <div v-if="activeDay.places && activeDay.places.length" class="timeline">
+            <div
+              v-for="(place, idx) in activeDay.places"
+              :key="place.contentId ?? idx"
+              class="timeline-item"
+            >
+              <div class="tl-left">
+                <div class="tl-dot">{{ idx + 1 }}</div>
+                <div v-if="idx < activeDay.places.length - 1" class="tl-line" />
               </div>
-              <div class="dot-time">{{ place.visitTime }}</div>
-            </div>
-            <div class="place-card">
-              <div class="place-top">
-                <div class="place-thumb">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <div class="place-card">
+                <div class="place-thumb-wrap">
+                  <div class="place-thumb">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                      <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
                 </div>
                 <div class="place-info">
+                  <div class="place-meta">
+                    <span v-if="place.visitTime" class="place-time">{{ place.visitTime }}</span>
+                  </div>
                   <div class="place-name">{{ place.title }}</div>
                   <div v-if="place.reason" class="place-reason">{{ place.reason }}</div>
                 </div>
               </div>
             </div>
           </div>
+
+          <div v-else class="empty-day">
+            이 날의 일정이 없어요.
+          </div>
         </div>
 
-        <div v-else-if="activeDay" class="empty-day">
-          이 날의 일정이 없어요.
+        <!-- Store error -->
+        <div v-if="recommendStore.error" class="error-msg">
+          {{ recommendStore.error }}
         </div>
-
-        <!-- Error -->
-        <div v-if="recommendStore.error" class="error-msg">{{ recommendStore.error }}</div>
 
         <!-- Save done notice -->
-        <div v-if="saveDone" class="save-notice">
-          계획에 저장했어요!
-          <span class="save-notice-link" @click="router.push('/plan')">계획 보러 가기 →</span>
-        </div>
+        <Transition name="slide-down">
+          <div v-if="saveDone" class="save-notice">
+            <span>계획에 저장했어요!</span>
+            <button class="save-notice-link" @click="router.push('/plan')">계획 보러 가기 →</button>
+          </div>
+        </Transition>
+
+        <div class="bottom-spacer" />
       </div>
 
-      <!-- Bottom Bar -->
+      <!-- Bottom bar -->
       <div class="bottom-bar">
-        <button class="btn-modify" @click="router.push('/ai')">재생성</button>
+        <button class="btn-retry" @click="router.push('/ai')">재생성</button>
         <button
           class="btn-save"
-          :disabled="saveLoading"
+          :disabled="saveLoading || saveDone"
           @click="handleSavePlan"
         >
           <template v-if="saveLoading">
-            <span class="spinner"></span>
+            <span class="spinner" />
             저장 중...
           </template>
           <template v-else-if="saveDone">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12" /></svg>
             저장됨
           </template>
           <template v-else>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            내 계획에 담기
+            계획으로 저장
           </template>
         </button>
       </div>
     </template>
-
   </div>
 </template>
 
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useRecommendStore } from '@/stores/recommend.js'
+
+const router = useRouter()
+const recommendStore = useRecommendStore()
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const pageLoading = ref(false)
+const saveLoading = ref(false)
+const saveDone = ref(false)
+
+// ── Bootstrap: if no current recommendation, try loading latest from history ──
+onMounted(async () => {
+  if (recommendStore.current) return
+
+  pageLoading.value = true
+  try {
+    await recommendStore.loadHistory()
+    if (recommendStore.history.length === 0) {
+      router.replace('/ai')
+      return
+    }
+    const latest = recommendStore.history[0]
+    await recommendStore.load(latest.id)
+  } catch {
+    router.replace('/ai')
+  } finally {
+    pageLoading.value = false
+  }
+})
+
+// ── Computed ──────────────────────────────────────────────────────────────────
+const rec = computed(() => recommendStore.current)
+const draft = computed(() => rec.value?.draft ?? null)
+const days = computed(() => draft.value?.days ?? [])
+const isPartial = computed(() => rec.value?.status === 'PARTIAL')
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+const activeTab = ref(0)
+const tabs = computed(() => days.value.map(d => `${d.dayNo}일차`))
+const activeDay = computed(() => days.value[activeTab.value] ?? null)
+
+// ── Save plan ─────────────────────────────────────────────────────────────────
+async function handleSavePlan() {
+  if (!rec.value) return
+  saveLoading.value = true
+  recommendStore.error = null
+  try {
+    await recommendStore.savePlan(rec.value.id)
+    saveDone.value = true
+  } catch {
+    // error shown via store.error
+  } finally {
+    saveLoading.value = false
+  }
+}
+</script>
+
 <style scoped>
-.ai-result-view { background: var(--surface-subtle); min-height: 100%; }
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-surface);
+}
 
-/* skeleton */
-.skeleton-wrap { padding: 0; }
-.skeleton-nav { height: 52px; background: #fff; border-bottom: 1px solid var(--border-subtle); }
-.skeleton-banner { height: 110px; background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%); }
-.skeleton-body { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+/* ── Skeleton ─────────────────────────────────────────────────────────────── */
+.skeleton-wrap {
+  flex: 1;
+  overflow: hidden;
+}
 
-.nav-bar { height: 52px; display: flex; align-items: center; padding: 0 16px; gap: 8px; background: #fff; border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; z-index: var(--z-raised); }
-.nav-back { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: var(--text-primary); cursor: pointer; flex-shrink: 0; }
-.nav-title { flex: 1; font: var(--weight-semibold) var(--text-lg)/1 var(--font-sans); color: var(--text-primary); }
-.nav-share { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); cursor: pointer; flex-shrink: 0; }
-.nav-regen { display: flex; align-items: center; gap: 5px; font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); color: var(--color-primary-500); padding: 7px 12px; background: var(--color-primary-50); border-radius: var(--radius-full); cursor: pointer; white-space: nowrap; }
+.skeleton-nav {
+  height: 52px;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-line-light);
+}
 
-.summary-banner { background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%); padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; }
-.summary-label { font: var(--weight-medium) var(--text-xs)/1 var(--font-sans); color: rgba(255,255,255,0.6); margin-bottom: 5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.partial-badge { background: rgba(255,200,100,0.25); border: 1px solid rgba(255,200,100,0.5); color: #ffd280; padding: 2px 8px; border-radius: var(--radius-full); font-size: 10px; }
-.summary-title { font: var(--weight-bold) var(--text-xl)/var(--leading-snug) var(--font-sans); color: #fff; letter-spacing: -0.02em; }
-.summary-tags { display: flex; gap: 6px; margin-top: 8px; }
-.summary-tag { font: var(--weight-medium) 10px/1 var(--font-sans); color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.12); padding: 3px 8px; border-radius: var(--radius-full); }
-.score-circle { width: 60px; height: 60px; border-radius: var(--radius-full); background: rgba(247,143,87,0.2); border: 2px solid rgba(247,143,87,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
-.score-num { font: var(--weight-extrabold) 16px/1 var(--font-sans); color: var(--color-primary-400); }
-.score-label { font: var(--weight-medium) 9px/1 var(--font-sans); color: rgba(255,255,255,0.5); margin-top: 2px; }
+.skeleton-banner {
+  height: 110px;
+  background: linear-gradient(135deg, #1c1c3a 0%, #0f2f5a 100%);
+}
 
-.day-tabs { display: flex; background: #fff; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; scrollbar-width: none; padding: 0 20px; }
-.day-tabs::-webkit-scrollbar { display: none; }
-.day-tab { flex-shrink: 0; padding: 14px 16px; font: var(--weight-medium) var(--text-sm)/1 var(--font-sans); color: var(--text-tertiary); border-bottom: 2.5px solid transparent; cursor: pointer; white-space: nowrap; }
-.day-tab.active { color: var(--color-primary-500); border-bottom-color: var(--color-primary-500); font-weight: var(--weight-semibold); }
+.skeleton-body {
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-.content { padding: 16px 20px 140px; }
+.skeleton-line {
+  height: 14px;
+  background: var(--color-line-light);
+  border-radius: var(--radius-full);
+  animation: shimmer 1.2s infinite;
+}
 
-.day-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
-.day-pill { background: var(--color-primary-500); color: #fff; padding: 5px 12px; border-radius: var(--radius-full); font: var(--weight-bold) var(--text-sm)/1 var(--font-sans); flex-shrink: 0; }
-.day-summary { font: var(--weight-medium) var(--text-sm)/1.4 var(--font-sans); color: var(--text-secondary); padding-top: 3px; }
+.w60 { width: 60%; }
+.w90 { width: 90%; }
+.w75 { width: 75%; }
 
-.empty-day { font: var(--type-body-sm); color: var(--text-tertiary); padding: 20px 0; text-align: center; }
-.error-msg { font: var(--weight-medium) var(--text-sm)/1.4 var(--font-sans); color: #e53e3e; margin-top: 12px; text-align: center; }
-.save-notice { background: var(--color-primary-50); border: 1px solid var(--color-primary-200); border-radius: var(--radius-md); padding: 12px 16px; margin-top: 16px; font: var(--weight-medium) var(--text-sm)/1 var(--font-sans); color: var(--color-primary-700); display: flex; align-items: center; justify-content: space-between; }
-.save-notice-link { font-weight: var(--weight-semibold); color: var(--color-primary-500); cursor: pointer; }
+@keyframes shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 
-.timeline { position: relative; }
-.timeline::before { content: ''; position: absolute; left: 19px; top: 0; bottom: 0; width: 2px; background: var(--border-subtle); }
-.timeline-item { display: flex; gap: 14px; margin-bottom: 16px; position: relative; }
-.timeline-dot { width: 40px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.dot-circle { width: 22px; height: 22px; border-radius: var(--radius-full); border: 2.5px solid var(--color-primary-500); background: #fff; display: flex; align-items: center; justify-content: center; z-index: 1; position: relative; }
-.dot-num { font: var(--weight-bold) 9px/1 var(--font-sans); color: var(--color-primary-500); }
-.dot-time { font: var(--weight-medium) 9px/1 var(--font-sans); color: var(--text-tertiary); margin-top: 2px; white-space: nowrap; }
+/* ── Empty page ──────────────────────────────────────────────────────────── */
+.empty-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+}
 
-.place-card { flex: 1; background: var(--surface-bg); border-radius: var(--radius-lg); padding: 14px; box-shadow: var(--shadow-xs); }
-.place-top { display: flex; align-items: flex-start; gap: 10px; }
-.place-thumb { width: 48px; height: 48px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-100)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-tertiary); }
-.place-info { flex: 1; }
-.place-name { font: var(--weight-bold) var(--text-base)/1 var(--font-sans); color: var(--text-primary); margin-bottom: 5px; }
-.place-reason { font: var(--type-body-sm); color: var(--text-secondary); line-height: 1.4; }
+.empty-icon {
+  margin-bottom: 8px;
+}
 
-.bottom-bar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: var(--surface-bg); border-top: 1px solid var(--border-subtle); padding: 14px 20px 34px; display: flex; gap: 10px; z-index: var(--z-raised); }
-.btn-save { flex: 1; height: 52px; background: var(--color-primary-500); color: #fff; border: none; border-radius: var(--radius-md); font: var(--weight-bold) var(--text-base)/1 var(--font-sans); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.2s; }
-.btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-modify { height: 52px; padding: 0 18px; background: transparent; color: var(--text-secondary); border: 1.5px solid var(--border-default); border-radius: var(--radius-md); font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans); cursor: pointer; white-space: nowrap; }
+.empty-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.4px;
+}
 
-@keyframes spin { to { transform: rotate(360deg); } }
-.spinner { width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+.empty-sub {
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  margin-bottom: 12px;
+}
+
+.goto-ai-btn {
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 13px 28px;
+  border-radius: var(--radius-full);
+  letter-spacing: -0.2px;
+}
+
+/* ── Top nav ──────────────────────────────────────────────────────────────── */
+.nav-bar {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 8px;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-line-light);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.nav-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink);
+  flex-shrink: 0;
+}
+
+.nav-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+
+.nav-regen-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+  padding: 7px 12px;
+  background: var(--color-peach-light);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  letter-spacing: -0.2px;
+}
+
+/* ── Summary banner ──────────────────────────────────────────────────────── */
+.summary-banner {
+  background: linear-gradient(135deg, #1c1c3a 0%, #0f2f5a 100%);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-glow {
+  position: absolute;
+  top: -30px;
+  right: -20px;
+  width: 130px;
+  height: 130px;
+  background: radial-gradient(circle, rgba(247, 143, 87, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.banner-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.partial-badge {
+  background: rgba(255, 200, 100, 0.2);
+  border: 1px solid rgba(255, 200, 100, 0.45);
+  color: #ffd280;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+}
+
+.banner-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.4px;
+  line-height: 1.3;
+}
+
+.banner-tags {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.banner-tag {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.12);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+
+.score-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(247, 143, 87, 0.18);
+  border: 2px solid rgba(247, 143, 87, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.score-label-top {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-peach);
+  line-height: 1;
+}
+
+.score-label-bot {
+  font-size: 9px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+/* ── Day tabs ─────────────────────────────────────────────────────────────── */
+.day-tabs {
+  display: flex;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-line-light);
+  overflow-x: auto;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+
+.day-tab {
+  flex-shrink: 0;
+  padding: 13px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  border-bottom: 2.5px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  letter-spacing: -0.2px;
+  transition: all 0.15s;
+}
+
+.day-tab.active {
+  color: var(--color-peach);
+  border-bottom-color: var(--color-peach);
+  font-weight: 700;
+}
+
+/* ── Scroll content ──────────────────────────────────────────────────────── */
+.scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px 0;
+}
+
+.bottom-spacer {
+  height: 120px;
+}
+
+/* ── Day header ──────────────────────────────────────────────────────────── */
+.day-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.day-pill {
+  background: var(--color-peach);
+  color: #fff;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.day-summary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink-secondary);
+  line-height: 1.45;
+  padding-top: 3px;
+}
+
+/* ── Timeline ─────────────────────────────────────────────────────────────── */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 12px;
+}
+
+.tl-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.tl-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--color-peach);
+  background: var(--color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-peach);
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.tl-line {
+  width: 2px;
+  flex: 1;
+  background: var(--color-line-light);
+  margin: 4px 0;
+  min-height: 16px;
+}
+
+.place-card {
+  flex: 1;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 12px;
+  display: flex;
+  gap: 12px;
+}
+
+.place-thumb-wrap {
+  flex-shrink: 0;
+}
+
+.place-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--color-peach-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-peach);
+}
+
+.place-info {
+  flex: 1;
+}
+
+.place-meta {
+  margin-bottom: 4px;
+}
+
+.place-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-peach);
+  background: var(--color-peach-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.place-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  margin-bottom: 5px;
+}
+
+.place-reason {
+  font-size: 12.5px;
+  color: var(--color-ink-secondary);
+  line-height: 1.45;
+}
+
+/* ── Empty day ────────────────────────────────────────────────────────────── */
+.empty-day {
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  padding: 28px 0;
+}
+
+/* ── Error / notice ──────────────────────────────────────────────────────── */
+.error-msg {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-error);
+  text-align: center;
+  margin-top: 12px;
+  padding: 0 4px;
+}
+
+.save-notice {
+  background: var(--color-peach-light);
+  border: 1px solid rgba(247, 143, 87, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 13px 16px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+}
+
+.save-notice-link {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-peach);
+  white-space: nowrap;
+}
+
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: opacity 0.25s, transform 0.25s;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* ── Bottom bar ───────────────────────────────────────────────────────────── */
+.bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-white);
+  border-top: 1px solid var(--color-line-light);
+  padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+}
+
+.btn-retry {
+  height: 50px;
+  padding: 0 18px;
+  background: transparent;
+  color: var(--color-ink-secondary);
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-save {
+  flex: 1;
+  height: 50px;
+  background: linear-gradient(90deg, var(--color-peach) 0%, #f9a96a 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xl);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(247, 143, 87, 0.3);
+  transition: opacity 0.2s;
+}
+
+.btn-save:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2.5px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
 </style>

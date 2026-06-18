@@ -1,22 +1,33 @@
-import vue from '@vitejs/plugin-vue';
-import { defineConfig } from 'vite';
+// Created: 2026-06-16 13:36:03
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from 'node:url'
 
-const BACKEND = 'http://localhost:9090';
+const BACKEND = 'http://localhost:9090'
 
 export default defineConfig({
   plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   server: {
+    port: 5173,
     proxy: {
+      // IMPORTANT: '/api/tour' must come BEFORE '/api' (more specific first)
+      '/api/tour': {
+        target: 'https://apis.data.go.kr',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/tour/, ''),
+      },
       '/api': { target: BACKEND, changeOrigin: true },
+      '/community': { target: BACKEND, changeOrigin: true },
+      '/companion': { target: BACKEND, changeOrigin: true },
       '/auth': { target: BACKEND, changeOrigin: true },
       '/users': { target: BACKEND, changeOrigin: true },
       '/oauth2': { target: BACKEND, changeOrigin: true },
-      // 주의: '/login' 전체를 프록시하면 SPA의 /login 라우트 직접 진입이 백엔드로 가버린다.
-      // OAuth 인가 코드 콜백 경로만 프록시한다.
       '/login/oauth2': { target: BACKEND, changeOrigin: true },
-      '/community': { target: BACKEND, changeOrigin: true },
-      '/companion': { target: BACKEND, changeOrigin: true },
-      '/uploads': { target: BACKEND, changeOrigin: true },
     },
   },
-});
+})

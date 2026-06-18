@@ -1,268 +1,351 @@
-<script setup>
-import { ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { useAuthStore } from '../stores/auth.js';
-
-const router = useRouter();
-const route = useRoute();
-const auth = useAuthStore();
-
-const email = ref('');
-const password = ref('');
-const errorMsg = ref('');
-const loading = ref(false);
-
-async function handleLogin() {
-  errorMsg.value = '';
-  if (!email.value || !password.value) {
-    errorMsg.value = '이메일과 비밀번호를 입력해 주세요.';
-    return;
-  }
-  loading.value = true;
-  try {
-    await auth.login(email.value, password.value);
-    const redirect = route.query.redirect;
-    router.push(redirect && typeof redirect === 'string' ? redirect : '/');
-  } catch (err) {
-    const code = err.response?.data?.code;
-    if (code === 'USER401' || code === 'USER404') {
-      errorMsg.value = '이메일 또는 비밀번호가 올바르지 않아요.';
-    } else {
-      errorMsg.value = '로그인 중 오류가 발생했어요. 다시 시도해 주세요.';
-    }
-  } finally {
-    loading.value = false;
-  }
-}
-
-function handleGoogle() {
-  window.location.href = '/oauth2/authorization/google';
-}
-</script>
-
 <template>
-  <div class="login-view">
-    <!-- Logo area -->
-    <div class="logo-area">
-      <div class="logo-text">관통여행</div>
-      <div class="logo-sub">AI가 만들어주는 나만의 여행 일정</div>
+  <div class="page">
+    <!-- Hero photo area -->
+    <div class="hero-section">
+      <div class="hero-bg" />
+      <div class="hero-grain" />
+      <div class="hero-caption">제주 여행 무드 사진</div>
+
+      <!-- Logo card overlay -->
+      <div class="logo-card">
+        <div class="logo-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+          </svg>
+        </div>
+        <span class="logo-text">여행ON</span>
+      </div>
     </div>
 
-    <!-- Form card -->
-    <div class="form-card">
-      <div class="form-title">로그인</div>
+    <!-- Form section -->
+    <div class="form-section">
+      <h2 class="form-title">다시 만나서 반가워요</h2>
+      <p class="form-sub">로그인하고 나만의 여행을 계획해보세요.</p>
 
-      <div class="field">
-        <label class="field-label">이메일</label>
-        <input
-          v-model="email"
-          type="email"
-          class="field-input"
-          placeholder="이메일을 입력해 주세요"
-          autocomplete="email"
-          @keyup.enter="handleLogin"
-        />
+      <div class="fields">
+        <!-- Email -->
+        <div class="field-wrap">
+          <label class="field-label">이메일</label>
+          <div class="input-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+            </svg>
+            <input
+              v-model="email"
+              type="email"
+              class="field-input"
+              placeholder="user@email.com"
+              autocomplete="email"
+              @keydown.enter="focusPassword"
+            />
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="field-wrap">
+          <label class="field-label">비밀번호</label>
+          <div class="input-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
+            </svg>
+            <input
+              ref="passwordRef"
+              v-model="password"
+              type="password"
+              class="field-input"
+              placeholder="••••••••"
+              autocomplete="current-password"
+              @keydown.enter="submitLogin"
+            />
+          </div>
+        </div>
       </div>
 
-      <div class="field">
-        <label class="field-label">비밀번호</label>
-        <input
-          v-model="password"
-          type="password"
-          class="field-input"
-          placeholder="비밀번호를 입력해 주세요"
-          autocomplete="current-password"
-          @keyup.enter="handleLogin"
-        />
+      <div v-if="error" class="error-msg">{{ error }}</div>
+
+      <!-- Login button -->
+      <button class="login-btn" :disabled="loading" @click="submitLogin">
+        <span v-if="!loading">로그인</span>
+        <div v-else class="btn-spinner" />
+      </button>
+
+      <!-- Divider -->
+      <div class="divider-row">
+        <div class="divider" />
+        <span class="divider-text">또는</span>
+        <div class="divider" />
       </div>
 
-      <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
+      <!-- Social buttons -->
+      <div class="social-col">
+        <!-- Kakao -->
+        <button class="social-btn kakao" @click="handleKakao">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#3C1E1E" stroke="none">
+            <path d="M12 3C6.477 3 2 6.477 2 10.917c0 2.817 1.728 5.291 4.337 6.757l-1.1 4.073c-.097.361.296.65.612.44L10.5 19.5c.492.058.993.083 1.5.083 5.523 0 10-3.478 10-7.666C22 6.477 17.523 3 12 3z" />
+          </svg>
+          카카오로 계속하기
+        </button>
 
-      <button class="btn-primary" :disabled="loading" @click="handleLogin">
-        <span v-if="loading" class="spinner"></span>
-        <span v-else>로그인</span>
-      </button>
+        <!-- Google -->
+        <button class="social-btn google" @click="handleGoogle">
+          <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Google로 계속하기
+        </button>
+      </div>
 
-      <div class="divider"><span>또는</span></div>
-
-      <button class="btn-google" @click="handleGoogle">
-        <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-        </svg>
-        Google로 계속하기
-      </button>
-
+      <!-- Sign up link -->
       <p class="signup-link">
-        아직 계정이 없으신가요?
-        <router-link to="/signup">가입하기</router-link>
+        아직 회원이 아니신가요?
+        <button class="signup-text" @click="goSignup">회원가입</button>
       </p>
     </div>
   </div>
 </template>
 
+<script setup>
+import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
+
+const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
+
+const email = ref('')
+const password = ref('')
+const loading = ref(false)
+const error = ref('')
+const passwordRef = ref(null)
+
+function focusPassword() {
+  passwordRef.value?.focus()
+}
+
+async function submitLogin() {
+  if (!email.value || !password.value) {
+    error.value = '이메일과 비밀번호를 입력해주세요.'
+    return
+  }
+  loading.value = true
+  error.value = ''
+  try {
+    await authStore.login(email.value, password.value)
+    const redirect = route.query.redirect
+    router.push(redirect && typeof redirect === 'string' ? redirect : '/home')
+  } catch (err) {
+    const code = err.response?.data?.code
+    if (code === 'USER401' || code === 'USER404') {
+      error.value = '이메일 또는 비밀번호가 올바르지 않아요.'
+    } else {
+      error.value = '로그인 중 오류가 발생했어요. 다시 시도해 주세요.'
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleKakao() {
+  const redirect = route.query.redirect
+  if (redirect && typeof redirect === 'string') {
+    sessionStorage.setItem('oauth_redirect', redirect)
+  }
+  window.location.href = '/oauth2/authorization/kakao'
+}
+
+function handleGoogle() {
+  const redirect = route.query.redirect
+  if (redirect && typeof redirect === 'string') {
+    sessionStorage.setItem('oauth_redirect', redirect)
+  }
+  window.location.href = '/oauth2/authorization/google'
+}
+
+function goSignup() {
+  router.push('/signup')
+}
+</script>
+
 <style scoped>
-.login-view {
-  min-height: 100%;
-  background: var(--surface-subtle);
+.page {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-white);
+}
+
+/* Hero */
+.hero-section {
+  position: relative;
+  height: 220px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(145deg, #c8b8a8 0%, #b0a090 40%, #a89080 100%);
+}
+.hero-grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+  opacity: 0.4;
+}
+.hero-caption {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+.logo-card {
+  position: absolute;
+  bottom: -24px;
+  left: 24px;
+  display: flex;
   align-items: center;
-  padding: 48px 20px 40px;
+  gap: 8px;
 }
-
-.logo-area {
-  text-align: center;
-  margin-bottom: 32px;
-}
-.logo-text {
-  font: 800 32px/1 var(--font-sans);
-  color: var(--color-primary-500);
-  letter-spacing: -0.03em;
-  margin-bottom: 8px;
-}
-.logo-sub {
-  font: var(--type-body-sm);
-  color: var(--text-secondary);
-}
-
-.form-card {
-  width: 100%;
-  max-width: 390px;
-  background: var(--surface-bg);
-  border-radius: var(--radius-xl);
-  padding: 28px 24px 32px;
-  box-shadow: var(--shadow-md);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.form-title {
-  font: var(--weight-bold) var(--text-xl)/1 var(--font-sans);
-  color: var(--text-primary);
-  margin-bottom: 24px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-.field-label {
-  font: var(--weight-semibold) var(--text-sm)/1 var(--font-sans);
-  color: var(--text-secondary);
-}
-.field-input {
-  height: 50px;
-  border: 1.5px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 0 14px;
-  font: var(--weight-regular) var(--text-base)/1 var(--font-sans);
-  color: var(--text-primary);
-  background: var(--surface-bg);
-  outline: none;
-  transition: border-color 0.15s;
-}
-.field-input::placeholder {
-  color: var(--text-tertiary);
-}
-.field-input:focus {
-  border-color: var(--color-primary-400);
-}
-
-.error-msg {
-  font: var(--weight-medium) var(--text-sm)/1.4 var(--font-sans);
-  color: var(--color-error);
-  margin: 0 0 12px;
-}
-
-.btn-primary {
-  width: 100%;
-  height: 52px;
-  background: var(--color-primary-500);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-md);
-  font: var(--weight-bold) var(--text-base)/1 var(--font-sans);
-  cursor: pointer;
-  margin-top: 4px;
+.logo-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--color-peach);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  transition: background 0.15s;
+  box-shadow: 0 4px 12px rgba(247, 143, 87, 0.4);
 }
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary-600);
-}
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.logo-text {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.5px;
 }
 
-.spinner {
+/* Form */
+.form-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 48px 24px 32px;
+}
+.form-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.6px;
+  margin-bottom: 6px;
+}
+.form-sub {
+  font-size: 14px;
+  color: var(--color-ink-muted);
+  margin-bottom: 28px;
+  letter-spacing: -0.2px;
+}
+
+.fields { display: flex; flex-direction: column; gap: 16px; margin-bottom: 4px; }
+.field-wrap { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 13px; font-weight: 600; color: var(--color-ink-secondary); }
+
+.input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 13px 16px;
+  border: 1.5px solid transparent;
+  transition: border-color 0.15s;
+}
+.input-wrap:focus-within { border-color: var(--color-peach); }
+.field-input {
+  flex: 1;
+  font-size: 14.5px;
+  color: var(--color-ink);
+  background: transparent;
+}
+.field-input::placeholder { color: var(--color-ink-muted); }
+
+.error-msg {
+  font-size: 13px;
+  color: var(--color-error);
+  margin: 8px 0 12px;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 16px;
+  background: var(--color-peach);
+  color: white;
+  font-size: 15.5px;
+  font-weight: 700;
+  border-radius: var(--radius-xl);
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  letter-spacing: -0.3px;
+  transition: background 0.15s;
+}
+.login-btn:hover:not(:disabled) { background: var(--color-peach-pressed); }
+.login-btn:disabled { opacity: 0.6; }
+.btn-spinner {
   width: 20px;
   height: 20px;
-  border: 2.5px solid rgba(255,255,255,0.35);
-  border-top-color: #fff;
+  border: 2.5px solid rgba(255,255,255,0.4);
+  border-top-color: white;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.divider {
+.divider-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 20px 0;
-  color: var(--text-tertiary);
-  font: var(--weight-medium) var(--text-xs)/1 var(--font-sans);
+  gap: 12px;
+  margin: 22px 0 16px;
 }
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border-subtle);
-}
+.divider { flex: 1; height: 1px; background: var(--color-line-light); }
+.divider-text { font-size: 12.5px; color: var(--color-ink-muted); white-space: nowrap; }
 
-.btn-google {
+.social-col { display: flex; flex-direction: column; gap: 10px; }
+.social-btn {
   width: 100%;
-  height: 52px;
-  background: var(--surface-bg);
-  border: 1.5px solid var(--border-default);
-  border-radius: var(--radius-md);
-  font: var(--weight-semibold) var(--text-base)/1 var(--font-sans);
-  color: var(--text-primary);
-  cursor: pointer;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  transition: background 0.15s, border-color 0.15s;
+  transition: opacity 0.15s;
 }
-.btn-google:hover {
-  background: var(--surface-subtle);
-  border-color: var(--border-strong);
-}
+.social-btn:active { opacity: 0.8; }
+.social-btn.kakao { background: #FEE500; color: #3C1E1E; }
+.social-btn.google { background: var(--color-white); color: var(--color-ink); border: 1.5px solid var(--color-line); }
 
 .signup-link {
   text-align: center;
-  font: var(--weight-medium) var(--text-sm)/1 var(--font-sans);
-  color: var(--text-secondary);
   margin-top: 20px;
-  margin-bottom: 0;
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
 }
-.signup-link a {
-  color: var(--color-primary-500);
-  font-weight: var(--weight-semibold);
-  text-decoration: none;
-}
-.signup-link a:hover {
-  text-decoration: underline;
+.signup-text {
+  color: var(--color-peach-pressed);
+  font-weight: 700;
+  margin-left: 4px;
 }
 </style>
