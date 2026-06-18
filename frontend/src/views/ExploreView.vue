@@ -106,13 +106,11 @@
           <div class="place-img">
             <div class="img-placeholder small">
               <img
-                v-if="place.imageUrl"
-                :src="place.imageUrl"
+                :src="thumbSrc(place)"
                 :alt="place.name"
                 class="thumb-img"
-                @error="(e) => e.target.style.display='none'"
+                @error="(e) => onThumbError(e, place)"
               />
-              <span v-else class="rank-num">{{ idx + 1 }}</span>
             </div>
           </div>
           <div class="place-info">
@@ -139,21 +137,23 @@
         <div class="sheet-header festival-header">
           <h2 class="sheet-title">
             진행중인 축제
-            <span class="count">{{ festivalStore.festivals.slice(0, 4).length }}</span>
+            <span class="count">{{ festivalStore.festivals.slice(0, 6).length }}</span>
           </h2>
         </div>
         <div class="festival-grid">
           <div
-            v-for="fest in festivalStore.festivals.slice(0, 4)"
+            v-for="fest in festivalStore.festivals.slice(0, 6)"
             :key="fest.id"
             class="festival-row"
           >
-            <div class="festival-dot" />
+            <div class="festival-thumb">
+              <img :src="festThumb(fest)" :alt="fest.title" @error="(e) => onFestError(e, fest)" />
+            </div>
             <div class="festival-info">
               <span class="festival-title">{{ fest.title }}</span>
               <span class="festival-addr">{{ fest.address }}</span>
+              <span class="festival-date">{{ formatFestDate(fest.startDate) }} ~ {{ formatFestDate(fest.endDate) }}</span>
             </div>
-            <span class="festival-date">{{ formatFestDate(fest.startDate) }}</span>
           </div>
         </div>
       </template>
@@ -335,6 +335,28 @@ function loadAttractions() {
 function formatDist(km) {
   if (!Number.isFinite(km)) return ''
   return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`
+}
+
+// 썸네일 — 실제 이미지가 없으면 id 기반 결정적 사진(picsum)으로 채움
+function placePlaceholder(place) {
+  return `https://picsum.photos/seed/triip-${place.contentId ?? place.name}/240/240`
+}
+function thumbSrc(place) {
+  return place.imageUrl || placePlaceholder(place)
+}
+function onThumbError(e, place) {
+  const fb = placePlaceholder(place)
+  if (e.target.src !== fb) e.target.src = fb
+}
+function festPlaceholder(fest) {
+  return `https://picsum.photos/seed/fest-${fest.id ?? fest.title}/240/240`
+}
+function festThumb(fest) {
+  return fest.image || festPlaceholder(fest)
+}
+function onFestError(e, fest) {
+  const fb = festPlaceholder(fest)
+  if (e.target.src !== fb) e.target.src = fb
 }
 
 function formatFestDate(raw) {
@@ -566,17 +588,24 @@ onMounted(() => {
 
 /* ── Place grid / rows ────────────────────────────────────────────────────── */
 .place-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px 16px;
 }
 
 .place-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
   align-items: center;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  transition: background 0.12s;
+}
+
+.place-row:active {
+  background: var(--color-surface);
 }
 
 .place-img {
@@ -584,14 +613,15 @@ onMounted(() => {
 }
 
 .img-placeholder.small {
-  width: 56px;
-  height: 56px;
+  width: 66px;
+  height: 66px;
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, #efe6e4, #e7e0d8);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .thumb-img {
@@ -721,34 +751,48 @@ onMounted(() => {
 .festival-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 16px 16px;
+  gap: 4px;
+  padding: 0 8px 16px;
 }
 
 .festival-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--radius-md);
 }
 
-.festival-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-peach);
+.festival-thumb {
+  width: 66px;
+  height: 66px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
   flex-shrink: 0;
+  background: linear-gradient(135deg, #efe6e4, #e7e0d8);
+}
+
+.festival-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .festival-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .festival-title {
   display: block;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--color-ink);
+  letter-spacing: -0.2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -756,13 +800,16 @@ onMounted(() => {
 
 .festival-addr {
   display: block;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--color-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .festival-date {
   font-size: 11.5px;
-  color: var(--color-ink-muted);
-  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-peach);
 }
 </style>
