@@ -1,7 +1,8 @@
 # Created: 2026-06-16 13:26:10
 <template>
   <div class="page">
-    <header class="home-header">
+    <div class="scroll-content">
+      <header class="home-header">
       <div class="location-row">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2.2">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
@@ -24,7 +25,6 @@
       </div>
     </header>
 
-    <div class="scroll-content">
       <div class="search-bar" @click="$router.push('/explore')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2">
           <circle cx="11" cy="11" r="8" />
