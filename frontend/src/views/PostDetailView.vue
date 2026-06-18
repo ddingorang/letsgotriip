@@ -151,14 +151,19 @@
     </div>
 
     <div class="comment-input-bar">
-      <div class="input-wrap">
-        <input ref="commentInputRef" v-model="newComment" class="comment-input" placeholder="댓글을 입력하세요" @keydown.enter.prevent="(e) => !e.isComposing && submitComment()" />
-      </div>
-      <button class="send-btn" :disabled="!newComment.trim() || submitting" @click="submitComment">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13" />
-          <polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </svg>
+      <template v-if="authStore.isAuthenticated">
+        <div class="input-wrap">
+          <input ref="commentInputRef" v-model="newComment" class="comment-input" placeholder="댓글을 입력하세요" @keydown.enter.prevent="(e) => !e.isComposing && submitComment()" />
+        </div>
+        <button class="send-btn" :disabled="!newComment.trim() || submitting" @click="submitComment">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </template>
+      <button v-else class="login-prompt" @click="$router.push({ path: '/login', query: { redirect: $route.fullPath } })">
+        댓글을 작성하려면 로그인하세요
       </button>
     </div>
   </div>
@@ -666,6 +671,14 @@ onBeforeUnmount(() => {
 
 .send-btn:disabled {
   background: var(--color-line);
+}
+
+.login-prompt {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.2px;
 }
 
 .fade-enter-active,

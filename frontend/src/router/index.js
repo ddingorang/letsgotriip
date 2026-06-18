@@ -20,15 +20,15 @@ const router = createRouter({
 
     // ── Community ─────────────────────────────────────────────────────────────
     { path: '/community', name: 'community', component: () => import('@/views/CommunityView.vue') },
-    { path: '/community/write', name: 'post-write', component: () => import('@/views/PostWriteView.vue'), meta: { tabBar: false } },
+    { path: '/community/write', name: 'post-write', component: () => import('@/views/PostWriteView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/community/:id', name: 'post-detail', component: () => import('@/views/PostDetailView.vue'), meta: { tabBar: false } },
 
     // ── Hotplace ──────────────────────────────────────────────────────────────
-    { path: '/hotplace/register', name: 'hotplace-register', component: () => import('@/views/HotplaceRegisterView.vue'), meta: { tabBar: false } },
+    { path: '/hotplace/register', name: 'hotplace-register', component: () => import('@/views/HotplaceRegisterView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/hotplace/:id', name: 'hotplace-detail', component: () => import('@/views/HotplaceDetailView.vue'), meta: { tabBar: false } },
 
     // ── Companion ─────────────────────────────────────────────────────────────
-    { path: '/companion/write', name: 'companion-write', component: () => import('@/views/CompanionWriteView.vue'), meta: { tabBar: false } },
+    { path: '/companion/write', name: 'companion-write', component: () => import('@/views/CompanionWriteView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/companion/:id/applicants', name: 'companion-applicants', component: () => import('@/views/CompanionApplicantsView.vue'), meta: { tabBar: false } },
     { path: '/companion/:id', name: 'companion-detail', component: () => import('@/views/CompanionDetailView.vue'), meta: { tabBar: false } },
 

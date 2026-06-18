@@ -2,9 +2,8 @@
   <div class="page">
     <!-- Hero photo area -->
     <div class="hero-section">
-      <div class="hero-bg" />
+      <img class="hero-img" src="/loginpic.jpg" alt="" />
       <div class="hero-grain" />
-      <div class="hero-caption">제주 여행 무드 사진</div>
 
       <!-- Logo card overlay -->
       <div class="logo-card">
@@ -13,12 +12,17 @@
             <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
           </svg>
         </div>
-        <span class="logo-text">여행ON</span>
       </div>
     </div>
 
     <!-- Form section -->
     <div class="form-section">
+      <div v-if="isRedirected" class="auth-notice">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        로그인이 필요한 서비스예요.
+      </div>
       <h2 class="form-title">다시 만나서 반가워요</h2>
       <p class="form-sub">로그인하고 나만의 여행을 계획해보세요.</p>
 
@@ -103,6 +107,9 @@
         아직 회원이 아니신가요?
         <button class="signup-text" @click="goSignup">회원가입</button>
       </p>
+
+      <!-- Guest link -->
+      <button class="guest-link" @click="$router.push('/home')">비로그인 상태로 둘러보기</button>
     </div>
   </div>
 </template>
@@ -121,6 +128,7 @@ const password = ref('')
 const loading = ref(false)
 const error = ref('')
 const passwordRef = ref(null)
+const isRedirected = !!route.query.redirect
 
 function focusPassword() {
   passwordRef.value?.focus()
@@ -184,29 +192,19 @@ function goSignup() {
   position: relative;
   height: 220px;
   flex-shrink: 0;
-  overflow: hidden;
 }
-.hero-bg {
+.hero-img {
   position: absolute;
   inset: 0;
-  background: linear-gradient(145deg, #c8b8a8 0%, #b0a090 40%, #a89080 100%);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .hero-grain {
   position: absolute;
   inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
   opacity: 0.4;
-}
-.hero-caption {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255,255,255,0.7);
-  letter-spacing: 0.2px;
-  pointer-events: none;
 }
 .logo-card {
   position: absolute;
@@ -215,6 +213,7 @@ function goSignup() {
   display: flex;
   align-items: center;
   gap: 8px;
+  z-index: 10;
 }
 .logo-icon {
   width: 48px;
@@ -226,11 +225,19 @@ function goSignup() {
   justify-content: center;
   box-shadow: 0 4px 12px rgba(247, 143, 87, 0.4);
 }
-.logo-text {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--color-ink);
-  letter-spacing: -0.5px;
+
+.auth-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--color-peach-light, #fff0e8);
+  color: var(--color-peach-pressed, #d45f1e);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  letter-spacing: -0.2px;
 }
 
 /* Form */
@@ -347,5 +354,16 @@ function goSignup() {
   color: var(--color-peach-pressed);
   font-weight: 700;
   margin-left: 4px;
+}
+
+.guest-link {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 </style>
