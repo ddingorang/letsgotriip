@@ -105,7 +105,9 @@
 
         <Transition name="slide-up">
           <div v-if="selectedHp" class="map-card" @click="$router.push(`/hotplace/${selectedHp.id}`)">
-            <div class="map-thumb" />
+            <div class="map-thumb">
+              <img :src="selectedHp.imageUrl || seedImg('hp-' + selectedHp.id)" :alt="selectedHp.name" @error="onThumbError($event, 'hp-' + selectedHp.id)" />
+            </div>
             <div class="map-card-body">
               <div class="map-card-row1">
                 <span class="cat-tag">{{ selectedHp.category }}</span>
@@ -139,6 +141,7 @@
           @click="$router.push(`/hotplace/${hp.id}`)"
         >
           <div class="hp-thumb">
+            <img :src="hp.imageUrl || seedImg('hp-' + hp.id)" :alt="hp.name" @error="onThumbError($event, 'hp-' + hp.id)" />
             <span class="cat-tag">{{ hp.category }}</span>
           </div>
           <div class="hp-info">
@@ -177,7 +180,9 @@
             class="room-card"
             @click="$router.push(`/chat/${room.id}`)"
           >
-            <div class="room-avatar-area" />
+            <div class="room-avatar-area">
+              <img :src="seedImg('room-' + room.id, 240, 140)" :alt="room.title" />
+            </div>
             <div class="room-bottom">
               <div class="room-name">{{ room.title }}</div>
               <div class="room-d-row">
@@ -204,7 +209,9 @@
             class="comp-item"
             @click="$router.push(`/companion/${comp.id}`)"
           >
-            <div class="comp-thumb" />
+            <div class="comp-thumb">
+              <img :src="comp.thumbnail || seedImg('comp-' + comp.id)" :alt="comp.title" @error="onThumbError($event, 'comp-' + comp.id)" />
+            </div>
             <div class="comp-info">
               <div class="comp-header-row">
                 <span :class="['status-badge', { urgent: comp.status === '마감임박' }]">{{ comp.status }}</span>
@@ -284,6 +291,15 @@ const mappableHotplaces = computed(() =>
 )
 function onHpSelect(place) {
   selectedHp.value = selectedHp.value?.id === place.id ? null : place
+}
+
+// 썸네일 — 업로드 이미지가 없거나 로딩 실패 시 seed 기반 결정적 사진(picsum)으로 채움
+function seedImg(seed, w = 200, h = 200) {
+  return `https://picsum.photos/seed/triip-${seed}/${w}/${h}`
+}
+function onThumbError(e, seed) {
+  const fb = seedImg(seed)
+  if (e.target.src !== fb) e.target.src = fb
 }
 
 onMounted(() => {
@@ -593,6 +609,16 @@ onMounted(() => {
   border-radius: var(--radius-md);
   background: var(--color-surface);
   flex-shrink: 0;
+  overflow: hidden;
+}
+.map-thumb img,
+.hp-thumb img,
+.comp-thumb img,
+.room-avatar-area img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .map-card-body { flex: 1; min-width: 0; }
 .map-card-row1 {
@@ -631,14 +657,20 @@ onMounted(() => {
   cursor: pointer;
 }
 .hp-thumb {
+  position: relative;
   width: 72px;
   height: 72px;
   border-radius: var(--radius-md);
   background: var(--color-surface);
   flex-shrink: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: 6px;
+  overflow: hidden;
+}
+.hp-thumb .cat-tag {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  padding: 2px 7px;
+  font-size: 10px;
 }
 .hp-info { flex: 1; min-width: 0; }
 .hp-name { font-size: 15px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.3px; margin-bottom: 4px; }
@@ -714,6 +746,7 @@ onMounted(() => {
   width: 100%;
   height: 70px;
   background: var(--color-surface);
+  overflow: hidden;
 }
 .room-bottom {
   padding: 8px 10px 10px;
@@ -762,6 +795,7 @@ onMounted(() => {
   border-radius: var(--radius-md);
   background: var(--color-surface);
   flex-shrink: 0;
+  overflow: hidden;
 }
 .comp-info { flex: 1; min-width: 0; }
 .comp-header-row {
