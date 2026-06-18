@@ -98,10 +98,22 @@ export const usePostsStore = defineStore('posts', () => {
   }
 
   async function likePost(id) {
-    await communityApi.likePost(id)
+    const res = await communityApi.likePost(id)
+    const isLiked = res.data
+    const delta = isLiked ? 1 : -1
     const post = posts.value.find((p) => p.id === id)
-    if (post) post.likeCount++
-    if (currentPost.value?.id === id) currentPost.value.likeCount++
+    if (post) { post.likedByMe = isLiked; post.likeCount += delta }
+    if (currentPost.value?.id === id) {
+      currentPost.value.likedByMe = isLiked
+      currentPost.value.likeCount += delta
+    }
+    return isLiked
+  }
+
+  async function deleteComment(postId, commentId) {
+    await communityApi.deleteComment(postId, commentId)
+    comments.value = comments.value.filter((c) => c.id !== commentId)
+    if (currentPost.value?.id === Number(postId)) currentPost.value.commentCount = Math.max(0, (currentPost.value.commentCount ?? 1) - 1)
   }
 
   async function addComment(postId, content) {
@@ -141,7 +153,7 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
-  return { posts, currentPost, comments, hasMore, loading, fetchPosts, fetchPost, fetchComments, likePost, addComment, updatePost, deletePost }
+  return { posts, currentPost, comments, hasMore, loading, fetchPosts, fetchPost, fetchComments, likePost, addComment, deleteComment, updatePost, deletePost }
 })
 
 const mockPosts = [

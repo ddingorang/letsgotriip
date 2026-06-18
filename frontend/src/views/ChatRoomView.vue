@@ -26,13 +26,11 @@
       </div>
 
       <template v-for="msg in messages" :key="msg.id">
-        <!-- Incoming -->
-        <div v-if="msg.senderId === 'other'" class="msg-row incoming">
-          <div class="msg-avatar" />
-          <div class="msg-col">
-            <span class="msg-sender">{{ msg.sender }}</span>
-            <div class="bubble incoming-bubble">{{ msg.text }}</div>
+        <!-- Outgoing (내 메시지) -->
+        <div v-if="isMyMessage(msg)" class="msg-row outgoing">
+          <div class="msg-col-out">
             <span class="msg-time">{{ msg.time }}</span>
+            <div class="bubble outgoing-bubble">{{ msg.text ?? msg.content }}</div>
           </div>
         </div>
 
@@ -41,7 +39,7 @@
           <div class="msg-avatar" />
           <div class="msg-col">
             <div class="plan-card" @click="$router.push('/plan')">
-              <div class="plan-card-tag">승유된 여행 계획</div>
+              <div class="plan-card-tag">공유된 여행 계획</div>
               <div class="plan-card-title">{{ msg.planTitle }}</div>
               <div class="plan-card-meta">{{ msg.dateRange }} · {{ msg.spotCount }}곳</div>
               <div class="plan-card-link">일정 보러가기 →</div>
@@ -50,11 +48,13 @@
           </div>
         </div>
 
-        <!-- Outgoing -->
-        <div v-else class="msg-row outgoing">
-          <div class="msg-col-out">
+        <!-- Incoming (상대방 메시지) -->
+        <div v-else class="msg-row incoming">
+          <div class="msg-avatar" />
+          <div class="msg-col">
+            <span class="msg-sender">{{ msg.sender ?? msg.senderNickname }}</span>
+            <div class="bubble incoming-bubble">{{ msg.text ?? msg.content }}</div>
             <span class="msg-time">{{ msg.time }}</span>
-            <div class="bubble outgoing-bubble">{{ msg.text }}</div>
           </div>
         </div>
       </template>
@@ -86,11 +86,18 @@
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const route = useRoute()
 const companionStore = useCompanionStore()
+const authStore = useAuthStore()
 const msgScroll = ref(null)
 const inputText = ref('')
+
+function isMyMessage(msg) {
+  const myId = authStore.user?.userId
+  return myId != null ? Number(msg.senderId) === Number(myId) : msg.senderId === 'me'
+}
 
 const room = computed(() => companionStore.myRooms.find((r) => r.id === Number(route.params.id)))
 const messages = computed(() => companionStore.messages[route.params.id] ?? [])
@@ -101,7 +108,7 @@ function sendMessage() {
   if (!companionStore.messages[route.params.id]) companionStore.messages[route.params.id] = []
   companionStore.messages[route.params.id].push({
     id: Date.now(),
-    senderId: 'me',
+    senderId: authStore.user?.userId,
     text,
     time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
   })

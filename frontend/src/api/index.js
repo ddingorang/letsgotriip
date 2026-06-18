@@ -81,6 +81,7 @@ export const communityApi = {
   likePost: (id) => http.post(`/api/community/posts/${id}/likes`),
   getComments: (postId) => http.get(`/api/community/posts/${postId}/comments`),
   createComment: (postId, data) => http.post(`/api/community/posts/${postId}/comments`, data),
+  deleteComment: (postId, commentId) => http.delete(`/api/community/posts/${postId}/comments/${commentId}`),
   likeComment: (postId, commentId) =>
     http.post(`/api/community/posts/${postId}/comments/${commentId}/likes`),
 }

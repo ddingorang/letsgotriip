@@ -39,7 +39,7 @@
       <div class="stats-row">
         <div class="stat-group">
           <button class="stat-btn" @click.stop="$emit('like', post.id)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--color-peach)" stroke="none">
+            <svg width="18" height="18" viewBox="0 0 24 24" :fill="post.likedByMe ? 'var(--color-peach)' : 'none'" :stroke="post.likedByMe ? 'none' : 'var(--color-peach)'" stroke-width="1.8">
               <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
             </svg>
             <span class="stat-num peach">{{ post.likeCount }}</span>
