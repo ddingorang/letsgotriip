@@ -2,6 +2,8 @@
 package com.trip.companion.entity;
 
 import com.trip.companion.entity.enums.ApplicationStatus;
+import com.trip.global.error.GeneralException;
+import com.trip.global.error.ResponseCode;
 import com.trip.user.entity.BaseEntity;
 import com.trip.user.entity.User;
 import jakarta.persistence.*;
@@ -32,11 +34,17 @@ public class CompanionApplication extends BaseEntity {
     @Builder.Default
     private ApplicationStatus status = ApplicationStatus.PENDING;
 
+    public boolean isPending() {
+        return this.status == ApplicationStatus.PENDING;
+    }
+
     public void approve() {
+        if (!isPending()) throw new GeneralException(ResponseCode.COMPANION_ALREADY_PROCESSED);
         this.status = ApplicationStatus.APPROVED;
     }
 
     public void reject() {
+        if (!isPending()) throw new GeneralException(ResponseCode.COMPANION_ALREADY_PROCESSED);
         this.status = ApplicationStatus.REJECTED;
     }
 }

@@ -147,7 +147,9 @@ public class CompanionService {
         if (post.getStatus() != CompanionStatus.OPEN) {
             throw new GeneralException(ResponseCode.COMPANION_POST_CLOSED);
         }
-        if (companionApplicationRepository.existsByCompanionPostAndApplicant(post, applicant)) {
+        // REJECTED 상태는 재신청 허용 — PENDING·APPROVED 상태일 때만 중복으로 간주
+        if (companionApplicationRepository.existsByCompanionPostAndApplicantAndStatusNot(
+                post, applicant, com.trip.companion.entity.enums.ApplicationStatus.REJECTED)) {
             throw new GeneralException(ResponseCode.COMPANION_ALREADY_APPLIED);
         }
 
@@ -175,7 +177,17 @@ public class CompanionService {
         verifyAuthor(post, userId);
 
         CompanionApplication application = findApplication(applicationId, post);
-        application.approve();
+
+        // 정원 초과 방지
+        if (post.getChatRoom() != null) {
+            int currentMembers = chatRoomMembershipRepository
+                    .findByChatRoomId(post.getChatRoom().getId()).size();
+            if (currentMembers >= post.getMaxMembers()) {
+                throw new GeneralException(ResponseCode.COMPANION_FULL);
+            }
+        }
+
+        application.approve(); // PENDING이 아니면 COMPANION_ALREADY_PROCESSED 예외
 
         if (post.getChatRoom() != null) {
             Long applicantId = application.getApplicant().getId();

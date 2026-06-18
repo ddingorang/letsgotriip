@@ -52,8 +52,8 @@ public class CompanionPost extends BaseEntity {
     @Builder.Default
     private CompanionStatus status = CompanionStatus.OPEN;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "chat_room_id")
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chat_room_id", nullable = false, unique = true)
     private ChatRoom chatRoom;
 
     @Column(nullable = false)

@@ -3,6 +3,7 @@ package com.trip.companion.repository;
 
 import com.trip.companion.entity.CompanionApplication;
 import com.trip.companion.entity.CompanionPost;
+import com.trip.companion.entity.enums.ApplicationStatus;
 import com.trip.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -11,7 +12,7 @@ import java.util.Optional;
 
 public interface CompanionApplicationRepository extends JpaRepository<CompanionApplication, Long> {
 
-    boolean existsByCompanionPostAndApplicant(CompanionPost post, User applicant);
+    boolean existsByCompanionPostAndApplicantAndStatusNot(CompanionPost post, User applicant, ApplicationStatus status);
 
     Optional<CompanionApplication> findByIdAndCompanionPost(Long id, CompanionPost post);
 
