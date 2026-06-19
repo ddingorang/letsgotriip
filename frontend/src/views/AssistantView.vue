@@ -259,16 +259,27 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAssistantStore } from '@/stores/assistant.js'
 import { useDocumentsStore } from '@/stores/documents.js'
 import { analysisApi } from '@/api/index.js'
 import PlanQuickForm from '@/components/assistant/PlanQuickForm.vue'
 
+const route = useRoute()
 const assistantStore = useAssistantStore()
 const documentsStore = useDocumentsStore()
 const msgScroll = ref(null)
 const inputText = ref('')
+
+// PlanView 의 "챗봇으로 수정"에서 진입 시(?planId=N) 입력창에 시드 메시지를 채운다.
+// 자동 전송하지 않고 사용자가 확인 후 보내도록 한다.
+onMounted(() => {
+  const planId = route.query.planId
+  if (planId != null && String(planId).trim() !== '' && !inputText.value) {
+    inputText.value = `내 계획(#${planId})을 수정/평가하고 싶어`
+  }
+})
 
 const messages = computed(() => assistantStore.messages)
 const loading = computed(() => assistantStore.loading)
@@ -674,7 +685,8 @@ watch(
 }
 
 /* ── 첨부 메뉴 ─────────────────────────────────────────────────────────────── */
-.attach-menu-wrap { position: absolute; inset: 0; z-index: 40; }
+/* 뷰포트 기준 고정 — .page(overflow:hidden)에 갇히지 않고 항상 최상위(BottomNav 위) */
+.attach-menu-wrap { position: fixed; inset: 0; z-index: 1000; }
 .attach-backdrop { position: absolute; inset: 0; }
 .attach-menu {
   position: absolute;

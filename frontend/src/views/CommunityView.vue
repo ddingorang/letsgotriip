@@ -5,7 +5,7 @@
     <header class="comm-header">
       <h1 class="header-title">커뮤니티</h1>
       <div class="header-right">
-        <button class="icon-btn">
+        <button class="icon-btn" @click="$router.push('/search')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
           </svg>
@@ -51,6 +51,7 @@
             :post="post"
             @click="$router.push(`/community/${post.id}`)"
             @like="postsStore.likePost($event)"
+            @bookmark="postsStore.bookmarkPost($event)"
           />
         </div>
         <div v-if="postsStore.loading" class="loading-row">

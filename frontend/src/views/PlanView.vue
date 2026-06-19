@@ -207,6 +207,21 @@
                   AI 동선 최적화
                 </button>
               </div>
+              <!-- 평가 받기 / 챗봇으로 수정 -->
+              <div class="detail-actions secondary">
+                <button class="detail-sub-btn" @click="goReport(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+                  </svg>
+                  평가 받기
+                </button>
+                <button class="detail-sub-btn" @click="goAssistant(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  </svg>
+                  챗봇으로 수정
+                </button>
+              </div>
               <div class="detail-actions secondary">
                 <button class="detail-sub-btn" :disabled="budgetLoading" @click="loadBudget(plan.id)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -372,9 +387,14 @@ async function togglePlan(plan) {
   }
 }
 
-/** Navigate to the 동선 리포트 screen */
+/** Navigate to the 동선 리포트(평가) screen */
 function goReport(planId) {
   router.push(`/plan/${planId}/report`)
+}
+
+/** 챗봇으로 수정 — AssistantView로 planId 쿼리와 함께 이동 */
+function goAssistant(planId) {
+  router.push({ path: '/assistant', query: { planId } })
 }
 
 /** 원(₩) 포맷 */
@@ -1125,13 +1145,13 @@ async function removePlace(planId, dayNo, place) {
 
 /* ── Compare modal ────────────────────────────────────────────────────────── */
 .compare-overlay {
-  position: absolute;
+  position: fixed;          /* .page(overflow:hidden)에 갇히지 않게 뷰포트 기준 */
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 50;
+  z-index: 1000;            /* BottomNav(z-index:100) 위로 — 시트 하단이 가려지지 않게 */
 }
 
 .compare-sheet {

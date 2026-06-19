@@ -31,6 +31,7 @@ public class CommunityService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final jakarta.persistence.EntityManager entityManager;
 
     // ─── 게시글 ───────────────────────────────────────────────
 
@@ -151,6 +152,43 @@ public class CommunityService {
         }
 
         return liked;
+    }
+
+    /**
+     * 현재 사용자가 좋아요한 게시글 목록을 최신 좋아요순(PostLike.id desc)으로 반환한다.
+     * 기존 {@link #getPosts} 와 동일한 {@link CursorPageResponse}&lt;{@link PostSummaryResponse}&gt;
+     * 형태를 재사용하며, cursor 는 PostLike.id 기준 커서다(삭제된 게시글은 제외).
+     */
+    public CursorPageResponse<PostSummaryResponse> getLikedPosts(Long userId, Long cursor, int size) {
+        // PostLike 를 Post 와 조인해 사용자가 좋아요한 미삭제 게시글을 최신 좋아요순으로 조회.
+        // cursor(=PostLike.id) 미만만 가져와 무한 스크롤을 지원하고, size+1 로 hasNext 를 판정한다.
+        String jpql = "select pl.id, pl.post from PostLike pl "
+                + "where pl.user.id = :userId and pl.post.deleted = false "
+                + (cursor != null ? "and pl.id < :cursor " : "")
+                + "order by pl.id desc";
+
+        var query = entityManager.createQuery(jpql, Object[].class)
+                .setParameter("userId", userId);
+        if (cursor != null) {
+            query.setParameter("cursor", cursor);
+        }
+        List<Object[]> rows = query.setMaxResults(size + 1).getResultList();
+
+        boolean hasNext = rows.size() > size;
+        List<Object[]> content = hasNext ? rows.subList(0, size) : rows;
+
+        List<PostSummaryResponse> responses = content.stream()
+                .map(row -> {
+                    Post post = (Post) row[1];
+                    int commentCount = commentRepository.countByPostIdAndDeletedFalse(post.getId());
+                    String thumbnailUrl = postImageRepository.findFirstByPostIdOrderByDisplayOrderAsc(post.getId())
+                            .map(PostImage::getImageUrl).orElse(null);
+                    return PostSummaryResponse.of(post, commentCount, thumbnailUrl);
+                }).toList();
+
+        // nextCursor 는 마지막 행의 PostLike.id (게시글 id 가 아님 — 좋아요 순서 유지를 위해).
+        Long nextCursor = hasNext ? (Long) content.get(content.size() - 1)[0] : null;
+        return new CursorPageResponse<>(responses, nextCursor, hasNext);
     }
 
     // ─── 댓글 ────────────────────────────────────────────────

@@ -63,6 +63,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/search").permitAll()
                         // 찜(즐겨찾기) — 본인 리소스, 인증 필수
                         .requestMatchers("/api/favorites/**").authenticated()
+                        // 팔로우 — 토글/상태/내 팔로잉 전부 인증 필수
+                        .requestMatchers("/api/follows/**").authenticated()
                         // 여행 맥락 정보(날씨/충전소/뉴스) — 전부 비회원 공개
                         .requestMatchers("/api/context/**").permitAll()
                         // 공유 토큰으로 계획 공개 조회 (소유 검증 없이 접근, 토큰만으로)

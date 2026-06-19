@@ -1,7 +1,7 @@
 // Created: 2026-06-16 13:23:20
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { communityApi } from '@/api/index.js'
+import { communityApi, favoriteApi } from '@/api/index.js'
 
 const CATEGORY_LABELS = {
   REVIEW: '후기',
@@ -110,6 +110,29 @@ export const usePostsStore = defineStore('posts', () => {
     return isLiked
   }
 
+  // 댓글 좋아요 토글 — BE POST /comments/{id}/likes → Boolean(좋아요 상태)
+  async function likeComment(postId, commentId) {
+    const res = await communityApi.likeComment(postId, commentId)
+    const isLiked = res.data
+    const delta = isLiked ? 1 : -1
+    const comment = comments.value.find((c) => c.id === commentId)
+    if (comment) {
+      comment.likedByMe = isLiked
+      comment.likeCount = Math.max(0, (comment.likeCount ?? 0) + delta)
+    }
+    return isLiked
+  }
+
+  // 게시글 북마크(찜) 토글 — BE POST /api/favorites { targetType:'POST', targetId } → Boolean(찜 상태)
+  async function bookmarkPost(id) {
+    const res = await favoriteApi.toggle('POST', id)
+    const isBookmarked = res.data
+    const post = posts.value.find((p) => p.id === id)
+    if (post) post.bookmarked = isBookmarked
+    if (currentPost.value?.id === id) currentPost.value.bookmarked = isBookmarked
+    return isBookmarked
+  }
+
   async function deleteComment(postId, commentId) {
     await communityApi.deleteComment(postId, commentId)
     comments.value = comments.value.filter((c) => c.id !== commentId)
@@ -153,7 +176,7 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
-  return { posts, currentPost, comments, hasMore, loading, fetchPosts, fetchPost, fetchComments, likePost, addComment, deleteComment, updatePost, deletePost }
+  return { posts, currentPost, comments, hasMore, loading, fetchPosts, fetchPost, fetchComments, likePost, likeComment, bookmarkPost, addComment, deleteComment, updatePost, deletePost }
 })
 
 const mockPosts = [

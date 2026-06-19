@@ -242,6 +242,9 @@ export const communityApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   getPosts: (params) => http.get('/api/community/posts', { params }),
+  // 내가 좋아요한 게시글(커서 페이지, 인증 필요). cursor=직전 페이지 마지막 PostLike.id
+  // → CursorPageResponse<PostSummaryResponse>{ content, nextCursor, hasNext }
+  getLikedPosts: (params) => http.get('/api/community/posts/liked', { params }),
   getPost: (id) => http.get(`/api/community/posts/${id}`),
   createPost: (data) => http.post('/api/community/posts', data),
   updatePost: (id, data) => http.patch(`/api/community/posts/${id}`, data),
@@ -272,6 +275,19 @@ export const companionApi = {
   // 모집 마감 / 글 삭제 (방장만)
   close: (postId) => http.patch(`/api/companion/posts/${postId}/close`),
   remove: (postId) => http.delete(`/api/companion/posts/${postId}`),
+}
+
+// ── Follow (팔로우, BE: /api/follows, 인증 필요) ──────────────────────────────
+// POST /api/follows { targetUserId }                       → 토글 FollowToggleResponse
+//   { targetUserId, following(bool), followerCount }
+// GET  /api/follows/users/{userId}/follow-status           → FollowStatusResponse
+//   { userId, following(bool), followerCount, followingCount }
+// GET  /api/follows/me/following                           → List<FollowUserResponse>
+//   [{ userId, nickname, profileImageUrl, bio }]
+export const followApi = {
+  toggle: (targetUserId) => http.post('/api/follows', { targetUserId }),
+  status: (userId) => http.get(`/api/follows/users/${userId}/follow-status`),
+  following: () => http.get('/api/follows/me/following'),
 }
 
 // ── Chat (BE: /api/chat/rooms) ────────────────────────────────────────────────

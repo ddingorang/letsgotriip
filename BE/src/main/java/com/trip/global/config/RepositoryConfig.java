@@ -23,7 +23,8 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
         "com.trip.group.repository",         // TravelGroupRepository, GroupMemberRepository (단체할인 D9)
         "com.trip.favorite.repository",      // FavoriteRepository (찜)
         "com.trip.review.repository",        // AttractionReviewRepository (관광지 리뷰)
-        "com.trip.gamification.repository"   // UserGameStatRepository, EarnedBadgeRepository, UserQuestProgressRepository
+        "com.trip.gamification.repository",  // UserGameStatRepository, EarnedBadgeRepository, UserQuestProgressRepository
+        "com.trip.follow.repository"         // FollowRepository (팔로우)
 })
 @EnableMongoRepositories(basePackages = {
         "com.trip.chat.repository.mongo"     // ChatMessageRepository

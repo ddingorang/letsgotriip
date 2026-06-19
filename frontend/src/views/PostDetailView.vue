@@ -76,7 +76,9 @@
               <span class="author-sub">{{ post?.location }} · {{ timeAgo(post?.createdAt) }}</span>
             </div>
           </div>
-          <button class="follow-btn">팔로우</button>
+          <!-- TODO: 팔로우 비활성 — BE PostResponse에 작성자 userId가 없어
+               followApi.toggle(작성자 userId) 호출 불가. BE DTO에 authorId 추가 시 활성화. -->
+          <button class="follow-btn" disabled>팔로우</button>
         </div>
 
         <p class="post-body">{{ post?.content }}</p>
@@ -122,18 +124,11 @@
             </div>
             <p class="comment-text">{{ comment.content }}</p>
             <div class="comment-actions">
-              <button class="comment-action">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <button class="comment-action" :class="{ liked: comment.likedByMe }" @click="likeComment(comment)">
+                <svg width="14" height="14" viewBox="0 0 24 24" :fill="comment.likedByMe ? 'var(--color-peach)' : 'none'" :stroke="comment.likedByMe ? 'var(--color-peach)' : 'currentColor'" stroke-width="2">
                   <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
                 </svg>
                 {{ comment.likeCount }}
-              </button>
-              <button class="comment-action">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                  <polyline points="9 14 4 9 9 4" />
-                  <path d="M20 20v-7a4 4 0 00-4-4H4" />
-                </svg>
-                답글
               </button>
               <button v-if="isMyComment(comment)" class="comment-action delete-action" @click="deleteComment(comment.id)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -201,7 +196,12 @@ const submitting = ref(false)
 const commentInputRef = ref(null)
 const dropdownRef = ref(null)
 
-watch(post, (p) => { if (p) liked.value = !!p.likedByMe }, { immediate: true })
+watch(post, (p) => {
+  if (p) {
+    liked.value = !!p.likedByMe
+    bookmarked.value = !!p.bookmarked
+  }
+}, { immediate: true })
 
 const likeCount = computed(() => post.value?.likeCount ?? 0)
 
@@ -220,8 +220,20 @@ async function likePost() {
   liked.value = await postsStore.likePost(post.value.id)
 }
 
-function bookmarkPost() {
-  bookmarked.value = !bookmarked.value
+async function bookmarkPost() {
+  if (!post.value?.id) return
+  // 낙관적 토글 후 실패 시 롤백
+  const prev = bookmarked.value
+  bookmarked.value = !prev
+  try {
+    bookmarked.value = await postsStore.bookmarkPost(post.value.id)
+  } catch {
+    bookmarked.value = prev
+  }
+}
+
+async function likeComment(comment) {
+  await postsStore.likeComment(route.params.id, comment.id)
 }
 
 function sharePost() {
@@ -480,6 +492,11 @@ onBeforeUnmount(() => {
   letter-spacing: -0.2px;
 }
 
+.follow-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .post-body {
   font-size: 13.4px;
   color: var(--color-dark-text);
@@ -616,6 +633,10 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: var(--color-ink-muted);
   letter-spacing: -0.2px;
+}
+
+.comment-action.liked {
+  color: var(--color-peach);
 }
 
 .delete-action {

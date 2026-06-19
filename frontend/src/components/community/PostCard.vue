@@ -27,7 +27,9 @@
             <span class="author-sub">{{ post.location }} · {{ timeAgo(post.createdAt) }}</span>
           </div>
         </div>
-        <button class="follow-btn" @click.stop>팔로우</button>
+        <!-- TODO: 팔로우 비활성 — BE PostSummaryResponse/PostResponse에 작성자 userId가 없어
+             followApi.toggle(작성자 userId) 호출 불가. BE DTO에 authorId 추가 시 활성화. -->
+        <button class="follow-btn" disabled @click.stop>팔로우</button>
       </div>
 
       <p v-if="post.content" class="post-excerpt">{{ post.content.slice(0, 80) }}{{ post.content.length > 80 ? '...' : '' }}</p>
@@ -228,6 +230,11 @@ function timeAgo(dateStr) {
   padding: 7px 18px;
   border-radius: 13px;
   letter-spacing: -0.2px;
+}
+
+.follow-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .post-excerpt {

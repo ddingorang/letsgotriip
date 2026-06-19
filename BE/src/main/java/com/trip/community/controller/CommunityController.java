@@ -5,6 +5,8 @@ import com.trip.community.dto.*;
 import com.trip.community.entity.enums.PostCategory;
 import com.trip.community.service.CommunityService;
 import com.trip.community.service.FileStorageService;
+import com.trip.global.error.GeneralException;
+import com.trip.global.error.ResponseCode;
 import com.trip.global.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -49,6 +51,20 @@ public class CommunityController {
             @RequestParam(defaultValue = "10") int size
     ) {
         return ResponseEntity.ok(communityService.getPosts(category, cursor, size));
+    }
+
+    @GetMapping("/posts/liked")
+    public ResponseEntity<CursorPageResponse<PostSummaryResponse>> getLikedPosts(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        // SecurityConfig 의 permitAll 매처(/community/posts/*)가 이 경로도 비회원 통과시키므로,
+        // 인증이 필요한 '내 좋아요 목록'은 컨트롤러에서 principal null 을 방어한다.
+        if (principal == null) {
+            throw new GeneralException(ResponseCode._UNAUTHORIZED);
+        }
+        return ResponseEntity.ok(communityService.getLikedPosts(principal.userId(), cursor, size));
     }
 
     @GetMapping("/posts/{postId}")
