@@ -5,6 +5,8 @@ import com.trip.community.dto.*;
 import com.trip.community.entity.*;
 import com.trip.community.entity.enums.PostCategory;
 import com.trip.community.repository.*;
+import com.trip.favorite.entity.FavoriteTargetType;
+import com.trip.favorite.repository.FavoriteRepository;
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
 import com.trip.user.entity.User;
@@ -28,6 +30,7 @@ public class CommunityService {
     private final PostLikeRepository postLikeRepository;
     private final CommentLikeRepository commentLikeRepository;
     private final PostImageRepository postImageRepository;
+    private final FavoriteRepository favoriteRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
@@ -51,13 +54,17 @@ public class CommunityService {
 
         // 사용자가 좋아요한 게시글 id 를 한 번에 조회해 매핑(N+1 방지). 비로그인이면 빈 집합.
         java.util.Set<Long> likedPostIds = resolveLikedPostIds(userId, content);
+        // 사용자가 찜(북마크)한 게시글 id 도 한 번에 조회해 매핑(N+1 방지). 비로그인이면 빈 집합.
+        java.util.Set<Long> bookmarkedPostIds = resolveBookmarkedPostIds(userId);
 
         List<PostSummaryResponse> responses = content.stream()
                 .map(post -> {
                     int commentCount = commentRepository.countByPostIdAndDeletedFalse(post.getId());
                     String thumbnailUrl = postImageRepository.findFirstByPostIdOrderByDisplayOrderAsc(post.getId())
                             .map(PostImage::getImageUrl).orElse(null);
-                    return PostSummaryResponse.of(post, commentCount, thumbnailUrl, likedPostIds.contains(post.getId()));
+                    return PostSummaryResponse.of(post, commentCount, thumbnailUrl,
+                            likedPostIds.contains(post.getId()),
+                            bookmarkedPostIds.contains(post.getId()));
                 }).toList();
 
         Long nextCursor = hasNext ? content.get(content.size() - 1).getId() : null;
@@ -76,6 +83,22 @@ public class CommunityService {
         return new java.util.HashSet<>(postLikeRepository.findLikedPostIds(userId, postIds));
     }
 
+    /**
+     * 현재 사용자가 찜(북마크)한 POST 타입 게시글 id 집합을 한 번의 쿼리로 조회한다.
+     * Favorite.targetId 는 문자열이므로 Long 으로 파싱해 담는다.
+     * 비로그인(userId == null)이면 빈 집합을 반환한다.
+     */
+    private java.util.Set<Long> resolveBookmarkedPostIds(Long userId) {
+        if (userId == null) {
+            return Collections.emptySet();
+        }
+        return favoriteRepository
+                .findByUserIdAndTargetTypeOrderByCreatedAtDesc(userId, FavoriteTargetType.POST)
+                .stream()
+                .map(fav -> Long.parseLong(fav.getTargetId()))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     @Transactional
     public PostResponse getPost(Long postId, Long userId) {
         Post post = findActivePost(postId);
@@ -84,8 +107,11 @@ public class CommunityService {
         int commentCount = commentRepository.countByPostIdAndDeletedFalse(postId);
         List<String> imageUrls = getImageUrls(postId);
         boolean likedByMe = userId != null && postLikeRepository.existsByPostIdAndUserId(postId, userId);
+        // 단건은 existsBy... 로 현재 사용자의 찜 여부를 직접 조회. 비로그인이면 false.
+        boolean bookmarked = userId != null && favoriteRepository
+                .existsByUserIdAndTargetTypeAndTargetId(userId, FavoriteTargetType.POST, String.valueOf(postId));
 
-        return PostResponse.of(post, commentCount, imageUrls, likedByMe);
+        return PostResponse.of(post, commentCount, imageUrls, likedByMe, bookmarked);
     }
 
     @Transactional
@@ -101,7 +127,8 @@ public class CommunityService {
 
         List<String> imageUrls = saveImages(post, request.imageUrls());
 
-        return PostResponse.of(post, 0, imageUrls, false);
+        // 방금 생성된 글이므로 좋아요/찜 모두 false.
+        return PostResponse.of(post, 0, imageUrls, false, false);
     }
 
     @Transactional
@@ -121,7 +148,9 @@ public class CommunityService {
 
         int commentCount = commentRepository.countByPostIdAndDeletedFalse(postId);
         boolean likedByMe = postLikeRepository.existsByPostIdAndUserId(postId, userId);
-        return PostResponse.of(post, commentCount, imageUrls, likedByMe);
+        boolean bookmarked = favoriteRepository
+                .existsByUserIdAndTargetTypeAndTargetId(userId, FavoriteTargetType.POST, String.valueOf(postId));
+        return PostResponse.of(post, commentCount, imageUrls, likedByMe, bookmarked);
     }
 
     @Transactional

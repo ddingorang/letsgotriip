@@ -52,13 +52,21 @@ public class GroupController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<GroupResponse> get(@PathVariable Long id) {
-        return ResponseEntity.ok(groupService.get(id));
+    public ResponseEntity<GroupResponse> get(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long id
+    ) {
+        requireAuth(principal);
+        return ResponseEntity.ok(groupService.get(principal.userId(), id));
     }
 
     @GetMapping("/{id}/members")
-    public ResponseEntity<List<GroupMemberResponse>> members(@PathVariable Long id) {
-        return ResponseEntity.ok(groupService.members(id));
+    public ResponseEntity<List<GroupMemberResponse>> members(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long id
+    ) {
+        requireAuth(principal);
+        return ResponseEntity.ok(groupService.members(principal.userId(), id));
     }
 
     @PostMapping("/{id}/join")

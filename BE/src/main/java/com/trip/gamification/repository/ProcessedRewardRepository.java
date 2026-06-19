@@ -5,5 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ProcessedRewardRepository extends JpaRepository<ProcessedReward, Long> {
 
-    boolean existsBySignature(String signature);
+    boolean existsByUserIdAndSignature(Long userId, String signature);
 }

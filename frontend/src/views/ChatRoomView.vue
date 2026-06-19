@@ -51,16 +51,25 @@
         <!-- Outgoing (내 메시지) -->
         <div v-if="isMyMessage(msg)" class="msg-row outgoing">
           <div class="msg-col-out">
-            <span class="msg-time">{{ msg.time }}</span>
+            <span class="msg-status">
+              <span v-if="msg.failed" class="msg-failed">전송 실패</span>
+              <span v-else-if="msg.pending" class="msg-pending">전송 중…</span>
+              <template v-else>{{ msg.time }}</template>
+            </span>
             <img
               v-if="msg.type === 'IMAGE'"
               :src="msg.content"
               class="msg-image"
+              :class="{ 'msg-sending': msg.pending, 'msg-send-failed': msg.failed }"
               alt="이미지"
               @click="openImage(msg.content)"
               @error="onImageError"
             />
-            <div v-else class="bubble outgoing-bubble">{{ msg.text ?? msg.content }}</div>
+            <div
+              v-else
+              class="bubble outgoing-bubble"
+              :class="{ 'msg-sending': msg.pending, 'msg-send-failed': msg.failed }"
+            >{{ msg.text ?? msg.content }}</div>
           </div>
         </div>
 
@@ -294,6 +303,8 @@ async function fetchParticipants() {
     participants.value = Array.isArray(data?.participants) ? data.participants : []
     participantCount.value = data?.count ?? participants.value.length
     viewerIsHost.value = data?.viewerIsHost === true
+    // 서버가 내려준 음소거 상태로 초기화/동기화(토글 직후 서버값과 일치 유지)
+    if (typeof data?.viewerMuted === 'boolean') muted.value = data.viewerMuted === true
   } catch (e) {
     // 권한/네트워크 실패는 조용히 무시 (배지 미표시)
   }
@@ -598,6 +609,15 @@ onBeforeUnmount(() => {
 .msg-col-out { display: flex; flex-direction: row; align-items: flex-end; gap: 5px; }
 .msg-sender { font-size: 12px; font-weight: 600; color: var(--color-ink-secondary); }
 .msg-time { font-size: 11px; color: var(--color-ink-muted); flex-shrink: 0; padding-bottom: 2px; }
+
+/* ── 전송 상태(낙관적 전송) ─────────────────────────────────────── */
+.msg-status { font-size: 11px; color: var(--color-ink-muted); flex-shrink: 0; padding-bottom: 2px; }
+.msg-pending { color: var(--color-ink-muted); }
+.msg-failed { color: #e2483d; font-weight: 600; }
+/* 에코 대기 중인 버블은 살짝 흐리게 */
+.msg-sending { opacity: 0.6; }
+/* 전송 실패 버블은 붉은 테두리로 강조 */
+.msg-send-failed { outline: 1px solid #e2483d; outline-offset: 1px; }
 
 .bubble {
   padding: 11px 14px;

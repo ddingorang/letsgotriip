@@ -49,7 +49,7 @@
               <span class="doc-name">{{ doc.filename }}</span>
               <div class="doc-meta">
                 <span v-if="doc.type" class="doc-type">{{ shortType(doc.type) }}</span>
-                <span :class="['doc-status', statusClass(doc.status)]">{{ statusLabel(doc.status) }}</span>
+                <span :class="['doc-status', statusClass(doc)]">{{ statusLabel(doc) }}</span>
               </div>
             </div>
             <button
@@ -145,27 +145,43 @@ function shortType(type) {
   return type
 }
 
-function statusLabel(status) {
-  switch (String(status ?? '').toUpperCase()) {
+// doc 객체(또는 상태 문자열)를 받아 표시 라벨을 만든다.
+// 색인된 내용이 없는 문서(EMPTY/추출 글자수 0)는 '완료'로 위장하지 않고
+// '내용 없음'으로 구분 표기한다 — 질문에 쓸 수 없는 문서임을 알린다.
+function statusLabel(doc) {
+  const status = typeof doc === 'object' && doc !== null ? doc.status : doc
+  const upper = String(status ?? '').toUpperCase()
+  switch (upper) {
+    case 'PENDING':
     case 'PROCESSING':
     case 'INDEXING':
       return '처리 중'
     case 'FAILED':
     case 'ERROR':
-      return '실패'
+      return '색인 실패'
+    case 'EMPTY':
+    case 'NO_TEXT':
+      return '내용 없음'
     case 'READY':
     case 'INDEXED':
+    case 'INGESTED':
     case 'DONE':
     case 'COMPLETED':
+      // INGESTED여도 추출 글자수가 0이면 색인된 내용이 없는 문서다.
+      if (typeof doc === 'object' && doc !== null && Number(doc.extractedChars) === 0) {
+        return '내용 없음'
+      }
+      return '완료'
     default:
       return '완료'
   }
 }
 
-function statusClass(status) {
-  const label = statusLabel(status)
+function statusClass(doc) {
+  const label = statusLabel(doc)
   if (label === '처리 중') return 'status-processing'
-  if (label === '실패') return 'status-failed'
+  if (label === '색인 실패') return 'status-failed'
+  if (label === '내용 없음') return 'status-empty'
   return 'status-ready'
 }
 
@@ -328,6 +344,7 @@ onMounted(() => {
 .status-ready { background: var(--color-peach-light); color: var(--color-peach-pressed); }
 .status-processing { background: var(--color-surface); color: var(--color-ink-secondary); }
 .status-failed { background: #fdecea; color: var(--color-error); }
+.status-empty { background: #fff4e0; color: #b9851c; }
 
 .del-btn {
   width: 36px;

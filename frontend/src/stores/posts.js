@@ -51,24 +51,34 @@ export const usePostsStore = defineStore('posts', () => {
   const hasMore = ref(true)
   const loading = ref(false)
   const cursor = ref(null)
+  // 현재 적용된 카테고리 필터(enum). 전체일 때 null → 무필터.
+  const category = ref(null)
+  // 댓글 페이지네이션 상태 — 누적(append) 방식
+  const commentsPage = ref(0)
+  const hasMoreComments = ref(true)
   // 정직화: 조회 실패를 가짜 데이터로 가리지 않고 error 상태로 노출한다.
   const postsError = ref(null)
   const postError = ref(null)
   const commentsError = ref(null)
   const commentError = ref(null)
 
-  async function fetchPosts(reset = false) {
+  // category(enum) 인자: reset 시에만 적용된다(서버 카테고리 필터 재조회용).
+  async function fetchPosts(reset = false, categoryArg) {
     if (loading.value) return
     if (reset) {
       posts.value = []
       cursor.value = null
       hasMore.value = true
       postsError.value = null
+      // reset 호출에서 명시된 카테고리로 갱신(undefined면 무필터로 간주)
+      category.value = categoryArg ?? null
     }
     if (!hasMore.value) return
     loading.value = true
     try {
-      const res = await communityApi.getPosts({ cursor: cursor.value, size: 10 })
+      const params = { cursor: cursor.value, size: 10 }
+      if (category.value) params.category = category.value
+      const res = await communityApi.getPosts(params)
       const data = res.data
       const raw = data.content || []
       posts.value.push(...raw.map(normalizePost))
@@ -94,17 +104,34 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
-  async function fetchComments(postId) {
+  // 댓글 조회 — reset(첫 페이지)이면 0페이지부터, 아니면 다음 페이지를 누적(append)한다.
+  async function fetchComments(postId, reset = true) {
     commentsError.value = null
-    try {
-      const res = await communityApi.getComments(postId)
-      // BE returns Spring Page({ content: [...] })
-      const raw = res.data?.content ?? res.data ?? []
-      comments.value = raw.map(normalizeComment)
-    } catch (err) {
+    if (reset) {
       comments.value = []
+      commentsPage.value = 0
+      hasMoreComments.value = true
+    }
+    if (!hasMoreComments.value) return
+    const page = commentsPage.value
+    try {
+      const res = await communityApi.getComments(postId, { page, size: 10 })
+      const data = res.data
+      // BE returns Spring Page({ content: [...], last })
+      const raw = data?.content ?? data ?? []
+      comments.value.push(...raw.map(normalizeComment))
+      commentsPage.value = page + 1
+      // Spring Page: last=true면 마지막 페이지. content 부재(배열 응답) 시 더 없음으로 간주.
+      hasMoreComments.value = data?.content ? data.last === false : false
+    } catch (err) {
+      if (reset) comments.value = []
       commentsError.value = err
     }
+  }
+
+  // 다음 댓글 페이지 로드('더보기')
+  async function fetchMoreComments(postId) {
+    await fetchComments(postId, false)
   }
 
   async function likePost(id) {
@@ -133,10 +160,11 @@ export const usePostsStore = defineStore('posts', () => {
     return isLiked
   }
 
-  // 게시글 북마크(찜) 토글 — BE POST /api/favorites { targetType:'POST', targetId } → Boolean(찜 상태)
+  // 게시글 북마크(찜) 토글 — BE POST /api/favorites { targetType:'POST', targetId } → { favorited: boolean }
   async function bookmarkPost(id) {
     const res = await favoriteApi.toggle('POST', id)
-    const isBookmarked = res.data
+    // 응답은 { favorited } 객체다. 객체를 boolean처럼 쓰면 항상 truthy가 되므로 언래핑한다.
+    const isBookmarked = res.data.favorited
     const post = posts.value.find((p) => p.id === id)
     if (post) post.bookmarked = isBookmarked
     if (currentPost.value?.id === id) currentPost.value.bookmarked = isBookmarked
@@ -183,5 +211,5 @@ export const usePostsStore = defineStore('posts', () => {
     }
   }
 
-  return { posts, currentPost, comments, hasMore, loading, postsError, postError, commentsError, commentError, fetchPosts, fetchPost, fetchComments, likePost, likeComment, bookmarkPost, addComment, deleteComment, updatePost, deletePost }
+  return { posts, currentPost, comments, hasMore, loading, category, hasMoreComments, postsError, postError, commentsError, commentError, fetchPosts, fetchPost, fetchComments, fetchMoreComments, likePost, likeComment, bookmarkPost, addComment, deleteComment, updatePost, deletePost }
 })

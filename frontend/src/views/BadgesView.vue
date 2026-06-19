@@ -1,6 +1,20 @@
 <template>
   <div class="page">
-    <div class="scroll-content">
+    <!-- 로드 실패: 가짜 Lv1·0XP 를 그리지 않고 에러 + 재시도 -->
+    <div v-if="error" class="state-box">
+      <p class="state-text">{{ error }}</p>
+      <button class="retry-btn" @click="reload">다시 시도</button>
+    </div>
+
+    <!-- 로딩: 스켈레톤 -->
+    <div v-else-if="loading" class="state-box">
+      <div class="skeleton skel-hero" />
+      <div class="skeleton skel-line" />
+      <div class="skeleton skel-line short" />
+    </div>
+
+    <!-- 정상: 로딩 아님 + 에러 없음 + 실제 summary 있을 때만 -->
+    <div v-else-if="ready" class="scroll-content">
       <!-- Level hero card -->
       <div class="level-card">
         <div class="level-glow" />
@@ -123,23 +137,32 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useGamificationStore } from '@/stores/gamification.js'
 import { gamificationApi } from '@/api/index.js'
 
 const gamiStore = useGamificationStore()
+// error/loading 을 구독해 로드 실패를 'Lv1·0XP·빈 챌린지'의 가짜 성공으로 위장하지 않는다.
+const { loading, error } = storeToRefs(gamiStore)
+// 정상 렌더는 로딩 아님 + 에러 없음 + 실제 summary 가 있을 때만.
+const ready = computed(() => !loading.value && !error.value && !!gamiStore.summary)
 // 전체 퀘스트(완료 포함)는 summary 가 아니라 quests 엔드포인트로 받는다.
 // (summary.quests 는 미완료만 담는다)
 const allQuests = ref([])
 
-onMounted(async () => {
+async function reload() {
   await gamiStore.refresh()
+  // summary 로드 실패 시에는 퀘스트 목록을 덮어쓰지 않는다(에러 화면으로 분기됨).
+  if (gamiStore.error) return
   try {
     const { data } = await gamificationApi.quests()
     allQuests.value = Array.isArray(data) ? data : []
   } catch {
     allQuests.value = []
   }
-})
+}
+
+onMounted(reload)
 
 const activeTab = ref(0)
 const tabs = ['진행중 퀘스트', '뱃지 컬렉션', '완료 기록']
@@ -566,5 +589,44 @@ const badgeEmptyText = computed(() =>
 
 .bottom-spacer {
   height: 32px;
+}
+
+/* 로드 실패 / 로딩 상태 */
+.state-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 56px 24px;
+  text-align: center;
+}
+.state-text {
+  font-size: 13.5px;
+  color: var(--color-ink-secondary);
+  line-height: 1.5;
+}
+.retry-btn {
+  padding: 10px 22px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-line-light) 25%, var(--color-surface) 50%, var(--color-line-light) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-md);
+  animation: skel-shine 1.2s ease-in-out infinite;
+}
+.skel-hero { width: 100%; height: 120px; border-radius: var(--radius-lg); }
+.skel-line { width: 80%; height: 14px; }
+.skel-line.short { width: 50%; }
+@keyframes skel-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 </style>

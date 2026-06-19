@@ -169,12 +169,28 @@ public class ChatService {
                         && m.isActiveMember()
                         && Boolean.TRUE.equals(m.getIsHost()));
 
-        List<ChatRoomParticipantsResponse.Participant> participants = memberships.stream()
+        // 요청자 본인의 음소거 초기 상태 — FE 토글 초기값 동기화용(본인 멤버십의 muted 값).
+        boolean viewerMuted = memberships.stream()
+                .filter(m -> m.getUserId().equals(userId) && m.isActiveMember())
+                .findFirst()
+                .map(ChatRoomMembership::isMuted)
+                .orElse(false);
+
+        List<ChatRoomMembership> activeMemberships = memberships.stream()
                 .filter(ChatRoomMembership::isActiveMember)
+                .toList();
+
+        // 닉네임 일괄 조회 — 활성 멤버 userId 집합을 한 번에 findAllById 로 가져와 멤버당 쿼리(N+1)를 제거한다.
+        Set<Long> memberIds = activeMemberships.stream()
+                .map(ChatRoomMembership::getUserId)
+                .collect(Collectors.toSet());
+        Map<Long, String> nicknameById = userRepository.findAllById(memberIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getNickname, (a, b) -> a));
+
+        List<ChatRoomParticipantsResponse.Participant> participants = activeMemberships.stream()
                 .map(m -> ChatRoomParticipantsResponse.Participant.builder()
                         .userId(m.getUserId())
-                        .nickname(userRepository.findById(m.getUserId())
-                                .map(User::getNickname).orElse("알 수 없음"))
+                        .nickname(nicknameById.getOrDefault(m.getUserId(), "알 수 없음"))
                         .isHost(Boolean.TRUE.equals(m.getIsHost()))
                         .build())
                 .toList();
@@ -183,6 +199,7 @@ public class ChatService {
                 .chatRoomId(chatRoomId)
                 .count(participants.size())
                 .viewerIsHost(viewerIsHost)
+                .viewerMuted(viewerMuted)
                 .participants(participants)
                 .build();
     }

@@ -126,8 +126,9 @@
             </svg>
           </div>
           <div class="msg-col">
-            <div class="bubble incoming-bubble">{{ msg.content
+            <div class="bubble incoming-bubble" :class="{ errored: msg.errored }">{{ msg.content
               }}<span v-if="streaming && msg.id === messages[messages.length - 1]?.id" class="stream-caret" /></div>
+            <span v-if="msg.errored" class="partial-note">⚠ 응답이 중단된 부분 답변이에요.</span>
             <span class="msg-time">{{ msg.time }}</span>
           </div>
         </div>
@@ -178,7 +179,7 @@
             </span>
             <span class="attach-text">
               <span class="attach-name">음성 첨부</span>
-              <span class="attach-sub">녹음 파일을 텍스트로 변환</span>
+              <span class="attach-sub">녹음 파일로 질문하기</span>
             </span>
           </button>
         </div>
@@ -392,39 +393,23 @@ async function onDocumentSelected(e) {
   }
 }
 
-// 음성 첨부 → STT 업로드. 변환 텍스트가 응답에 있으면 입력창에 채워 확인 후 전송.
+// 음성 첨부 → STT 업로드(색인). BE 는 dataId(Long)만 반환하고 전사 본문은 응답에 없으므로
+// 입력창에 채울 텍스트가 없다. 업로드 성공 안내만 띄우고 질문은 사용자가 직접 입력하게 한다.
 async function onVoiceSelected(e) {
   const file = e.target.files?.[0]
   e.target.value = ''
   if (!file) return
-  uploadStatus.value = { kind: 'progress', text: `'${file.name}' 음성 변환 중...` }
+  uploadStatus.value = { kind: 'progress', text: `'${file.name}' 음성 업로드 중...` }
   try {
-    const { data } = await analysisApi.uploadVoice(file)
-    // BE 는 dataId(Long)를 반환한다. 응답에 변환 텍스트가 포함된 경우에만 입력창에 채운다.
-    const text = extractTranscript(data)
-    if (text) {
-      inputText.value = text
-      uploadStatus.value = { kind: 'done', text: '음성을 텍스트로 변환했어요. 확인 후 전송하세요.' }
-    } else {
-      uploadStatus.value = { kind: 'done', text: '음성을 업로드했어요. 질문을 입력해 주세요.' }
-    }
+    await analysisApi.uploadVoice(file)
+    uploadStatus.value = { kind: 'done', text: '음성을 업로드했어요. 질문을 입력해 주세요.' }
     setTimeout(() => { if (uploadStatus.value?.kind === 'done') uploadStatus.value = null }, 3000)
   } catch (err) {
     uploadStatus.value = {
       kind: 'error',
-      text: err?.response?.data?.message ?? err?.message ?? '음성 변환에 실패했어요.',
+      text: err?.response?.data?.message ?? err?.message ?? '음성 업로드에 실패했어요.',
     }
   }
-}
-
-// uploadVoice 응답에서 변환 텍스트를 안전하게 추출(문자열/객체 형태 모두 방어).
-function extractTranscript(data) {
-  if (typeof data === 'string') return data.trim()
-  if (data && typeof data === 'object') {
-    const t = data.text ?? data.transcript ?? data.rawText ?? data.content
-    if (typeof t === 'string') return t.trim()
-  }
-  return ''
 }
 
 function scrollToBottom() {
@@ -562,6 +547,16 @@ watch(
   background: var(--color-peach);
   color: white;
   border-radius: 18px 4px 18px 18px;
+}
+/* 오류로 중단된 부분 답변 — 완성 답변과 구분 */
+.incoming-bubble.errored {
+  border: 1px solid #f3c0bb;
+  background: #fff7f6;
+}
+.partial-note {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-error);
 }
 
 /* 스트리밍 진행 중 깜빡이는 캐럿 */

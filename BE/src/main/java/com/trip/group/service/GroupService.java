@@ -73,8 +73,10 @@ public class GroupService {
                 .toList();
     }
 
-    public GroupResponse get(Long id) {
+    public GroupResponse get(Long userId, Long id) {
         TravelGroup group = findGroup(id);
+        // IDOR 방어: 그룹 멤버(소유자 포함)만 상세 조회 가능
+        requireMember(id, userId);
         return GroupResponse.from(group, groupMemberRepository.countByGroupId(group.getId()));
     }
 
@@ -115,8 +117,10 @@ public class GroupService {
         groupMemberRepository.delete(member);
     }
 
-    public List<GroupMemberResponse> members(Long groupId) {
+    public List<GroupMemberResponse> members(Long userId, Long groupId) {
         findGroup(groupId);
+        // IDOR 방어: 그룹 멤버(소유자 포함)만 멤버 목록 조회 가능
+        requireMember(groupId, userId);
         return groupMemberRepository.findByGroupId(groupId).stream()
                 .map(GroupMemberResponse::from)
                 .toList();
@@ -133,5 +137,12 @@ public class GroupService {
     private TravelGroup findGroup(Long id) {
         return travelGroupRepository.findById(id)
                 .orElseThrow(() -> new GeneralException(ResponseCode._BAD_REQUEST));
+    }
+
+    /** 비멤버의 그룹 상세/멤버 접근 차단 (IDOR 방어). 멤버가 아니면 403. */
+    private void requireMember(Long groupId, Long userId) {
+        if (groupMemberRepository.findByGroupIdAndUserId(groupId, userId).isEmpty()) {
+            throw new GeneralException(ResponseCode._FORBIDDEN);
+        }
     }
 }

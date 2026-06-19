@@ -98,6 +98,17 @@ export const useAssistantStore = defineStore('assistant', () => {
       if (result?.conversationId) conversationId.value = result.conversationId
 
       const reply = result?.reply ?? ''
+      // S3가 chatStream 결과에 { errored, errorMessage }를 실어준다(event:error 수신 시 true).
+      // 스트림이 HTTP 200으로 끝났더라도 서버가 오류를 알린 경우 = 부분/빈 응답이므로
+      // 완성으로 위장하지 않고 실패를 노출한다.
+      if (result?.errored) {
+        error.value = result.errorMessage ?? '응답 생성 중 오류가 발생했어요.'
+        // 일부 토큰을 받았다면(부분 버블) 부분 답변임을 표식한다 — 완성으로 오인하지 않도록.
+        if (assistantMsg) {
+          assistantMsg.errored = true
+        }
+        return
+      }
       // 스트림이 정상 종료(HTTP 200)됐지만 토큰이 하나도 없는 경우 = 서버가 event:error를
       // 보내고 done으로 마무리한 상황(BE AssistantController). 이를 빈 성공으로 위장하지 않고
       // 실패로 노출한다. (정상 응답은 항상 최소 1개 이상의 토큰을 동반한다.)

@@ -155,13 +155,20 @@
           <span class="phase2-label">Phase 2</span>
           <h3 class="phase2-title">앨범은 곧 만나요</h3>
           <p class="phase2-sub">여행이 끝나면 사진이 자동으로<br />앨범에 정리될 예정이에요.</p>
+          <!-- 앨범이 0개여도 직접 만들 수 있게 CTA 노출 -->
+          <button class="create-plan-btn phase2-create" :disabled="albumCreating" @click="createAlbum">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            {{ albumCreating ? '만드는 중…' : '앨범 만들기' }}
+          </button>
         </div>
 
         <!-- Albums grid -->
         <div v-else>
           <div class="album-section-header">
             <span class="album-count">앨범 {{ albums.length }}</span>
-            <button class="make-album-btn">+ 앨범 만들기</button>
+            <button class="make-album-btn" :disabled="albumCreating" @click="createAlbum">
+              {{ albumCreating ? '만드는 중…' : '+ 앨범 만들기' }}
+            </button>
           </div>
           <div class="albums-grid">
             <div
@@ -171,6 +178,8 @@
               @click="$router.push(`/mypage/album/${album.id}`)"
             >
               <div class="album-thumb">
+                <!-- 썸네일 실데이터: 있으면 그라데이션 위에 덮고, 없으면 폴백 유지 -->
+                <img v-if="album.thumbnailUrl" :src="album.thumbnailUrl" :alt="album.title" class="album-thumb-img" />
                 <div class="album-photo-count">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
                   {{ album.photoCount }}
@@ -246,6 +255,18 @@
             </svg>
           </span>
           <span class="menu-label">내 그룹</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 팔로잉 -->
+        <button class="menu-row" @click="openFollowing">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+            </svg>
+          </span>
+          <span class="menu-label">팔로잉</span>
+          <span v-if="followingCount > 0" class="menu-count">{{ followingCount }}</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
         </button>
 
@@ -391,6 +412,38 @@
       </div>
     </div>
 
+    <!-- 팔로잉 시트 (GET /api/follows/me/following) -->
+    <div v-if="followSheetOpen" class="sheet-backdrop" @click.self="followSheetOpen = false">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h3 class="sheet-title">팔로잉 {{ followingCount > 0 ? followingCount : '' }}</h3>
+          <button class="sheet-close" @click="followSheetOpen = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <p v-if="followLoading" class="sheet-hint">불러오는 중…</p>
+          <p v-else-if="followError" class="sheet-hint">{{ followError }}</p>
+          <template v-else-if="following.length > 0">
+            <div v-for="f in following" :key="f.userId" class="follow-item">
+              <div class="follow-avatar">
+                <img v-if="f.profileImageUrl" :src="f.profileImageUrl" :alt="f.nickname" class="follow-avatar-img" />
+                <span v-else class="follow-avatar-text">{{ (f.nickname || '?').charAt(0) }}</span>
+              </div>
+              <div class="follow-info">
+                <span class="follow-name">{{ f.nickname }}</span>
+                <span v-if="f.bio" class="follow-bio">{{ f.bio }}</span>
+              </div>
+            </div>
+          </template>
+          <div v-else class="sheet-empty">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>
+            <p class="sheet-hint">아직 팔로우한 사람이 없어요.<br />커뮤니티에서 마음에 드는 여행자를 팔로우해보세요.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -401,7 +454,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationStore } from '@/stores/notification.js'
 import { useGamificationStore } from '@/stores/gamification.js'
 import { http } from '@/api/http.js'
-import { favoriteApi } from '@/api/index.js'
+import { favoriteApi, followApi } from '@/api/index.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -498,6 +551,23 @@ async function loadAlbums() {
   }
 }
 
+// '+ 앨범 만들기' — 이름 입력 후 생성(POST /users/me/albums)하고 목록 갱신.
+const albumCreating = ref(false)
+async function createAlbum() {
+  if (albumCreating.value) return
+  const name = (window.prompt('새 앨범 이름을 입력하세요') ?? '').trim()
+  if (!name) return
+  albumCreating.value = true
+  try {
+    await http.post('/users/me/albums', { name, imageUrls: [] })
+    await loadAlbums()
+  } catch (e) {
+    window.alert(e.response?.data?.message ?? e.message ?? '앨범을 만들지 못했어요.')
+  } finally {
+    albumCreating.value = false
+  }
+}
+
 // ── 뱃지 ────────────────────────────────────────────────────────────────────
 // 게임화 API(GET /api/gamification/summary)의 실데이터 뱃지 목록.
 // 미로그인/로딩 시 빈 배열 → 화면은 빈 상태로 정직하게 표시.
@@ -567,11 +637,39 @@ function openReviews() {
   reviewSheetOpen.value = true
 }
 
+// ── 팔로잉 시트 (GET /api/follows/me/following) ──────────────────────────────
+const followSheetOpen = ref(false)
+const following = ref([])
+const followLoading = ref(false)
+const followError = ref('')
+const followingCount = computed(() => following.value.length)
+
+// 마운트 시 카운트 표시용으로 미리 1회 로드(실패는 0개로 정직하게 표시).
+async function loadFollowing() {
+  followLoading.value = true
+  followError.value = ''
+  try {
+    const { data } = await followApi.following()
+    following.value = Array.isArray(data) ? data : (data?.content ?? [])
+  } catch (e) {
+    followError.value = e.response?.data?.message ?? e.message ?? '팔로잉 목록을 불러오지 못했어요.'
+    following.value = []
+  } finally {
+    followLoading.value = false
+  }
+}
+
+function openFollowing() {
+  followSheetOpen.value = true
+  loadFollowing()
+}
+
 onMounted(() => {
   notifStore.load()
   gamiStore.load()
   loadPlans()
   loadAlbums()
+  loadFollowing()
 })
 </script>
 
@@ -975,6 +1073,8 @@ onMounted(() => {
   color: var(--color-ink-muted);
   line-height: 1.6;
 }
+.phase2-create { margin-top: 20px; }
+.phase2-create:disabled { opacity: 0.5; }
 
 /* Albums grid */
 .album-section-header {
@@ -993,6 +1093,7 @@ onMounted(() => {
   font-weight: 600;
   color: var(--color-peach);
 }
+.make-album-btn:disabled { opacity: 0.5; }
 .albums-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1012,7 +1113,17 @@ onMounted(() => {
   justify-content: space-between;
   padding: 8px;
 }
+/* 썸네일 이미지: 카드 전체를 덮어 그라데이션 위에 표시(배지/라벨은 z-index 로 위에) */
+.album-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .album-photo-count {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1025,6 +1136,8 @@ onMounted(() => {
   align-self: flex-start;
 }
 .album-place-label {
+  position: relative;
+  z-index: 1;
   font-size: 11px;
   color: white;
   background: rgba(0,0,0,0.35);
@@ -1257,6 +1370,66 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .fav-remove:active { opacity: 0.6; }
+
+/* 메뉴 행 우측 카운트 배지 (팔로잉 등) */
+.menu-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* 팔로잉 시트 아이템 */
+.follow-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.follow-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #efe6e4, #e0d4cc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.follow-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.follow-avatar-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+}
+.follow-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.follow-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+.follow-bio {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .bottom-spacer { height: 24px; }
 </style>

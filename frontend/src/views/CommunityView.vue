@@ -38,7 +38,7 @@
           v-for="f in filterTabs"
           :key="f"
           :class="['chip-btn', { active: activeFilter === f }]"
-          @click="activeFilter = f"
+          @click="selectFilter(f)"
         >
           {{ f }}
         </button>
@@ -46,7 +46,7 @@
       <div class="scroll-content" @scroll="onScroll">
         <div class="post-list">
           <PostCard
-            v-for="post in filteredPosts"
+            v-for="post in postsStore.posts"
             :key="post.id"
             :post="post"
             @click="$router.push(`/community/${post.id}`)"
@@ -57,7 +57,7 @@
         <div v-if="postsStore.loading" class="loading-row">
           <div class="spinner" />
         </div>
-        <div v-if="!postsStore.hasMore && filteredPosts.length > 0" class="end-msg">모든 게시글을 불러왔어요</div>
+        <div v-if="!postsStore.hasMore && postsStore.posts.length > 0" class="end-msg">모든 게시글을 불러왔어요</div>
         <div class="bottom-spacer" />
       </div>
     </div>
@@ -264,12 +264,22 @@ const TAB_INDEX = { board: 0, hotplace: 1, companion: 2 }
 const activeMain = ref(TAB_INDEX[route.query.tab] ?? 0)
 
 // 공유게시판
-const filterTabs = ['전체', '후기', '꿀팁', '동행']
+const filterTabs = ['전체', '후기', '질문', '꿀팁', '맛집', '동행']
 const activeFilter = ref('전체')
-const filteredPosts = computed(() => {
-  if (activeFilter.value === '전체') return postsStore.posts
-  return postsStore.posts.filter((p) => (p.categoryLabel ?? p.category) === activeFilter.value)
-})
+// 라벨 → BE PostCategory enum. '전체'는 무필터(undefined).
+const FILTER_ENUM = {
+  후기: 'REVIEW',
+  질문: 'QUESTION',
+  꿀팁: 'TIP',
+  맛집: 'RESTAURANT',
+  동행: 'COMPANION',
+}
+// 카테고리 필터 변경 시 서버에서 재조회(클라이언트 필터 제거 — 페이지네이션과 정합)
+function selectFilter(f) {
+  if (activeFilter.value === f) return
+  activeFilter.value = f
+  postsStore.fetchPosts(true, FILTER_ENUM[f])
+}
 function onScroll(e) {
   const el = e.target
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) postsStore.fetchPosts()

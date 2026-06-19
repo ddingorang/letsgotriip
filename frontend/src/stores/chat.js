@@ -121,6 +121,20 @@ export const useChatStore = defineStore('chat', () => {
     const key = ensureRoom(roomId)
     const normalized = normalizeMessage(dto)
     const list = messages.value[key]
+    // 낙관적 버블 병합: 동일 correlationId의 pending 버블이 있으면 실제 메시지로 교체
+    // (sendMessage가 먼저 push한 임시 버블을 에코 수신 시 확정한다)
+    if (normalized.correlationId) {
+      const pendingIdx = list.findIndex(
+        (m) => m.correlationId === normalized.correlationId && m.pending,
+      )
+      if (pendingIdx !== -1) {
+        const pending = list[pendingIdx]
+        if (pending.failTimer) clearTimeout(pending.failTimer)
+        // 실제 서버 데이터로 교체하되 pending/failed 플래그는 제거
+        list[pendingIdx] = normalized
+        return
+      }
+    }
     // correlationId 또는 messageTSID 중복 방지(에코 수신 대비)
     const dup = list.some(
       (m) =>
@@ -131,6 +145,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ── 송신 ────────────────────────────────────────────────────────────────────
+  // 낙관적 버블이 일정 시간 내 에코로 확정되지 않으면 '전송 실패'로 표시할 대기시간(ms).
+  const ECHO_TIMEOUT_MS = 8000
+
   // messageType: 'TEXT'(기본) | 'IMAGE' 등. IMAGE면 content는 업로드된 이미지 URL.
   function sendMessage(roomId, content, messageType = 'TEXT') {
     // TEXT는 공백 트림 후 빈 값 차단, 그 외(IMAGE 등)는 URL 보존을 위해 원본 사용
@@ -146,6 +163,35 @@ export const useChatStore = defineStore('chat', () => {
       messageType,
       content: body,
     })
+
+    // 낙관적 표시: 전송 직후 내 메시지 버블을 즉시 목록에 추가한다.
+    // 동일 correlationId로 에코가 도착하면 appendMessage가 실제 메시지로 교체한다.
+    const key = ensureRoom(roomId)
+    const authStore = useAuthStore()
+    const optimistic = {
+      id: `pending-${correlationId}`,
+      correlationId,
+      senderId: authStore.user?.userId ?? null,
+      senderNickname: authStore.user?.nickname ?? null,
+      content: body,
+      type: messageType,
+      timestamp: null,
+      time: formatTime(null),
+      pending: true,  // 전송 중(에코 대기) 표시
+      failed: false,  // 에코 타임아웃 시 true
+      failTimer: null,
+    }
+    // 8초 내 에코 미수신 시 '전송 실패' 상태로 전환
+    optimistic.failTimer = setTimeout(() => {
+      const list = messages.value[key]
+      const target = list.find((m) => m.correlationId === correlationId && m.pending)
+      if (target) {
+        target.pending = false
+        target.failed = true
+      }
+    }, ECHO_TIMEOUT_MS)
+    messages.value[key].push(optimistic)
+
     return true
   }
 
@@ -157,6 +203,12 @@ export const useChatStore = defineStore('chat', () => {
     if (client) {
       try { client.disconnect() } catch { /* ignore */ }
       client = null
+    }
+    // 대기 중인 낙관적 버블의 실패 타이머 정리(메모리/오발화 방지)
+    if (currentRoomId && messages.value[currentRoomId]) {
+      messages.value[currentRoomId].forEach((m) => {
+        if (m.failTimer) { clearTimeout(m.failTimer); m.failTimer = null }
+      })
     }
     connected.value = false
     currentRoomId = null

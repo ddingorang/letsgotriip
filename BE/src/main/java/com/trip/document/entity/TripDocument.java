@@ -48,6 +48,15 @@ public class TripDocument extends BaseEntity {
         this.extractedChars = extractedChars;
     }
 
+    /**
+     * 추출 텍스트가 없어 색인하지 못한 상태. INGESTED(완료)로 위장하지 않고
+     * 내용 없음을 명시한다(질문에 쓸 수 없는 문서임을 구분).
+     */
+    public void markEmpty() {
+        this.status = DocumentStatus.EMPTY;
+        this.extractedChars = 0;
+    }
+
     public void markFailed() {
         this.status = DocumentStatus.FAILED;
     }

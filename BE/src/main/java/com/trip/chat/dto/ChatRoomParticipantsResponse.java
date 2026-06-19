@@ -13,6 +13,7 @@ public record ChatRoomParticipantsResponse(
         Long chatRoomId,
         int count, // 활성 참여 인원수
         boolean viewerIsHost, // 요청자가 방장인지(FE 관리 버튼 게이팅용)
+        boolean viewerMuted, // 요청자 본인의 음소거 초기 상태(FE 토글 초기값 동기화용)
         List<Participant> participants
 ) {
     @Builder

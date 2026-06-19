@@ -76,9 +76,16 @@
               <span class="author-sub">{{ post?.location }} · {{ timeAgo(post?.createdAt) }}</span>
             </div>
           </div>
-          <!-- TODO: 팔로우 비활성 — BE PostResponse에 작성자 userId가 없어
-               followApi.toggle(작성자 userId) 호출 불가. BE DTO에 authorId 추가 시 활성화. -->
-          <button class="follow-btn" disabled>팔로우</button>
+          <!-- 팔로우 — BE PostResponse의 authorId로 followApi.toggle 호출.
+               내 글이면 숨김, 비로그인 시 /login 유도. -->
+          <button
+            v-if="post?.authorId && !isMyPost"
+            class="follow-btn"
+            :class="{ following }"
+            @click="toggleFollow"
+          >
+            {{ following ? '팔로잉' : '팔로우' }}
+          </button>
         </div>
 
         <p class="post-body">{{ post?.content }}</p>
@@ -111,7 +118,7 @@
       </div>
 
       <div class="comments-section">
-        <h2 class="comments-title">댓글 {{ comments.length }}</h2>
+        <h2 class="comments-title">댓글 {{ post?.commentCount ?? comments.length }}</h2>
 
         <div v-for="(comment, idx) in comments" :key="comment.id" class="comment-item" :class="{ bordered: idx > 0 }">
           <div class="comment-avatar">
@@ -140,6 +147,14 @@
             </div>
           </div>
         </div>
+
+        <button
+          v-if="postsStore.hasMoreComments && comments.length > 0"
+          class="more-comments-btn"
+          @click="loadMoreComments"
+        >
+          댓글 더보기
+        </button>
       </div>
 
       <div class="bottom-spacer" />
@@ -169,6 +184,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePostsStore } from '@/stores/posts.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { followApi } from '@/api/index.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -190,18 +206,53 @@ const comments = computed(() => postsStore.comments)
 
 const liked = ref(false)
 const bookmarked = ref(false)
+const following = ref(false)
 const menuOpen = ref(false)
 const newComment = ref('')
 const submitting = ref(false)
 const commentInputRef = ref(null)
 const dropdownRef = ref(null)
 
-watch(post, (p) => {
+// 내 글이면 팔로우 버튼을 숨긴다.
+const isMyPost = computed(() => {
+  const myId = authStore.user?.userId
+  return myId != null && post.value?.authorId != null && Number(post.value.authorId) === Number(myId)
+})
+
+watch(post, async (p) => {
   if (p) {
     liked.value = !!p.likedByMe
     bookmarked.value = !!p.bookmarked
+    // 작성자 팔로우 상태 초기화(로그인 + 내 글 아님일 때만)
+    if (p.authorId && !isMyPost.value && authStore.isAuthenticated) {
+      try {
+        const res = await followApi.status(p.authorId)
+        following.value = !!res.data?.following
+      } catch {
+        following.value = false
+      }
+    } else {
+      following.value = false
+    }
   }
 }, { immediate: true })
+
+async function toggleFollow() {
+  if (!authStore.isAuthenticated) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  const authorId = post.value?.authorId
+  if (!authorId) return
+  const prev = following.value
+  following.value = !prev
+  try {
+    const res = await followApi.toggle(authorId)
+    following.value = !!res.data?.following
+  } catch {
+    following.value = prev
+  }
+}
 
 const likeCount = computed(() => post.value?.likeCount ?? 0)
 
@@ -234,6 +285,11 @@ async function bookmarkPost() {
 
 async function likeComment(comment) {
   await postsStore.likeComment(route.params.id, comment.id)
+}
+
+// 댓글 다음 페이지 로드('더보기')
+async function loadMoreComments() {
+  await postsStore.fetchMoreComments(route.params.id)
 }
 
 function sharePost() {
@@ -497,6 +553,11 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+.follow-btn.following {
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+}
+
 .post-body {
   font-size: 13.4px;
   color: var(--color-dark-text);
@@ -637,6 +698,19 @@ onBeforeUnmount(() => {
 
 .comment-action.liked {
   color: var(--color-peach);
+}
+
+.more-comments-btn {
+  display: block;
+  width: 100%;
+  margin: 8px 0 4px;
+  padding: 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  letter-spacing: -0.2px;
 }
 
 .delete-action {

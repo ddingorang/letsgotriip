@@ -47,8 +47,15 @@ public class GamificationEventListener {
      * 멱등 키를 만든다.
      *
      * NotificationEvent 에는 고유 이벤트 ID 가 없으므로, 토글로 반복 발행될 수 있는
-     * 커뮤니티 반응(좋아요 등)만 type+link 로 1회 적립되게 한다.
-     * link 가 없으면 멱등할 수 없으므로 null(=기존 동작)로 둔다.
+     * 커뮤니티 반응(좋아요 등)만 dedup 한다. 단, 글ID(link)만으로 키를 만들면
+     * "글당 1회"가 되어 같은 글에 여러 사람이 반응해도 1회만 적립되는 버그가 생긴다.
+     * → 트리거를 유일하게 식별하도록 recipientId(수신자) + 반응 종류(type/title) + 대상(link)
+     *   을 모두 포함한다. 이래야 POPULAR_AUTHOR(반응 5회 받기) 등이 정상 누적된다.
+     *
+     * 같은 사람이 같은 글에 좋아요를 토글(반복)하는 경우는 동일 시그니처가 되어 1회만 적립되고,
+     * 서로 다른 사람의 반응이나 좋아요/댓글 등 다른 종류의 반응은 서로 다른 시그니처가 되어
+     * 정상적으로 누적된다.
+     * link 가 없으면 트리거를 식별할 수 없으므로 null(=기존 동작, 무조건 적립)로 둔다.
      * 동행 활동은 도착/수락이 서로 다른 정당한 이벤트이므로 dedup 하지 않는다.
      */
     private String dedupSignature(NotificationEvent event, GameAction action) {
@@ -59,7 +66,15 @@ public class GamificationEventListener {
         if (link == null || link.isBlank()) {
             return null;
         }
-        return "COMMUNITY_REACTION:" + link;
+        // recipient + 반응 종류(type/title) + 대상(link) 조합으로 최대한 유일하게 구성.
+        return "COMMUNITY_REACTION:" + event.recipientId()
+                + ":" + safe(event.type()) + "/" + safe(event.title())
+                + ":" + link;
+    }
+
+    /** 시그니처 구성 시 null 을 구분자 공백 없이 안전하게 다룬다. */
+    private String safe(String s) {
+        return s == null ? "" : s;
     }
 
     /**

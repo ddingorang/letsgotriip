@@ -76,6 +76,15 @@
 
       <!-- Result groups -->
       <template v-else>
+        <!-- 관광지 소스 일시 실패 배너(부분 실패) — 빈 '결과 없음'과 구분 -->
+        <div v-if="attractionFailed" class="source-error-banner">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span class="source-error-text">관광지 정보를 일시적으로 불러올 수 없어요. 잠시 후 재시도</span>
+          <button class="source-error-retry" @click="runSearch">재시도</button>
+        </div>
+
         <!-- 관광지 -->
         <section v-if="attractions.length" class="group">
           <h2 class="group-title">
@@ -221,14 +230,22 @@ const attractions = ref([])
 const posts = ref([])
 const companions = ref([])
 const festivals = ref([])
+// 통합검색 부분 실패 소스명 목록(예: ['attraction']). 전체 성공이면 빈 배열.
+const sourceErrors = ref([])
 
 // ── Derived ────────────────────────────────────────────────────────────────
 const hasQuery = computed(() => query.value.trim().length >= 2)
+// 관광지 소스가 일시 실패했고 해당 그룹이 비어 있으면 배너로 노출(빈 '결과 없음'과 구분)
+const attractionFailed = computed(
+  () => sourceErrors.value.includes('attraction') && !attractions.value.length,
+)
 const isEmpty = computed(
   () =>
     !loading.value &&
     !error.value &&
     hasQuery.value &&
+    // 부분 실패가 있으면 '결과 없음'으로 처리하지 않는다(일시 장애를 빈 결과로 위장 금지)
+    !sourceErrors.value.length &&
     !attractions.value.length &&
     !posts.value.length &&
     !companions.value.length &&
@@ -268,6 +285,7 @@ function resetResults() {
   posts.value = []
   companions.value = []
   festivals.value = []
+  sourceErrors.value = []
   error.value = false
   loading.value = false
   lastQuery.value = ''
@@ -291,6 +309,8 @@ async function runSearch() {
     posts.value = data?.posts ?? []
     companions.value = data?.companions ?? []
     festivals.value = data?.festivals ?? []
+    // 부분 실패 메타(예: TourAPI 장애) — 배너로 노출하고 '결과 없음'과 구분
+    sourceErrors.value = data?.sourceErrors ?? []
   } catch {
     if (seq !== requestSeq) return // 오래된 응답의 에러는 무시
     error.value = true
@@ -298,6 +318,7 @@ async function runSearch() {
     posts.value = []
     companions.value = []
     festivals.value = []
+    sourceErrors.value = []
   } finally {
     if (seq === requestSeq) loading.value = false
   }
@@ -454,6 +475,32 @@ onBeforeUnmount(() => {
 
 .retry-btn {
   font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach);
+  text-decoration: underline;
+}
+
+/* ── Source error banner (부분 실패) ──────────────────────────────────────── */
+.source-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 16px 4px;
+  padding: 11px 14px;
+  background: var(--color-peach-light);
+  border-radius: var(--radius-md);
+}
+
+.source-error-text {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--color-ink-secondary);
+  letter-spacing: -0.2px;
+}
+
+.source-error-retry {
+  flex-shrink: 0;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--color-peach);
   text-decoration: underline;

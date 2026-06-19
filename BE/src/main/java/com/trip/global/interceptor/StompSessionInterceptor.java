@@ -45,6 +45,14 @@ public class StompSessionInterceptor implements ChannelInterceptor {
 
             String token = bearerToken.substring(7); // "Bearer " 제거
 
+            // REST(JwtAuthenticationFilter)와 동일한 검증 — 서명/만료 + 세션(familyId) 생존 대조.
+            // 로그아웃/재사용 탐지로 패밀리가 폐기되면 Redis 세션이 삭제되므로, 만료 전 토큰이라도
+            // 여기서 걸러내 CONNECT를 거부한다(폐기된 토큰으로의 WebSocket 연결 차단).
+            if (!jwtUtil.validateToken(token) || !jwtUtil.isSessionAlive(token)) {
+                log.warn("WebSocket CONNECT 인증 거부 — 유효하지 않거나 폐기된 세션 토큰.");
+                throw new JwtHandler(ResponseCode.JWT_INVALID_TOKEN);
+            }
+
             Long userId = jwtUtil.getUserId(token); // JWT 파싱 + 검증 → userId 추출
             accessor.setUser(new UserPrincipal(userId)); // WebSocket 세션에 저장
 

@@ -99,7 +99,7 @@ public class GamificationService {
      * 경합으로 유니크 제약 위반이 나도 "이미 처리됨"으로 흡수한다.
      */
     private boolean markProcessed(Long userId, String signature) {
-        if (processedRewardRepository.existsBySignature(signature)) {
+        if (processedRewardRepository.existsByUserIdAndSignature(userId, signature)) {
             return false;
         }
         try {

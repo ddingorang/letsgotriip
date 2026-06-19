@@ -23,7 +23,7 @@
               <path d="M19 12H5M12 5l-7 7 7 7" />
             </svg>
           </button>
-          <button class="ghost-btn" @click="bookmarked = !bookmarked">
+          <button class="ghost-btn" :disabled="bookmarkLoading" @click="toggleBookmark">
             <svg width="22" height="22" viewBox="0 0 24 24" :fill="bookmarked ? 'white' : 'none'" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
             </svg>
@@ -193,20 +193,53 @@
         </div>
       </div>
 
-      <!-- ── Reviews (static seed — no reviews API) ────────────────────────── -->
+      <!-- ── Reviews (실연동: GET/POST/PATCH/DELETE /api/attractions/{id}/reviews) ── -->
       <div class="reviews-section">
         <div class="section-header">
-          <h2 class="section-title">여행 후기</h2>
-          <button class="see-all" @click="$router.push('/community')">전체보기</button>
+          <h2 class="section-title">여행 후기 <span v-if="reviews.length" class="rv-total">{{ reviews.length }}</span></h2>
+          <span v-if="reviewAverage" class="rv-avg">평균 {{ reviewAverage.toFixed(1) }}점</span>
         </div>
-        <div class="review-list">
-          <div v-for="review in STATIC_REVIEWS" :key="review.id" class="review-card">
+
+        <!-- 작성 폼 (수정 시 동일 폼 재사용) -->
+        <div class="review-form">
+          <div class="star-input">
+            <button
+              v-for="i in 5"
+              :key="i"
+              type="button"
+              class="star-btn"
+              @click="form.rating = i"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" :fill="i <= form.rating ? 'var(--color-gold)' : 'var(--color-line)'" stroke="none">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </button>
+          </div>
+          <textarea
+            v-model="form.content"
+            class="review-textarea"
+            rows="2"
+            :placeholder="editingId ? '후기를 수정해 주세요' : '이곳에 다녀오셨나요? 후기를 남겨주세요'"
+          />
+          <div v-if="reviewError" class="review-error">{{ reviewError }}</div>
+          <div class="review-form-actions">
+            <button v-if="editingId" type="button" class="rv-cancel-btn" @click="cancelEdit">취소</button>
+            <button type="button" class="rv-submit-btn" :disabled="reviewSubmitting" @click="submitReview">
+              {{ reviewSubmitting ? '저장 중…' : (editingId ? '수정 완료' : '후기 등록') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="reviewsLoading" class="rv-empty">후기를 불러오는 중…</div>
+        <div v-else-if="!reviews.length" class="rv-empty">아직 후기가 없어요. 첫 후기를 남겨보세요!</div>
+        <div v-else class="review-list">
+          <div v-for="review in reviews" :key="review.id" class="review-card">
             <div class="review-header">
               <div class="reviewer-info">
                 <div class="rv-avatar" />
                 <div>
-                  <p class="rv-name">{{ review.author }}</p>
-                  <p class="rv-date">{{ review.date }}</p>
+                  <p class="rv-name">{{ review.nickname || '익명' }}</p>
+                  <p class="rv-date">{{ formatReviewDate(review.createdAt) }}</p>
                 </div>
               </div>
               <div class="rv-rating">
@@ -224,6 +257,10 @@
               </div>
             </div>
             <p class="review-text">{{ review.content }}</p>
+            <div v-if="isMyReview(review)" class="rv-actions">
+              <button type="button" class="rv-edit" @click="startEdit(review)">수정</button>
+              <button type="button" class="rv-delete" @click="removeReview(review)">삭제</button>
+            </div>
           </div>
         </div>
       </div>
@@ -234,12 +271,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { usePlanStore } from '@/stores/plan.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { contextApi } from '@/api/index.js'
+import { contextApi, reviewApi, favoriteApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 
 const route = useRoute()
@@ -249,11 +286,21 @@ const planStore = usePlanStore()
 const authStore = useAuthStore()
 
 const bookmarked = ref(false)
+const bookmarkLoading = ref(false)
 const place = ref(null)
 const loading = ref(false)
 const fetchError = ref(null)
 const addMsg = ref('')      // 'added' | 'duplicate' | 'error' | 'no-auth'
 const addLoading = ref(false)
+
+// ── 리뷰 상태 (실연동) ───────────────────────────────────────────────────────
+const reviews = ref([])
+const reviewAverage = ref(0)
+const reviewsLoading = ref(false)
+const reviewError = ref('')
+const reviewSubmitting = ref(false)
+const editingId = ref(null)             // 수정 중인 리뷰 id (null이면 신규 작성 모드)
+const form = reactive({ rating: 5, content: '' })
 
 // ── 여행 맥락 정보 (날씨/일출일몰/충전소) ────────────────────────────────────
 const weather = ref(null)
@@ -327,12 +374,129 @@ async function loadContext() {
   }
 }
 
-// Static review seed (no reviews endpoint in API)
-const STATIC_REVIEWS = [
-  { id: 1, author: '여행가_지민', date: '2시간 전', rating: 5, content: '정말 아름다운 곳이었어요. 꼭 다시 오고 싶어요!' },
-  { id: 2, author: '한국여행러버', date: '1일 전', rating: 5, content: '가족과 함께 방문했는데 아이들도 너무 좋아했어요.' },
-  { id: 3, author: '힐링여행자', date: '3일 전', rating: 4, content: '풍경이 정말 멋있었습니다. 날씨가 좋은 날에 방문하시길 추천해요.' },
-]
+// ── 리뷰 로드/작성/수정/삭제 ─────────────────────────────────────────────────
+function formatReviewDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`
+}
+
+function isMyReview(review) {
+  const me = authStore.user?.userId
+  return me != null && review.userId === me
+}
+
+async function loadReviews() {
+  const contentId = route.params.id
+  if (!contentId) return
+  reviewsLoading.value = true
+  try {
+    const { data } = await reviewApi.list(contentId)
+    reviews.value = Array.isArray(data?.reviews) ? data.reviews : []
+    reviewAverage.value = data?.averageRating ?? 0
+  } catch {
+    // 목록 로드 실패 — 빈 목록으로 노출(가짜 데이터 미표시)
+    reviews.value = []
+    reviewAverage.value = 0
+  } finally {
+    reviewsLoading.value = false
+  }
+}
+
+function resetForm() {
+  editingId.value = null
+  form.rating = 5
+  form.content = ''
+}
+
+function cancelEdit() {
+  reviewError.value = ''
+  resetForm()
+}
+
+function startEdit(review) {
+  editingId.value = review.id
+  form.rating = review.rating
+  form.content = review.content
+  reviewError.value = ''
+}
+
+async function submitReview() {
+  if (!authStore.isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  const content = form.content.trim()
+  if (!content) {
+    reviewError.value = '후기 내용을 입력해 주세요.'
+    return
+  }
+  const contentId = route.params.id
+  reviewSubmitting.value = true
+  reviewError.value = ''
+  try {
+    if (editingId.value) {
+      await reviewApi.update(contentId, editingId.value, { rating: form.rating, content })
+    } else {
+      await reviewApi.create(contentId, { rating: form.rating, content })
+    }
+    resetForm()
+    await loadReviews()
+  } catch (e) {
+    reviewError.value = e?.response?.data?.message ?? '후기를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+  } finally {
+    reviewSubmitting.value = false
+  }
+}
+
+async function removeReview(review) {
+  if (!window.confirm('이 후기를 삭제할까요?')) return
+  const contentId = route.params.id
+  try {
+    await reviewApi.remove(contentId, review.id)
+    // 삭제한 항목을 수정 중이었다면 폼 초기화
+    if (editingId.value === review.id) resetForm()
+    await loadReviews()
+  } catch (e) {
+    reviewError.value = e?.response?.data?.message ?? '후기를 삭제하지 못했어요.'
+  }
+}
+
+// ── 찜(즐겨찾기) 토글 — 응답 favorited로 갱신, 실패 시 롤백 ────────────────────
+async function toggleBookmark() {
+  if (!authStore.isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  const contentId = route.params.id
+  if (!contentId) return
+  const prev = bookmarked.value
+  bookmarked.value = !prev          // 낙관적 갱신
+  bookmarkLoading.value = true
+  try {
+    const { data } = await favoriteApi.toggle('ATTRACTION', contentId)
+    bookmarked.value = !!data?.favorited
+  } catch {
+    bookmarked.value = prev         // 실패 롤백
+  } finally {
+    bookmarkLoading.value = false
+  }
+}
+
+// 초기 찜 상태 수화 — 내 즐겨찾기 목록에 이 관광지가 있으면 표시
+async function loadBookmark() {
+  if (!authStore.isAuthenticated) return
+  const contentId = String(route.params.id)
+  try {
+    const { data } = await favoriteApi.list('ATTRACTION')
+    bookmarked.value = Array.isArray(data)
+      && data.some((f) => String(f.targetId) === contentId)
+  } catch {
+    bookmarked.value = false
+  }
+}
 
 async function addToPlan() {
   if (!authStore.isAuthenticated) {
@@ -406,6 +570,9 @@ onMounted(async () => {
   }
   // 좌표가 있으면 날씨/충전소 맥락 정보 로드 (실패 시 위젯 숨김)
   if (hasCoords.value) loadContext()
+  // 리뷰 목록 + 찜 상태 수화 (공개 리뷰는 항상, 찜은 로그인 시)
+  loadReviews()
+  loadBookmark()
 })
 </script>
 
@@ -756,6 +923,115 @@ onMounted(async () => {
   color: var(--color-dark-text);
   line-height: 1.6;
   letter-spacing: -0.2px;
+}
+
+/* ── 리뷰 작성 폼 ─────────────────────────────────────────────────────────── */
+.rv-total {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+}
+
+.rv-avg {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.review-form {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.star-input {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.star-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+.review-textarea {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 9px 11px;
+  font-size: 13px;
+  color: var(--color-ink);
+  line-height: 1.5;
+  resize: vertical;
+  background: var(--color-white);
+}
+
+.review-textarea::placeholder {
+  color: var(--color-ink-muted);
+}
+
+.review-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-peach-pressed);
+}
+
+.review-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.rv-cancel-btn {
+  padding: 8px 14px;
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  background: var(--color-white);
+  border: 1px solid var(--color-line);
+}
+
+.rv-submit-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  background: var(--color-peach);
+}
+
+.rv-submit-btn:disabled {
+  opacity: 0.6;
+}
+
+.rv-empty {
+  padding: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+
+.rv-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.rv-edit,
+.rv-delete {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.rv-delete {
+  color: var(--color-peach-pressed);
 }
 
 /* ── 여행 맥락 정보 ───────────────────────────────────────────────────────── */

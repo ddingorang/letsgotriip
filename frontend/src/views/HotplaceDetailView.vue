@@ -84,7 +84,7 @@
         </svg>
         내 일정에 추가
       </button>
-      <button class="cta-bookmark" :class="{ bookmarked }">
+      <button class="cta-bookmark" :class="{ bookmarked }" :disabled="bookmarkLoading" @click="toggleBookmark">
         <svg width="20" height="20" viewBox="0 0 24 24" :fill="bookmarked ? 'var(--color-peach)' : 'none'" :stroke="bookmarked ? 'var(--color-peach)' : 'var(--color-ink)'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
         </svg>
@@ -97,10 +97,13 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHotplaceStore } from '@/stores/hotplace.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { favoriteApi } from '@/api/index.js'
 
 const route = useRoute()
 const router = useRouter()
 const hotplaceStore = useHotplaceStore()
+const authStore = useAuthStore()
 
 const DEFAULT_HP = {
   id: null, name: '핫플레이스', category: '명소', location: '제주',
@@ -112,6 +115,7 @@ const DEFAULT_HP = {
 const hp = ref({ ...DEFAULT_HP, id: route.params.id })
 const loading = ref(true)
 const bookmarked = ref(false)
+const bookmarkLoading = ref(false)
 
 // 미니맵용 실좌표 여부
 const mapEl = ref(null)
@@ -170,6 +174,8 @@ onMounted(async () => {
     loading.value = false
   }
   await renderMiniMap()
+  // 상세 로드 후 hp.id가 확정되면 초기 찜 상태 수화 (로그인 시)
+  loadBookmark()
 })
 
 onBeforeUnmount(() => {
@@ -181,6 +187,40 @@ function share() {
 }
 function addToItinerary() {
   router.push('/plan')
+}
+
+// ── 찜(즐겨찾기) 토글 — 응답 favorited로 갱신, 실패 시 롤백 ────────────────────
+async function toggleBookmark() {
+  if (!authStore.isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  const targetId = hp.value.id
+  if (targetId == null) return
+  const prev = bookmarked.value
+  bookmarked.value = !prev          // 낙관적 갱신
+  bookmarkLoading.value = true
+  try {
+    const { data } = await favoriteApi.toggle('HOTPLACE', targetId)
+    bookmarked.value = !!data?.favorited
+  } catch {
+    bookmarked.value = prev         // 실패 롤백
+  } finally {
+    bookmarkLoading.value = false
+  }
+}
+
+// 초기 찜 상태 수화 — 내 즐겨찾기 목록에 이 핫플이 있으면 표시
+async function loadBookmark() {
+  if (!authStore.isAuthenticated) return
+  const targetId = String(hp.value.id)
+  try {
+    const { data } = await favoriteApi.list('HOTPLACE')
+    bookmarked.value = Array.isArray(data)
+      && data.some((f) => String(f.targetId) === targetId)
+  } catch {
+    bookmarked.value = false
+  }
 }
 </script>
 

@@ -83,8 +83,11 @@ public class DocumentService {
                 document.markFailed();
             }
         } else {
-            // 추출 텍스트 없음(빈 PDF/빈 텍스트 등) → 색인 없이 INGESTED 처리
-            document.markIngested(0);
+            // 추출 텍스트 없음(빈 PDF/빈 텍스트 등) → 색인할 내용이 없다.
+            // INGESTED(완료)로 위장하지 않고 EMPTY로 표시한다(audio 빈 전사 거부와 동일 철학).
+            log.warn("Document text empty after extraction. documentId={}, userId={}",
+                    document.getId(), userId);
+            document.markEmpty();
         }
 
         return DocumentResponse.from(document);

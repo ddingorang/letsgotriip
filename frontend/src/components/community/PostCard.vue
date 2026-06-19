@@ -27,9 +27,16 @@
             <span class="author-sub">{{ post.location }} · {{ timeAgo(post.createdAt) }}</span>
           </div>
         </div>
-        <!-- TODO: 팔로우 비활성 — BE PostSummaryResponse/PostResponse에 작성자 userId가 없어
-             followApi.toggle(작성자 userId) 호출 불가. BE DTO에 authorId 추가 시 활성화. -->
-        <button class="follow-btn" disabled @click.stop>팔로우</button>
+        <!-- 팔로우 — BE PostSummaryResponse/PostResponse의 authorId로 followApi.toggle 호출.
+             내 글이면 숨김, 비로그인 시 /login 유도. -->
+        <button
+          v-if="post.authorId && !isMine"
+          class="follow-btn"
+          :class="{ following }"
+          @click.stop="toggleFollow"
+        >
+          {{ following ? '팔로잉' : '팔로우' }}
+        </button>
       </div>
 
       <p v-if="post.content" class="post-excerpt">{{ post.content.slice(0, 80) }}{{ post.content.length > 80 ? '...' : '' }}</p>
@@ -64,7 +71,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { followApi } from '@/api/index.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const props = defineProps({
   post: { type: Object, required: true },
@@ -72,9 +82,49 @@ const props = defineProps({
 
 defineEmits(['click', 'like', 'bookmark'])
 
+const router = useRouter()
+const authStore = useAuthStore()
+
 // 게시물 사진 — 업로드 이미지가 없으면 로컬 기본 썸네일로 채움(외부 더미 미사용)
 const imgFailed = ref(false)
 const displayImage = computed(() => props.post.imageUrl || '/images/placeholder-thumb.png')
+
+// 팔로우 — 작성자 본인 글이면 버튼을 숨기고, 아니면 followApi.status로 초기 상태를 채운다.
+const following = ref(false)
+const isMine = computed(() => {
+  const myId = authStore.user?.userId
+  return myId != null && Number(props.post.authorId) === Number(myId)
+})
+
+// 작성자 id가 정해지면 팔로우 상태 초기화(로그인 + 내 글 아님일 때만)
+watch(
+  () => props.post.authorId,
+  async (authorId) => {
+    if (!authorId || isMine.value || !authStore.isAuthenticated) return
+    try {
+      const res = await followApi.status(authorId)
+      following.value = !!res.data?.following
+    } catch {
+      // 상태 조회 실패 시 기본값(미팔로우) 유지
+    }
+  },
+  { immediate: true },
+)
+
+async function toggleFollow() {
+  if (!authStore.isAuthenticated) {
+    router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+    return
+  }
+  const prev = following.value
+  following.value = !prev
+  try {
+    const res = await followApi.toggle(props.post.authorId)
+    following.value = !!res.data?.following
+  } catch {
+    following.value = prev
+  }
+}
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''
@@ -235,6 +285,11 @@ function timeAgo(dateStr) {
 .follow-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.follow-btn.following {
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
 }
 
 .post-excerpt {

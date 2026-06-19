@@ -15,6 +15,22 @@
     </header>
 
     <div class="scroll-content">
+      <!-- 로드 실패: 가짜 진행을 그리지 않고 에러 + 재시도 -->
+      <div v-if="error" class="state-box">
+        <p class="state-text">{{ error }}</p>
+        <button class="retry-btn" @click="gamiStore.refresh()">다시 시도</button>
+      </div>
+
+      <!-- 로딩: 스켈레톤 -->
+      <div v-else-if="loading" class="state-box">
+        <div class="skeleton skel-icon" />
+        <div class="skeleton skel-title" />
+        <div class="skeleton skel-line" />
+        <div class="skeleton skel-bar" />
+      </div>
+
+      <!-- 정상: 로딩 아님 + 에러 없음 + 실제 데이터 있을 때만 -->
+      <template v-else-if="ready">
       <!-- Icon -->
       <div class="challenge-icon-wrap">
         <div class="challenge-icon">
@@ -93,16 +109,22 @@
           </div>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useGamificationStore } from '@/stores/gamification.js'
 
 const gamiStore = useGamificationStore()
+// error/loading 을 구독해 로드 실패를 '0/10곳'의 가짜 진행으로 위장하지 않는다.
+const { loading, error } = storeToRefs(gamiStore)
 const ch = computed(() => gamiStore.summary?.challenge)
+// 정상 렌더는 로딩 아님 + 에러 없음 + 실제 challenge 데이터가 있을 때만.
+const ready = computed(() => !loading.value && !error.value && !!ch.value)
 
 onMounted(() => gamiStore.refresh())
 </script>
@@ -248,4 +270,42 @@ onMounted(() => gamiStore.refresh())
 }
 .reward-title { font-size: 14px; font-weight: 700; color: var(--color-ink); margin-bottom: 4px; }
 .reward-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
+
+/* 로드 실패 / 로딩 상태 */
+.state-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 56px 24px;
+  text-align: center;
+}
+.state-text {
+  font-size: 13.5px;
+  color: var(--color-ink-secondary);
+  line-height: 1.5;
+}
+.retry-btn {
+  padding: 10px 22px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-line-light) 25%, var(--color-surface) 50%, var(--color-line-light) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-md);
+  animation: skel-shine 1.2s ease-in-out infinite;
+}
+.skel-icon { width: 80px; height: 80px; border-radius: 50%; }
+.skel-title { width: 60%; height: 22px; }
+.skel-line { width: 80%; height: 14px; }
+.skel-bar { width: 100%; height: 8px; border-radius: 4px; }
+@keyframes skel-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 </style>

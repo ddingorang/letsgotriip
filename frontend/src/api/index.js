@@ -29,6 +29,21 @@ export const userApi = {
   },
 }
 
+// ── Albums (내 여행 앨범, BE: /users/me/albums, 인증 필요) ─────────────────────
+// GET    /users/me/albums            → 내 앨범 목록
+// GET    /users/me/albums/{albumId}  → 앨범 단건
+// POST   /users/me/albums            → 앨범 생성
+// POST   /users/me/albums/images     → 앨범 이미지 업로드(multipart 'file') → { imageUrl }
+export const albumApi = {
+  list: () => http.get('/users/me/albums'),
+  get: (albumId) => http.get(`/users/me/albums/${albumId}`),
+  create: (body) => http.post('/users/me/albums', body),
+  uploadImage: (formData) =>
+    http.post('/users/me/albums/images', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+}
+
 // ── Attractions ───────────────────────────────────────────────────────────────
 // GET /api/attractions?areaCode=&sigunguCode=&contentTypeId=&keyword=&page=1&size=10
 // GET /api/attractions/areas
@@ -250,7 +265,8 @@ export const communityApi = {
   updatePost: (id, data) => http.patch(`/api/community/posts/${id}`, data),
   deletePost: (id) => http.delete(`/api/community/posts/${id}`),
   likePost: (id) => http.post(`/api/community/posts/${id}/likes`),
-  getComments: (postId) => http.get(`/api/community/posts/${postId}/comments`),
+  // params(page,size) 선택 — BE는 Page<CommentResponse> 반환. 무인자 호출과 호환.
+  getComments: (postId, params) => http.get(`/api/community/posts/${postId}/comments`, { params }),
   createComment: (postId, data) => http.post(`/api/community/posts/${postId}/comments`, data),
   deleteComment: (postId, commentId) => http.delete(`/api/community/posts/${postId}/comments/${commentId}`),
   likeComment: (postId, commentId) =>
@@ -336,11 +352,12 @@ export const assistantApi = {
    * @param {{
    *   onToken?: (token: string) => void,          // 응답 조각 수신마다 호출
    *   onConversationId?: (id: string) => void,    // 첫 conversationId 이벤트 수신 시 호출
+   *   onError?: (message: string) => void,        // 'error' 이벤트 수신 시 호출(스트림 중단 신호)
    *   signal?: AbortSignal,                       // 중간 취소용
    * }} [handlers]
-   * @returns {Promise<{ conversationId: string|null, reply: string }>} 누적 결과
+   * @returns {Promise<{ conversationId: string|null, reply: string, errored: boolean, errorMessage: string|null }>} 누적 결과
    */
-  async chatStream({ conversationId, message }, { onToken, onConversationId, signal } = {}) {
+  async chatStream({ conversationId, message }, { onToken, onConversationId, onError, signal } = {}) {
     let token = null
     try {
       token = useAuthStore().accessToken
@@ -370,6 +387,8 @@ export const assistantApi = {
     let buffer = ''
     let reply = ''
     let convId = conversationId ?? null
+    let errored = false
+    let errorMessage = null
 
     // SSE 프레임: "event: <name>\n" + "data: <payload>\n" ... 빈 줄로 구분.
     // data 가 여러 줄이면 \n 으로 합친다(SSE 규약).
@@ -385,6 +404,12 @@ export const assistantApi = {
           reply += data
           onToken?.(data)
         }
+      } else if (eventName === 'error') {
+        // BE가 스트림 도중 오류를 알리는 'error' 이벤트. 부분 토큰이 이미 왔더라도
+        // 호출자에게 실패를 노출한다(가짜 성공 위장 금지).
+        errored = true
+        errorMessage = data || '응답 생성 중 오류가 발생했습니다.'
+        onError?.(errorMessage)
       }
       // 'done' 및 기타 이벤트는 별도 처리 없음(루프가 스트림 종료로 마무리).
     }
@@ -431,7 +456,7 @@ export const assistantApi = {
       }
     }
 
-    return { conversationId: convId, reply }
+    return { conversationId: convId, reply, errored, errorMessage }
   },
 }
 
