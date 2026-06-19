@@ -18,10 +18,12 @@ import com.trip.chat.entity.ChatRoomMembership;
 import com.trip.chat.repository.ChatRoomMembershipRepository;
 import com.trip.chat.repository.ChatRoomRepository;
 import com.trip.chat.repository.mongo.ChatMessageRepository;
+import com.trip.community.service.FileStorageService;
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
 import com.trip.user.entity.User;
 import com.trip.user.repository.UserRepository;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -41,6 +43,7 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ChatRoomMembershipRepository chatRoomMembershipRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final FileStorageService fileStorageService; // 검증된 이미지 저장(매직바이트·크기 검증 포함) 재사용
 
     public void sendMessage(final MessageSendRequestDto messageSendRequest, final Long senderId, final Long chatRoomId) {
 
@@ -220,6 +223,29 @@ public class ChatService {
         broadcastSystemEvent(chatRoomId, "ROOM_UPDATED", payload);
 
         log.info("채팅방 정보 수정 완료. chatRoomId: {}, by userId: {}", chatRoomId, userId);
+    }
+
+    /**
+     * 방 프로필 이미지 변경 — 방장만. FileStorageService(검증된 저장)로 저장 후 imageUrl 갱신.
+     * ROOM_UPDATED 브로드캐스트(imageUrl 포함). 갱신된 imageUrl 반환.
+     */
+    @Transactional
+    public String updateRoomImage(final Long chatRoomId, final Long userId, final MultipartFile file) {
+        requireHost(chatRoomId, userId);
+
+        ChatRoom room = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new GeneralException(ResponseCode._BAD_REQUEST, "존재하지 않는 채팅방입니다."));
+
+        // 매직바이트·크기·형식 검증은 FileStorageService.store 내부에서 수행됨.
+        final String imageUrl = fileStorageService.store(file);
+        room.changeImageUrl(imageUrl);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("imageUrl", imageUrl);
+        broadcastSystemEvent(chatRoomId, "ROOM_UPDATED", payload);
+
+        log.info("채팅방 이미지 변경 완료. chatRoomId: {}, by userId: {}", chatRoomId, userId);
+        return imageUrl;
     }
 
     /**

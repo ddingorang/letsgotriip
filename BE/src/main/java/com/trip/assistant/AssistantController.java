@@ -5,12 +5,15 @@ import com.trip.assistant.dto.AssistantChatResponse;
 import com.trip.global.security.UserPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 
 import java.util.UUID;
 
@@ -38,5 +41,46 @@ public class AssistantController {
         String reply = assistantService.chat(principal.userId(), conversationId, request.message());
 
         return ResponseEntity.ok(new AssistantChatResponse(conversationId, reply));
+    }
+
+    /**
+     * POST /api/assistant/chat/stream — 대화 메시지 전송(SSE 토큰 스트리밍).
+     *
+     * <p>비스트리밍 {@link #chat}와 동일한 구성을 쓰되 응답 토큰을 SSE로 흘려보낸다.
+     * 첫 이벤트는 {@code event: conversationId} 로 대화 식별자를 내려주어 FE가 후속 요청에
+     * 같은 conversationId를 재사용할 수 있게 한다. 이후 이벤트는 {@code event: token} 으로
+     * 응답 텍스트 조각을 전달하고, 스트림이 끝나면 {@code event: done} 으로 종료를 알린다.</p>
+     */
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatStream(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody AssistantChatRequest request) {
+
+        String conversationId = (request.conversationId() == null || request.conversationId().isBlank())
+                ? UUID.randomUUID().toString()
+                : request.conversationId();
+
+        // 첫 이벤트: conversationId (FE가 후속 요청에 재사용)
+        Flux<ServerSentEvent<String>> idEvent = Flux.just(
+                ServerSentEvent.<String>builder()
+                        .event("conversationId")
+                        .data(conversationId)
+                        .build());
+
+        Flux<ServerSentEvent<String>> tokenEvents = assistantService
+                .chatStream(principal.userId(), conversationId, request.message())
+                .map(token -> ServerSentEvent.<String>builder()
+                        .event("token")
+                        .data(token)
+                        .build());
+
+        // 종료 이벤트: FE가 스트림 완료를 명확히 인지하도록 done 이벤트를 덧붙인다.
+        Flux<ServerSentEvent<String>> doneEvent = Flux.just(
+                ServerSentEvent.<String>builder()
+                        .event("done")
+                        .data("")
+                        .build());
+
+        return Flux.concat(idEvent, tokenEvents, doneEvent);
     }
 }

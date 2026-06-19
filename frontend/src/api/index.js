@@ -1,5 +1,6 @@
 // Created: 2026-06-16 13:22:42 (rewritten for real Spring backend at :9090)
 import { http } from '@/api/http.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
@@ -158,10 +159,122 @@ export const chatApi = {
 }
 
 // ── Assistant (RAG 챗봇, BE: /api/assistant) ──────────────────────────────────
-// POST /api/assistant/chat { conversationId, message } → { conversationId, reply }
+// POST /api/assistant/chat        { conversationId, message } → { conversationId, reply }  (비스트리밍 폴백)
+// POST /api/assistant/chat/stream { conversationId, message } → text/event-stream
+//   이벤트: event:conversationId(data=대화ID) → event:token(조각)* → event:done
+//
+// EventSource 는 커스텀 Authorization 헤더/POST 를 못 쓰므로 fetch()+ReadableStream 으로 SSE 를 수동 파싱한다.
+// Authorization Bearer 토큰은 axios 와 동일하게 auth store 의 accessToken 에서 가져온다(http.js 의 토큰 소스).
+// baseURL 도 axios 와 동일하게 VITE_API_BASE_URL(미설정 시 '' → dev 프록시) 을 사용하고, refresh 쿠키 전파를 위해
+// credentials:'include' 로 호출한다.
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+
 export const assistantApi = {
   chat: ({ conversationId, message }) =>
     http.post('/api/assistant/chat', { conversationId, message }, { timeout: 60_000 }),
+
+  /**
+   * SSE 스트리밍 채팅. fetch + ReadableStream 으로 토큰을 점진 수신한다.
+   * @param {{ conversationId?: string|null, message: string }} body
+   * @param {{
+   *   onToken?: (token: string) => void,          // 응답 조각 수신마다 호출
+   *   onConversationId?: (id: string) => void,    // 첫 conversationId 이벤트 수신 시 호출
+   *   signal?: AbortSignal,                       // 중간 취소용
+   * }} [handlers]
+   * @returns {Promise<{ conversationId: string|null, reply: string }>} 누적 결과
+   */
+  async chatStream({ conversationId, message }, { onToken, onConversationId, signal } = {}) {
+    let token = null
+    try {
+      token = useAuthStore().accessToken
+    } catch {
+      // Pinia 미활성(테스트 등) — 토큰 없이 진행
+    }
+
+    const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const res = await fetch(`${API_BASE}/api/assistant/chat/stream`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({ conversationId: conversationId ?? null, message }),
+      signal,
+    })
+
+    if (!res.ok || !res.body) {
+      const err = new Error(`스트리밍 요청 실패 (HTTP ${res.status})`)
+      err.status = res.status
+      throw err
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let reply = ''
+    let convId = conversationId ?? null
+
+    // SSE 프레임: "event: <name>\n" + "data: <payload>\n" ... 빈 줄로 구분.
+    // data 가 여러 줄이면 \n 으로 합친다(SSE 규약).
+    const dispatch = (eventName, dataLines) => {
+      const data = dataLines.join('\n')
+      if (eventName === 'conversationId') {
+        if (data) {
+          convId = data
+          onConversationId?.(data)
+        }
+      } else if (eventName === 'token') {
+        if (data) {
+          reply += data
+          onToken?.(data)
+        }
+      }
+      // 'done' 및 기타 이벤트는 별도 처리 없음(루프가 스트림 종료로 마무리).
+    }
+
+    const parseFrame = (frame) => {
+      let eventName = 'message'
+      const dataLines = []
+      for (const rawLine of frame.split('\n')) {
+        const line = rawLine.replace(/\r$/, '')
+        if (!line || line.startsWith(':')) continue
+        const idx = line.indexOf(':')
+        const field = idx === -1 ? line : line.slice(0, idx)
+        // 표준 SSE: 콜론 뒤 선행 공백 1개 제거
+        let value = idx === -1 ? '' : line.slice(idx + 1)
+        if (value.startsWith(' ')) value = value.slice(1)
+        if (field === 'event') eventName = value
+        else if (field === 'data') dataLines.push(value)
+      }
+      if (dataLines.length || eventName !== 'message') dispatch(eventName, dataLines)
+    }
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        // 완성된 프레임(빈 줄 구분)만 처리하고 나머지는 버퍼에 보관
+        let sep
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const frame = buffer.slice(0, sep)
+          buffer = buffer.slice(sep + 2)
+          if (frame.trim()) parseFrame(frame)
+        }
+      }
+      // 스트림 종료 후 잔여 프레임 처리
+      buffer += decoder.decode()
+      if (buffer.trim()) parseFrame(buffer)
+    } finally {
+      try {
+        reader.releaseLock()
+      } catch {
+        // 무시
+      }
+    }
+
+    return { conversationId: convId, reply }
+  },
 }
 
 // ── Documents (문서 업로드/RAG 인덱싱, BE: /api/documents) ─────────────────────

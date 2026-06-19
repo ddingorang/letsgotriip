@@ -53,7 +53,8 @@
             </svg>
           </div>
           <div class="msg-col">
-            <div class="bubble incoming-bubble">{{ msg.content }}</div>
+            <div class="bubble incoming-bubble">{{ msg.content
+              }}<span v-if="streaming && msg.id === messages[messages.length - 1]?.id" class="stream-caret" /></div>
             <span class="msg-time">{{ msg.time }}</span>
           </div>
         </div>
@@ -84,10 +85,29 @@
         v-model="inputText"
         class="msg-input"
         placeholder="메시지 입력"
-        :disabled="loading"
+        :disabled="busy"
         @keydown.enter.prevent="(e) => !e.isComposing && onSend()"
       />
-      <button class="send-btn" :class="{ active: inputText.trim() && !loading }" :disabled="loading" @click="onSend">
+      <!-- 응답 진행 중이면 전송 버튼이 '중지' 버튼으로 바뀐다 -->
+      <button
+        v-if="busy"
+        class="send-btn stop active"
+        type="button"
+        aria-label="응답 중지"
+        @click="onStop"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="none">
+          <rect x="6" y="6" width="12" height="12" rx="2" />
+        </svg>
+      </button>
+      <button
+        v-else
+        class="send-btn"
+        :class="{ active: inputText.trim() }"
+        type="button"
+        aria-label="전송"
+        @click="onSend"
+      >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
@@ -106,7 +126,11 @@ const inputText = ref('')
 
 const messages = computed(() => assistantStore.messages)
 const loading = computed(() => assistantStore.loading)
+const streaming = computed(() => assistantStore.streaming)
 const error = computed(() => assistantStore.error)
+
+// 응답 진행 중(요청~첫토큰=loading, 첫토큰~종료=streaming) — 입력 잠금/중지 버튼 노출 기준
+const busy = computed(() => loading.value || streaming.value)
 
 function scrollToBottom() {
   nextTick(() => {
@@ -116,14 +140,25 @@ function scrollToBottom() {
 
 async function onSend() {
   const text = inputText.value.trim()
-  if (!text || loading.value) return
+  if (!text || busy.value) return
   inputText.value = ''
   await assistantStore.send(text)
+}
+
+function onStop() {
+  assistantStore.cancel()
 }
 
 // 새 메시지/로딩 변화 시 자동 스크롤
 watch(() => messages.value.length, () => scrollToBottom())
 watch(loading, () => scrollToBottom())
+// 스트리밍 토큰 누적으로 마지막 버블이 길어질 때도 따라 내려간다
+watch(
+  () => messages.value[messages.value.length - 1]?.content,
+  () => {
+    if (streaming.value) scrollToBottom()
+  },
+)
 </script>
 
 <style scoped>
@@ -234,6 +269,21 @@ watch(loading, () => scrollToBottom())
   border-radius: 18px 4px 18px 18px;
 }
 
+/* 스트리밍 진행 중 깜빡이는 캐럿 */
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -2px;
+  background: var(--color-peach);
+  animation: caret-blink 1s step-end infinite;
+}
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* 타이핑 인디케이터 */
 .typing { display: flex; align-items: center; gap: 4px; padding: 14px; }
 .dot {
@@ -296,4 +346,5 @@ watch(loading, () => scrollToBottom())
 }
 .send-btn.active { background: var(--color-peach); }
 .send-btn:disabled { opacity: 0.7; }
+.send-btn.stop { background: var(--color-peach); }
 </style>

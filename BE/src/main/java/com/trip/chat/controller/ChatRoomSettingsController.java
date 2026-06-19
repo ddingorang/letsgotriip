@@ -12,6 +12,7 @@ import com.trip.global.security.UserPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,7 +21,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Map;
 
 /**
  * 채팅방 설정 + 참여자 관리 REST 엔드포인트.
@@ -47,6 +52,17 @@ public class ChatRoomSettingsController {
     ) {
         chatService.updateRoom(chatRoomId, principal.userId(), request.title(), request.description());
         return ResponseEntity.noContent().build();
+    }
+
+    /** 방 프로필 이미지 변경 — 방장만. 저장된 imageUrl 반환. */
+    @PostMapping(value = "/{chatRoomId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> updateRoomImage(
+            @PathVariable Long chatRoomId,
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        String imageUrl = chatService.updateRoomImage(chatRoomId, principal.userId(), file);
+        return ResponseEntity.ok(Map.of("imageUrl", imageUrl));
     }
 
     /** 본인 멤버십 음소거 토글. */

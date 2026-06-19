@@ -1,5 +1,6 @@
 package com.trip.user.service;
 
+import com.trip.community.service.FileStorageService;
 import com.trip.global.error.ResponseCode;
 import com.trip.global.error.exception.handler.UserHandler;
 import com.trip.global.util.RedisKeyNamingUtil;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -26,10 +28,24 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final RedisTemplate<String, RedisSessionDto> redisTemplate;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public UserProfileResponseDto getProfile(Long userId) {
         User user = findActiveUserById(userId);
+        return toProfileResponse(user);
+    }
+
+    /** 프로필 이미지 업로드: 파일 저장 후 URL 을 사용자 프로필에 반영하고 갱신된 프로필을 반환. */
+    @Transactional
+    public UserProfileResponseDto updateProfileImage(Long userId, MultipartFile file) {
+        User user = findActiveUserById(userId);
+        String imageUrl = fileStorageService.store(file);
+        user.updateProfileImage(imageUrl);
+        return toProfileResponse(user);
+    }
+
+    private UserProfileResponseDto toProfileResponse(User user) {
         return UserProfileResponseDto.builder()
                 .userId(user.getId())
                 .email(user.getEmail())

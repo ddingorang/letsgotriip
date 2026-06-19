@@ -117,6 +117,13 @@ public class User extends BaseEntity {
                 .build();
     }
 
+    /** 프로필 이미지 URL 갱신. null/빈 값은 무시(기존 값 유지). */
+    public void updateProfileImage(String profileImageUrl) {
+        if (profileImageUrl != null && !profileImageUrl.isBlank()) {
+            this.profileImageUrl = profileImageUrl;
+        }
+    }
+
     public void updateProfile(String nickname, String profileImageUrl, String bio) {
         if (nickname != null && !nickname.isBlank()) {
             this.nickname = nickname;
