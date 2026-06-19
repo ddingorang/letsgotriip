@@ -293,13 +293,13 @@ function onHpSelect(place) {
   selectedHp.value = selectedHp.value?.id === place.id ? null : place
 }
 
-// 썸네일 — 업로드 이미지가 없거나 로딩 실패 시 seed 기반 결정적 사진(picsum)으로 채움
-function seedImg(seed, w = 200, h = 200) {
-  return `https://picsum.photos/seed/triip-${seed}/${w}/${h}`
+// 썸네일 — 업로드 이미지가 없거나 로딩 실패 시 로컬 기본 썸네일로 채움(외부 더미 미사용)
+const THUMB_PLACEHOLDER = '/images/placeholder-thumb.png'
+function seedImg() {
+  return THUMB_PLACEHOLDER
 }
-function onThumbError(e, seed) {
-  const fb = seedImg(seed)
-  if (e.target.src !== fb) e.target.src = fb
+function onThumbError(e) {
+  if (!e.target.src.endsWith(THUMB_PLACEHOLDER)) e.target.src = THUMB_PLACEHOLDER
 }
 
 onMounted(() => {

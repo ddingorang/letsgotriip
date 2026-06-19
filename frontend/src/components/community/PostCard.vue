@@ -70,14 +70,9 @@ const props = defineProps({
 
 defineEmits(['click', 'like', 'bookmark'])
 
-// 게시물 사진 — 업로드 이미지가 없으면 id 기반 결정적 여행 사진(picsum)을 채움
+// 게시물 사진 — 업로드 이미지가 없으면 로컬 기본 썸네일로 채움(외부 더미 미사용)
 const imgFailed = ref(false)
-const displayImage = computed(() => {
-  const u = props.post.imageUrl
-  if (u) return u
-  const seed = props.post.id ?? props.post.title ?? 'triip'
-  return `https://picsum.photos/seed/triip-${seed}/640/440`
-})
+const displayImage = computed(() => props.post.imageUrl || '/images/placeholder-thumb.png')
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''

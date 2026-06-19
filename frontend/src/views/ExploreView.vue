@@ -343,19 +343,19 @@ function formatDist(km) {
   return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`
 }
 
-// 썸네일 — 실제 이미지가 없으면 id 기반 결정적 사진(picsum)으로 채움
-function placePlaceholder(place) {
-  return `https://picsum.photos/seed/triip-${place.contentId ?? place.name}/240/240`
+// 썸네일 — 실제 이미지가 없으면 로컬 기본 썸네일로 채움(외부 더미 미사용)
+const THUMB_PLACEHOLDER = '/images/placeholder-thumb.png'
+function placePlaceholder() {
+  return THUMB_PLACEHOLDER
 }
 function thumbSrc(place) {
-  return place.imageUrl || placePlaceholder(place)
+  return place.imageUrl || THUMB_PLACEHOLDER
 }
-function onThumbError(e, place) {
-  const fb = placePlaceholder(place)
-  if (e.target.src !== fb) e.target.src = fb
+function onThumbError(e) {
+  if (e.target.src !== location.origin + THUMB_PLACEHOLDER) e.target.src = THUMB_PLACEHOLDER
 }
-function festPlaceholder(fest) {
-  return `https://picsum.photos/seed/fest-${fest.id ?? fest.title}/240/240`
+function festPlaceholder() {
+  return THUMB_PLACEHOLDER
 }
 function festThumb(fest) {
   return fest.image || festPlaceholder(fest)

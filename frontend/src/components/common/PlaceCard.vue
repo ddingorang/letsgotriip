@@ -46,12 +46,9 @@ const props = defineProps({
 
 defineEmits(['click', 'bookmark'])
 
-// 썸네일 — 업로드/관광 이미지가 없거나 로딩 실패 시 id 기반 결정적 사진(picsum)으로 채움
+// 썸네일 — 업로드/관광 이미지가 없거나 로딩 실패 시 로컬 기본 썸네일로 채움(외부 더미 미사용)
 const imgFailed = ref(false)
-const placeholder = computed(() => {
-  const seed = props.place.contentId ?? props.place.id ?? props.place.name ?? 'triip'
-  return `https://picsum.photos/seed/triip-${seed}/240/200`
-})
+const placeholder = computed(() => '/images/placeholder-thumb.png')
 const thumb = computed(() => (!imgFailed.value && props.place.imageUrl) ? props.place.imageUrl : placeholder.value)
 function onImgError() {
   imgFailed.value = true
