@@ -80,7 +80,9 @@ public class CompanionPost extends BaseEntity {
         if (travelDate != null) this.travelDate = travelDate;
         if (region != null && !region.isBlank()) this.region = region;
         if (duration != null && !duration.isBlank()) this.duration = duration;
-        if (maxMembers != null) this.maxMembers = maxMembers;
+        // 정원은 최소 1명 이상만 허용 — 0/음수 같은 비정상 값으로 덮어쓰지 않는다.
+        // (현재 참여 인원 대비 축소 차단은 멤버십 카운트를 아는 서비스 계층에서 수행한다.)
+        if (maxMembers != null && maxMembers >= 1) this.maxMembers = maxMembers;
         if (estimatedCost != null) this.estimatedCost = estimatedCost;
         if (description != null && !description.isBlank()) this.description = description;
     }

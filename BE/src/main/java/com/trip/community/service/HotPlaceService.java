@@ -63,8 +63,8 @@ public class HotPlaceService {
     public HotPlaceResponse register(Long userId, HotPlaceCreateRequest request) {
         User submitter = findUser(userId);
 
-        // 자동 승인 정책: 등록 즉시 목록/지도에 노출되도록 APPROVED 상태로 저장
-        // (별도 관리자 승인 플로우는 범위 밖)
+        // 관리자 승인 대기 정책: 신규 등록은 PENDING 으로 저장하여 관리자 승인 전까지
+        // 공개 목록/지도에 노출되지 않는다. (approve/reject/getPending 관리자 플로우와 연동)
         HotPlace hotPlace = hotPlaceRepository.save(HotPlace.builder()
                 .submitter(submitter)
                 .name(request.name())
@@ -73,7 +73,7 @@ public class HotPlaceService {
                 .longitude(request.longitude())
                 .category(request.category())
                 .description(request.description())
-                .status(HotPlaceStatus.APPROVED)
+                .status(HotPlaceStatus.PENDING)
                 .build());
 
         List<String> imageUrls = savePhotos(hotPlace, request.imageUrls());

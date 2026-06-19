@@ -76,6 +76,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/notices", "/api/notices/**").permitAll()
                         // 커뮤니티 비회원 공개 조회
                         .requestMatchers(HttpMethod.GET, "/community/posts", "/community/posts/*", "/community/posts/*/comments").permitAll()
+                        // 핫플 승인 대기 목록은 ADMIN 전용 — 아래 hotplaces/* permitAll 와일드카드에 포함되지 않도록 먼저 선언
+                        .requestMatchers(HttpMethod.GET, "/community/hotplaces/pending").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces", "/community/hotplaces/*").permitAll()
                         // 동행 — 내 참여 방은 인증 필수 (공개 매처보다 먼저 선언해 /my가 permitAll에 포함되지 않도록)
                         .requestMatchers(HttpMethod.GET, "/companion/posts/my").authenticated()

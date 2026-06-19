@@ -316,9 +316,21 @@ export const useAttractionStore = defineStore('attraction', () => {
     } catch (e) {
       if (!isCurrent()) return
       error.value = e.response?.data?.message ?? e.message ?? '검색 중 오류가 발생했습니다.'
-      searchResults.value = MOCK_ATTRACTIONS
-      attractions.value = MOCK_ATTRACTIONS.map((item, i) => mapAttraction(item, i + 1))
-      hasMore.value = false
+      // 네트워크/타임아웃/5xx 일 때만 목업 폴백 — 정상 응답(2xx/4xx)으로 받은
+      // 빈 결과를 목업으로 위장하지 않는다(빈 데이터는 정직하게 노출).
+      const status = e.response?.status
+      const isServerOrNetworkError = status === undefined || status >= 500
+      if (isServerOrNetworkError) {
+        console.warn('[attraction.list] 네트워크/서버 오류 — 목업 데이터로 폴백', e)
+        searchResults.value = MOCK_ATTRACTIONS
+        attractions.value = MOCK_ATTRACTIONS.map((item, i) => mapAttraction(item, i + 1))
+        hasMore.value = false
+      } else {
+        // 4xx 등 클라이언트 오류 — 빈 결과로 정직하게 표시
+        searchResults.value = []
+        attractions.value = []
+        hasMore.value = false
+      }
     } finally {
       if (isCurrent()) loading.value = false
     }

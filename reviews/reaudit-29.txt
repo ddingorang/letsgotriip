@@ -1,0 +1,144 @@
+===[1] (plan/high) Missing @Valid annotation on PlacesReplaceRequestDto.places field prevents recursive validation of PlaceItemDto items
+FILES: BE/src/main/java/com/trip/plan/dto/PlacesReplaceRequestDto.java; BE/src/main/java/com/trip/plan/dto/PlaceItemDto.java
+EVID: PlacesReplaceRequestDto.places field is declared as 'List<PlaceItemDto> places' with only @NotNull annotation, missing @Valid for cascading validation. Combined with PlaceItemDto.seq field lacking @NotNull validation, this allows clients to send null seq values in replacePlaces requests. When null seq reaches the service, TripPlace entity attempts to persist with null seq column, violating the database NOT NULL constraint and causing a 500 database error instead of a 400 validation error. This breaks the principle 
+FIX: 1) Add @Valid annotation to PlacesReplaceRequestDto.places field to enable recursive validation of items. 2) Add @NotNull annotation to PlaceItemDto.seq field to enforce non-null values at validation layer. This ensures malformed data is caught at validation time with proper 400 error response rather than failing at database constraint level with 500 error.
+
+===[2] (ai-recommend/high) createTravelPlan @Tool automatically saves PARTIAL recommendations violating system prompt
+FILES: BE/src/main/java/com/trip/assistant/AssistantService.java:328-359, BE/src/main/java/com/trip/recommend/service/RecommendService.java:251-284
+EVID: Lines 348-352 in AssistantService.createTravelPlan() call recommendService.process() then immediately recommendService.savePlan() without user confirmation. When process() returns RecommendStatus.PARTIAL (computed at line 513-514 when validated.days().size() < totalDays or any day has < 2 places), the tool still saves it. savePlan() has NO status check (line 265 only validates resultJson != null); PARTIAL recommendations pass through with resultJson populated (line 199). System prompt (lines 67-81) explicitly forbi
+FIX: Add explicit status check in savePlan (RecommendService:265) to reject PARTIAL/FAILED, or modify createTravelPlan tool to return draft for user review without auto-saving. Remove line 352 recommendService.savePlan() call. Let FE handle save only on explicit user 'save' button click (AssistantView.vue:94).
+
+===[3] (home-explore/high) Infinite scroll sentinel suppression on search query breaks pagination
+FILES: frontend/src/views/ExploreView.vue:139
+EVID: Line 139: v-if="displayedPlaces.length && store.hasMore && !searchQuery.trim()" — sentinel DOM is removed when user types a search query. However, line 384 calls store.list(..., { forceLoading: true }) which resets page to 1 and loads fresh results. The sentinel is hidden (v-if=false) during search, so loadMore() is never invoked for search result pages, only list() page 1. When user clicks to load next search result page manually, there's no UI trigger because the sentinel is hidden. This breaks pagination for all
+FIX: Remove '&& !searchQuery.trim()' condition from sentinel v-if (line 139). The sentinel should always be visible when hasMore=true and results exist, regardless of whether we're searching or not. The store.list() already handles cached results properly with forceLoading=true for search/category changes.
+
+===[4] (home-explore/medium) Distance-based map view shows only 8 markers while full list has 30 items
+FILES: frontend/src/views/ExploreView.vue:265-269
+EVID: const mapPlaces = computed(() => sortMode.value === 'distance' && userLoc.value ? displayedPlaces.value.slice(0, 8) : displayedPlaces.value). When user toggles to distance sort with location, the map is intentionally limited to first 8 items to avoid cluttering. However, the bottom sheet still shows all items. If user clicks a marker pin (say pin #25 from the full list which is NOT in top 8 map display), the selectPlace() will scroll to it in the sheet. This creates hidden/disconnected interaction — the map doesn't
+FIX: Either: (a) show all displayedPlaces in map when distance sort is active (remove slice(0,8) limit), or (b) disable clicking on non-mapped items by filtering displayedPlaces to match mapPlaces when in distance mode. Currently it's ambiguous which items are mapped.
+
+===[5] (home-explore/medium) News data labeled 'demo' but always shows; no real source fallback
+FILES: frontend/src/views/HomeView.vue:64-71,136-143; BE/src/main/java/com/trip/context/service/NewsService.java:24-52
+EVID: HomeView renders news section with 'demo' badge (line 68), and contextApi.news() (line 136) always returns hard-coded demo data from BE NewsService.travelNews(). The UI shows v-if="newsLoading || news.length" so it renders whenever data arrives. No real news source integration exists — all 6 items are static strings with URL='#' (non-clickable). Users may believe they're seeing real travel news when it's purely mock. This violates transparency (gatekeeper masquerading real data as demo).
+FIX: Either: (a) remove news section entirely since it's demo-only, or (b) actually integrate a real news API (e.g., NewsAPI, RSS) and properly distinguish demo vs real responses via response.demo flag. If keeping demo badge, accept it but don't render when no real source is available.
+
+===[6] (home-explore/medium) HomeView 'places' computed shows only first 10 results; rank badge numbering may not reflect true ranking
+FILES: frontend/src/views/HomeView.vue:117,49; frontend/src/stores/attraction.js:247,250
+EVID: HomeView line 117: const places = computed(() => attractionStore.attractions.slice(0, 10)). These are passed to PlaceCard with :rank="place.rank" (line 49). In attraction.js line 247/250, rank is set via mapAttraction(item, i + 1) where i is the index in the mapped array. If 30 items are fetched (PAGE_SIZE=30), only items 0-9 are sliced to show, so rank badges show 1-10. However, if user sees item #10 on HomeView, they don't know if it's genuinely the 10th most popular or just the first 10 of a larger search result
+FIX: Either: (a) add real ranking metadata from BE (e.g., 'popularityRank' field from TourAPI or DB), or (b) remove the rank badge from HomeView since it's just positional. Document that it's slice(0,10) of whatever list() returned, not a global ranking.
+
+===[7] (home-explore/low) Location-based search in HomeView doesn't preserve location preference across sessions
+FILES: frontend/src/views/HomeView.vue:188-200; frontend/src/stores/location.js:43-95
+EVID: loadNearbyAttractions() (line 188) calls locationStore.ensureLocation() which caches coords to sessionStorage with 30min TTL. On first load, if location is granted, it's cached. On page refresh or new tab, sessionStorage is cleared, so ensureLocation() queries geolocation again (sync timeout 7s). If user denies permission mid-session, status becomes 'denied' permanently until next browser restart. If user later enables location in browser settings, the store won't re-request. This means HomeView shows Jeju fallback
+FIX: Add a way to manually refresh location consent or periodically retry denied status. Alternatively, store consent status in localStorage with ability to reset. Or at least document this as expected behavior (location sticky per session only).
+
+===[8] (hotplace/high) Hotplace Auto-Approval Bypasses Admin Moderation
+FILES: BE/src/main/java/com/trip/community/service/HotPlaceService.java:62-77
+EVID: The `register()` method sets `status(HotPlaceStatus.APPROVED)` immediately upon creation (line 76), with comment: 'auto-approval policy; exposed to list/map immediately (별도 관리자 승인 플로우는 범위 밖)'. This completely bypasses the admin approval workflow, making the `approve()`, `reject()`, and `getPendingHotPlaces()` methods unreachable for new submissions. The FE AdminView.vue assumes PENDING→APPROVED/REJECTED flow exists, but all registrations skip to APPROVED, contradicting the designed workflow.
+FIX: Change line 76 from `.status(HotPlaceStatus.APPROVED)` to `.status(HotPlaceStatus.PENDING)` to properly gate new registrations behind admin review. Restore the intended moderation flow: register → PENDING → admin approves/rejects → APPROVED/REJECTED.
+
+===[9] (hotplace/low) Unvalidated GPS Coordinates Allow Invalid Data Persistence
+FILES: BE/src/main/java/com/trip/community/dto/HotPlaceCreateRequest.java:9-17; BE/src/main/java/com/trip/community/entity/HotPlace.java:33-37
+EVID: The `latitude` and `longitude` fields in HotPlaceCreateRequest are raw `Double` with no validation constraints (@Min/@Max/@NotNull). Valid GPS coordinates must be -90≤lat≤90, -180≤lng≤180, but users can submit any Double value (e.g., 999999.0). The DB persists invalid coordinates, causing map rendering failures and data quality degradation.
+FIX: Add validation annotations to HotPlaceCreateRequest: `@DecimalMin("-90") @DecimalMax("90") Double latitude;` and `@DecimalMin("-180") @DecimalMax("180") Double longitude;`. Add @NotNull if coordinates are mandatory, or allow null explicitly with @Nullable documentation.
+
+===[10] (hotplace/low) FE Photo Upload UI Dead Code Creates False Feature Impression
+FILES: frontend/src/views/HotplaceRegisterView.vue:100-111, 273-283
+EVID: Lines 100-111 render a photo upload UI with 'photo-add-btn' and '0/5' counter, implying users can upload up to 5 photos. However, the submit function (line 273-296) always sends `imageUrls: []` regardless of UI state (line 280). Photos collected from the UI are never captured or transmitted, making the entire photo form non-functional.
+FIX: Either remove the photo grid UI (lines 100-111) to clarify photos aren't supported, OR implement photo handling: capture selected files in a ref, upload via multipart FormData to `/api/community/images`, collect returned URLs, and pass them in `imageUrls` field of the payload.
+
+===[11] (companion/high) Race Condition in Capacity Check During Application Approval
+FILES: BE/src/main/java/com/trip/companion/service/CompanionService.java:169-206
+EVID: In approveApplication(), line 176-182 reads current membership count and checks against maxMembers, but the membership save at line 194-200 is not atomic. Two concurrent approval requests can both pass the capacity check before either membership is persisted, allowing the group to exceed maxMembers. The approveApplication() method reads count via findByChatRoomId().size() (line 179), then conditionally adds membership (line 194-200), but no pessimistic lock or atomic operation prevents concurrent violations.
+FIX: Add pessimistic locking (SELECT FOR UPDATE) on the ChatRoom entity before the capacity check, or use an atomic operation like a stored procedure that checks-and-inserts in one transaction. Alternatively, use ChatRoom.participationCount field with proper increment logic instead of counting memberships each time.
+
+===[12] (companion/high) Application Cancellation Handler Missing in FE Store
+FILES: frontend/src/views/CompanionDetailView.vue:206-209 / frontend/src/stores/companion.js missing method
+EVID: CompanionDetailView.vue line 206-209 has cancelApply() function that only sets local state isApplied.value = false with a comment 'Cancellation endpoint not yet in BE; optimistic local only'. However, BE does have the endpoint (CompanionController.java:121-129, cancelApplication). The FE never calls the DELETE /api/companion/posts/{postId}/applications/{applicationId} endpoint, so cancellation is never persisted to database. The cancel button gives false success feedback.
+FIX: Add cancelApplication() method to companion.js store that calls http.delete(`/api/companion/posts/${postId}/applications/${applicationId}`, userId), and wire it in CompanionDetailView.vue line 197 to actually persist the cancellation.
+
+===[13] (companion/high) Hardcoded Chat Room ID in Owner Navigation
+FILES: frontend/src/views/CompanionDetailView.vue:161
+EVID: The owner's chat button on line 161 routes to hardcoded `/chat/1` instead of the actual chatRoomId for the companion group. Should be `$router.push(`/chat/${comp.chatRoomId}`)` to navigate to the correct group chat. Currently all group owners are sent to chat room 1 regardless of which companion post they're viewing.
+FIX: Replace line 161 `@click="$router.push(`/chat/1`)` with `@click="$router.push(`/chat/${comp.chatRoomId}`)"`
+
+===[14] (companion/medium) Missing Validation: Reducing maxMembers Below Current Participation
+FILES: BE/src/main/java/com/trip/companion/service/CompanionService.java:108-115 / BE/src/main/java/com/trip/companion/entity/CompanionPost.java:63-72
+EVID: updatePost() allows maxMembers to be reduced without checking if currentMembers > newMaxMembers. Example: a group with 3/4 full can be edited to 2/2 capacity, creating an invalid state where approved members count exceeds available slots. The Entity.update() method (line 69) just assigns without validation: 'if (maxMembers != null) this.maxMembers = maxMembers;'
+FIX: In updatePost() service method (line 108), after finding the post, add validation: if (request.maxMembers() != null && currentMembers > request.maxMembers()) throw new GeneralException(ResponseCode.COMPANION_CAPACITY_REDUCED_BELOW_CURRENT).
+
+===[15] (checklist-story-group/high) N+1 Query in GroupService.list()
+FILES: BE\src\main\java\com\trip\group\service\GroupService.java:65-73
+EVID: Lines 65-73: The method calls groupMemberRepository.findByUserId(userId) once, then for each group ID performs: (1) travelGroupRepository.findById(groupId) and (2) groupMemberRepository.countByGroupId(groupId). With N groups, this executes 1+2N queries instead of 1-2 optimal queries. For example, 10 groups = 21 queries. Stream with .map(travelGroupRepository::findById) and .map(g -> GroupResponse.from(g, groupMemberRepository.countByGroupId(g.getId()))) are the two separate loops causing the problem.
+FIX: Use a custom JPQL/native query to fetch all groups with member counts in 1-2 queries, or use a @Query with LEFT JOIN FETCH and GROUP BY COUNT. Example: SELECT g FROM TravelGroup g LEFT JOIN g.members m WHERE m.userId = :userId GROUP BY g.id, or create findAllWithMemberCountByUserId method.
+
+===[16] (checklist-story-group/low) Dead Code Pattern: story.storyId ?? story.id Fallback
+FILES: frontend\src\views\StoriesView.vue:29,182,217
+EVID: Lines 182, 217: Function storyKey(story) returns story.storyId ?? story.id. However, TravelStoryResponse DTO (line 10 in response DTO) returns field 'id' not 'storyId'. The BE API never returns a storyId field. This dead code pattern suggests confusion about the FE-BE contract. While functionally safe due to fallback, it indicates the FE developer was uncertain about field names and left defensive fallback code that will never execute with real BE data.
+FIX: Remove the dead code fallback and use only story.id consistently. Update line 182 to: return story.id
+
+===[17] (attraction-context-festival/high) FestivalItemReader pagination bug: currentPage reset not maintained across area codes
+FILES: BE/src/main/java/com/trip/festival/batch/FestivalItemReader.java:48
+EVID: In FestivalItemReader.read(), when an area code is exhausted (items.isEmpty()), areaCodeIndex is incremented but currentPage is reset to 0. On the next iteration for a new area code, currentPage++ happens immediately (line 40), making it 1 for the first fetch. This is correct, BUT the intent in the comment (line 45-49) suggests the currentPage should track TOTAL pages read. The state logic shows currentPage resets per area, which might be intentional. However, examining line 40 more closely: 'currentPage++' happens
+FIX: N/A - Logic is sound after careful trace
+
+===[18] (attraction-context-festival/medium) FestivalService.getFestivals missing null-safe enum parsing for status parameter
+FILES: BE/src/main/java/com/trip/festival/service/FestivalService.java:33,37
+EVID: Lines 33 and 37 call FestivalStatus.valueOf(status.toUpperCase()) without try-catch. If a user passes an invalid status (e.g., 'INVALID'), this throws IllegalArgumentException and returns 500 instead of 400. The status parameter comes from @RequestParam in FestivalController.java:28, which is user-controlled input.
+FIX: Wrap FestivalStatus.valueOf() calls in try-catch, or use a utility method that returns Optional<FestivalStatus> and throws 400 (AttractionHandler pattern) on invalid status.
+
+===[19] (attraction-context-festival/high) AttractionService.search uses @Cacheable with unless clause that masks empty results from stale fallback
+FILES: BE/src/main/java/com/trip/attraction/service/AttractionService.java:64-74
+EVID: The @Cacheable annotation has 'unless = "#result == null || #result.isEmpty()"', meaning empty result lists are NOT cached in the @Cacheable cache. However, line 102 manually caches results to Redis 'stale fallback' cache even if empty. This creates inconsistency: (1) First request gets empty result, bypasses @Cacheable cache (due to unless), BUT writes to manual Redis stale cache. (2) Second identical request DURING TTL window hits @Cacheable cache miss (empty results weren't cached), calls tourApiClient again, su
+FIX: Modify line 102 to skip caching if items.isEmpty(), or document this behavior and add logging to distinguish between real-time empty and fallback-empty.
+
+===[20] (attraction-context-festival/medium) FestivalItemProcessor date parsing silently returns null instead of failing fast
+FILES: BE/src/main/java/com/trip/festival/batch/FestivalItemProcessor.java:71-77
+EVID: The parseDate() method (line 71-77) silently returns null on DateTimeParseException. If eventStartDate/eventEndDate is malformed, the batch processor creates Festival records with null dates. This causes incorrect status determination (line 30-36): a malformed end_date becomes null, so 'endDate != null && endDate.isBefore(today)' is false, causing status to default to ONGOING for items that should be marked ENDED. Result: Malformed festival records persist with wrong status in the database.
+FIX: Either: (a) Log warnings for malformed dates with contentId for debugging, (b) return null-safe Optionals and skip the item if critical dates fail to parse, or (c) add a batch decider step that quarantines malformed records.
+
+===[21] (attraction-context-festival/medium) AttractionService stale fallback cache doesn't use same TTL semantics as @Cacheable
+FILES: BE/src/main/java/com/trip/attraction/service/AttractionService.java:87,102,138,145
+EVID: Lines 87, 102 manually cache to stringRedisTemplate with TTL_SEARCH (10 min). But @Cacheable for the same result uses Redis cache manager with 15 min TTL (CacheConfig.java:46). This creates two separate caches with different TTLs and keys. If TourAPI fails after 10 min, the stale cache is gone but @Cacheable cache (15 min) might still have the old result. Clients see inconsistent responses depending on which cache hits first. Additionally, the manual Redis key format (PREFIX_SEARCH + hash) differs from Spring @Cach
+FIX: Unify caching: either use only @Cacheable with CacheManager (remove manual stringRedisTemplate), or use only manual Redis with consistent TTL. Current dual-caching is confusing and error-prone.
+
+===[22] (attraction-context-festival/medium) FestivalItemProcessor.parseCoord() treats 0.0 as invalid (null), losing legitimate equatorial data
+FILES: BE/src/main/java/com/trip/festival/batch/FestivalItemProcessor.java:80-87
+EVID: Line 84 explicitly returns null if v == 0.0. While 0.0 might indicate missing data in some TourAPI responses, it's also a valid coordinate at the equator (lat=0) or prime meridian (lng=0). Any festival at these locations would have coordinates silently dropped, losing location data. This is a logic error: should distinguish between 0.0 (valid) and null/missing (invalid).
+FIX: Remove the '|| v == 0.0' check, or parse as string and only return null if the field was actually blank/missing, not if it parses to 0.0.
+
+===[23] (attraction-context-festival/medium) AttractionsStore FE MOCK_ATTRACTIONS fallback doesn't distinguish between network failure and empty result
+FILES: frontend/src/stores/attraction.js:316-321
+EVID: In the list() method, when attractionApi.list() throws an error (line 316), the catch block returns MOCK_ATTRACTIONS (line 319) without logging or distinguishing the error type. If the BE returns a legitimate empty result (200 OK + []), the FE treats it the same as a network failure (500/timeout) and shows mock data. This is false-success masquerade: user sees mock locations even though the real backend returned data, they don't know the result is synthetic.
+FIX: Only fallback to MOCK_ATTRACTIONS if the error is a network/timeout error (e.g., status 0 or 5xx). If 200 OK but empty, return empty array to distinguish from failures.
+
+===[24] (attraction-context-festival/medium) Festival batch cleanup step doesn't handle race condition between multiple job instances
+FILES: BE/src/main/java/com/trip/festival/batch/FestivalSyncJobConfig.java:71-105
+EVID: The cleanupStep() updates festivals where synced_at < jobStartTime (line 94). If two job instances start simultaneously (e.g., scheduled 6 AM and manual sync at 5:59 AM), both see approximately the same jobStartTime. When first job completes and updates synced_at, second job might still update the same records again, or miss updates. Spring Batch doesn't provide built-in distributed job locking by default, so concurrent jobs can interfere. This is more of an operational risk than data corruption, but can cause fest
+FIX: Enable Spring Batch's built-in job-locking (jdbcJobStore with IsolationLevelSerializableJobStore) or add an explicit database lock in the cleanup step to ensure only one sync runs at a time.
+
+===[25] (admin-notice/high) HotPlace pending 엔드포인트 비인증 접근 가능 + NPE 위험
+FILES: /c/Users/te/Desktop/next/springaitrip/.claude/worktrees/elated-leakey-81a1ee/BE/src/main/java/com/trip/global/config/SecurityConfig.java:79, /c/Users/te/Desktop/next/springaitrip/.claude/worktrees/elated-leakey-81a1ee/BE/src/main/java/com/trip/community/controller/HotPlaceController.java:75-80
+EVID: SecurityConfig 79줄에서 `requestMatchers(HttpMethod.GET, "/community/hotplaces", "/community/hotplaces/*").permitAll()` 로 설정되어 모든 GET /community/hotplaces/* 를 비인증 사용자에게 공개. 이는 /community/hotplaces/pending 도 포함. 그러나 HotPlaceController 75-80줄의 getPendingHotPlaces() 메서드는 `@AuthenticationPrincipal UserPrincipal principal` 파라미터를 필수로 요구하며, 비인증 요청에서는 principal이 null. 다음 줄 80에서 `principal.userId()` 호출 시 NullPointerException 발생.
+FIX: SecurityConfig에서 GET /community/hotplaces/pending 을 명시적으로 hasRole("ADMIN") 으로 설정하거나, HotPlaceController에서 @AuthenticationPrincipal 파라미터를 Optional로 처리하고 비인증 요청에 대해 적절한 에러 반환.
+
+===[26] (admin-notice/high) 공지 수정 HTTP method 불일치 (PATCH vs PUT)
+FILES: /c/Users/te/Desktop/next/springaitrip/frontend/src/views/AdminView.vue:176, /c/Users/te/Desktop/next/springaitrip/.claude/worktrees/elated-leakey-81a1ee/BE/src/main/java/com/trip/notice/controller/NoticeController.java:49-55
+EVID: AdminView.vue 176줄에서 공지 수정 시 `await http.patch(\`/api/notices/${editingId.value}\`, payload)` 로 PATCH 요청 발송. 그러나 NoticeController 49줄에서는 `@PutMapping(\"/{noticeId}\")` 로 PUT 메서드만 정의. 따라서 FE에서 PATCH를 보낼 경우 BE는 405 Method Not Allowed 에러 반환.
+FIX: NoticeController를 @PutMapping에서 @PatchMapping으로 변경하거나, AdminView.vue의 http.patch 를 http.put 으로 변경하여 FE-BE HTTP method 통일.
+
+===[27] (preprocessing-stt/high) PreprocessingController does not validate empty file uploads
+FILES: /c/Users/te/Desktop/next/springaitrip/.claude/worktrees/elated-leakey-81a1ee/BE/src/main/java/com/trip/preprocessing/controller/PreprocessingController.java:24-40
+EVID: PreprocessingController endpoints uploadKakaoTalk() and uploadVoiceCall() have no file validation (no call to validate() method like DocumentController does at line 32). DocumentController.validate() rejects empty files (line 54-56: 'if (file == null || file.isEmpty())'), but PreprocessingController accepts empty MultipartFile, transfers it to disk (PreprocessingService line 64), and returns HTTP 200 with dataId pointing to a record with null/empty rawText. User receives false-success response (HTTP 200) when uploa
+FIX: Add validation to PreprocessingController.uploadKakaoTalk() and uploadVoiceCall() methods before calling preprocessingService.uploadAndProcess(). Call a validate() method (copied from DocumentController lines 53-60) to reject empty or null files, or alternatively reject the upload in PreprocessingService.uploadAndProcess() by throwing GeneralException before file.transferTo() if file.isEmpty().
+
+===[28] (xc-contract/medium) Dead button: Comment like button has no @click handler
+FILES: C:\Users\te\Desktop\next\springaitrip\frontend\src\views\PostDetailView.vue:125-130, C:\Users\te\Desktop\next\springaitrip\frontend\src\api\index.js:85-86
+EVID: PostDetailView.vue line 125-130 renders a like button for each comment with no @click handler attached. The API endpoint likeComment(postId, commentId) is defined in index.js line 85-86 but is never called. The button renders visually with comment.likeCount but clicking it does nothing. BE endpoint POST /community/posts/{postId}/comments/{commentId}/likes (CommunityController:113-119) is implemented and ready but FE has no consumer.
+FIX: Add @click handler to the comment like button that calls the API: @click.prevent="likeComment(post.id, comment.id)" and implement the likeComment method in PostDetailView to call communityApi.likeComment(postId, commentId) similar to how likePost() is implemented (lines 218-221).
+
+===[29] (xc-contract/high) FE-BE image upload contract violation: FE sends base64 URIs instead of file multipart
+FILES: C:\Users\te\Desktop\next\springaitrip\frontend\src\views\PostWriteView.vue:119-127, C:\Users\te\Desktop\next\springaitrip\BE\src\main\java\com\trip\community\controller\CommunityController.java:34-41, C:\Users\te\Desktop\next\springaitrip\BE\src\main\java\com\trip\community\service\CommunityService.java:204-214
+EVID: PostWriteView.vue converts image to base64 data URI (line 125: form.value.imageUrl = ev.target.result) and sends it directly in imageUrls array to createPost. BE CommunityController has uploadImage endpoint (line 34-41) expecting MultipartFile, but FE never calls it. Instead, FE sends base64 strings to PostCreateRequest.imageUrls which are stored directly as-is. When replaceImages() (line 217) tries to delete old images using fileStorageService.delete(imageUrl), it passes a data URI instead of a real file path. Thi
+FIX: Implement proper image upload flow in FE: (1) Create uploadImage() function that sends selected file to POST /api/community/images via FormData, (2) receive imageUrl from response, (3) store imageUrl in form.imageUrls array instead of base64 data URI, (4) send only URLs in createPost/updatePost requests. Alternatively, if base64 storage is intended, remove the fileStorageService.delete() call for data URIs and update

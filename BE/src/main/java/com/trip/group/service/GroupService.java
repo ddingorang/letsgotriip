@@ -14,7 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -63,13 +65,31 @@ public class GroupService {
 
     /** 내가 속한(소유 포함) 그룹 목록 */
     public List<GroupResponse> list(Long userId) {
-        return groupMemberRepository.findByUserId(userId).stream()
+        // 1) 내 멤버십에서 그룹 ID들을 중복 제거하여 수집
+        List<Long> groupIds = groupMemberRepository.findByUserId(userId).stream()
                 .map(GroupMember::getGroupId)
                 .distinct()
-                .map(travelGroupRepository::findById)
-                .filter(java.util.Optional::isPresent)
-                .map(java.util.Optional::get)
-                .map(g -> GroupResponse.from(g, groupMemberRepository.countByGroupId(g.getId())))
+                .toList();
+        if (groupIds.isEmpty()) {
+            return List.of();
+        }
+
+        // 2) 그룹 본문을 1쿼리로 조회 후 ID → 그룹 매핑
+        Map<Long, TravelGroup> groupById = new HashMap<>();
+        travelGroupRepository.findAllById(groupIds)
+                .forEach(g -> groupById.put(g.getId(), g));
+
+        // 3) 멤버 수를 group by 집계 1쿼리로 조회 후 ID → count 매핑 (멤버 0인 그룹은 0으로 처리)
+        Map<Long, Integer> countById = new HashMap<>();
+        for (Object[] row : groupMemberRepository.countByGroupIdIn(groupIds)) {
+            countById.put((Long) row[0], ((Number) row[1]).intValue());
+        }
+
+        // 4) 원래 순서(내 그룹 ID 순)를 유지하며 응답 구성. 삭제 등으로 그룹이 없으면 건너뜀.
+        return groupIds.stream()
+                .map(groupById::get)
+                .filter(java.util.Objects::nonNull)
+                .map(g -> GroupResponse.from(g, countById.getOrDefault(g.getId(), 0)))
                 .toList();
     }
 

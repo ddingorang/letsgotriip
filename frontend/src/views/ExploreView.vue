@@ -134,9 +134,9 @@
           </div>
         </div>
 
-        <!-- 무한스크롤 센티넬 — 화면에 들어오면 다음 페이지 로드 -->
+        <!-- 무한스크롤 센티넬 — 화면에 들어오면 다음 페이지 로드 (검색 중에도 동작) -->
         <div
-          v-if="displayedPlaces.length && store.hasMore && !searchQuery.trim()"
+          v-if="displayedPlaces.length && store.hasMore"
           ref="loadMoreSentinel"
           class="load-more-sentinel"
         >
@@ -261,12 +261,9 @@ const mapCenter = computed(() =>
   userLoc.value ? [userLoc.value.lat, userLoc.value.lng] : [37.5665, 126.978],
 )
 
-// 거리순일 땐 지도가 내 주변으로 줌되도록 가까운 곳만 핀 표시
-const mapPlaces = computed(() =>
-  sortMode.value === 'distance' && userLoc.value
-    ? displayedPlaces.value.slice(0, 8)
-    : displayedPlaces.value,
-)
+// 지도 마커는 항상 시트와 동일한 집합을 표시 — 클릭(목록 row)과 지도 핀 불일치 방지.
+// (거리순일 때도 8개로 자르지 않고 전체를 핀으로 노출)
+const mapPlaces = computed(() => displayedPlaces.value)
 
 const sortLabel = computed(() =>
   sortMode.value === 'distance' ? '거리순' : '기본순',

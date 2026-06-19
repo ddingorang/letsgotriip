@@ -94,7 +94,8 @@ public enum ResponseCode {
     COMPANION_ALREADY_PROCESSED(HttpStatus.CONFLICT, "COMPANION4092", "이미 처리된 신청입니다."),
     COMPANION_FULL(HttpStatus.CONFLICT, "COMPANION4093", "정원이 마감되어 더 이상 승인할 수 없습니다."),
     COMPANION_APPROVED_CANCEL(HttpStatus.CONFLICT, "COMPANION4094", "이미 승인된 신청은 취소할 수 없어요."),
-    COMPANION_DUPLICATE_APPLY(HttpStatus.CONFLICT, "COMPANION4095", "이미 신청이 접수되었어요. 잠시 후 다시 확인해주세요.");
+    COMPANION_DUPLICATE_APPLY(HttpStatus.CONFLICT, "COMPANION4095", "이미 신청이 접수되었어요. 잠시 후 다시 확인해주세요."),
+    COMPANION_CAPACITY_REDUCED_BELOW_CURRENT(HttpStatus.CONFLICT, "COMPANION4096", "현재 참여 인원보다 적은 인원으로는 정원을 줄일 수 없어요.");
 
     private final HttpStatus httpStatus;
     private final String code; // 클라이언트 식별용 코드 (예: "USER404"

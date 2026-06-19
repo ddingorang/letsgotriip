@@ -38,8 +38,23 @@ import java.util.TreeMap;
 @Transactional(readOnly = true)
 public class AttractionService {
 
-    private static final Duration TTL_SEARCH = Duration.ofMinutes(10);
+    // ─────────────────────────────────────────────────────────────
+    // 이중 캐시 구조 (역할 구분)
+    //  1) @Cacheable(CacheManager) — 1차 캐시. 정상 응답을 짧은 TTL로 보관해 외부 왕복을 줄인다.
+    //     빈 결과는 unless로 캐시하지 않는다(CacheConfig 참조).
+    //  2) 수동 stringRedisTemplate — stale 폴백 캐시. 외부 API 장애 시 만료 직전 응답을 반환한다.
+    //     폴백이 의미를 가지려면 stale TTL이 1차(@Cacheable) TTL "이상"이어야 한다
+    //     (1차 만료 → 외부 호출 → 실패 시 stale로 복구). 그래서 검색은 1차(15분)와 동일,
+    //     상세는 1차(30분)보다 길게 잡아 더 오래 폴백되도록 한다.
+    //  ※ stale 캐시에는 빈 결과를 저장하지 않는다(#19). 빈 결과를 stale로 굳히면
+    //     일시적 빈 응답이 장애 시 그대로 폴백되어 혼동을 부른다.
+    // ─────────────────────────────────────────────────────────────
+
+    // 1차 @Cacheable(attractions, 15분)과 동일하게 맞춰 TTL 의미를 정합화(#21).
+    private static final Duration TTL_SEARCH = Duration.ofMinutes(15);
+    // 1차 @Cacheable(attractionDetail, 30분)보다 길게 — 상세는 변동이 적어 폴백을 더 오래 허용.
     private static final Duration TTL_DETAIL = Duration.ofHours(6);
+    // 1차 @Cacheable(attractionAreas, 24시간)과 동일.
     private static final Duration TTL_AREAS  = Duration.ofHours(24);
 
     private static final String PREFIX_SEARCH = "cache:attr:search:";
@@ -98,16 +113,26 @@ public class AttractionService {
                 items = tourApiClient.fetchAreaBased(req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size);
             }
 
-            // 성공 응답은 stale 폴백 캐시에도 백업(외부 장애 시 만료 캐시 반환용)
+            // 빈 결과는 stale 폴백 캐시에 저장하지 않는다(#19) — 빈 응답을 stale로 굳히지 않음.
+            // (@Cacheable도 unless로 빈 결과를 캐시하지 않으므로 두 캐시 동작을 일치시킨다.)
+            if (items.isEmpty()) {
+                log.info("TourAPI 검색 실시간-빈 결과 — stale 캐시 저장 건너뜀. key={}", cacheKey);
+                return items;
+            }
+
+            // 성공(비어있지 않은) 응답만 stale 폴백 캐시에 백업(외부 장애 시 만료 캐시 반환용)
             stringRedisTemplate.opsForValue().set(cacheKey, serializeItems(items), TTL_SEARCH);
             return items;
 
         } catch (Exception e) {
             log.warn("TourAPI 검색 실패 — stale 캐시 반환 시도. key={}, error={}", cacheKey, e.getMessage());
-            // stale 재시도 (TTL 만료 직전 캐시가 있을 수 있음)
+            // stale 재시도 (TTL 만료 직전 캐시가 있을 수 있음). 빈 결과는 애초에 저장되지 않으므로
+            // stale은 항상 비어있지 않은 과거 응답이다(폴백-빈 vs 실시간-빈 구분 가능).
             String stale = stringRedisTemplate.opsForValue().get(cacheKey);
             if (stale != null) {
-                return deserializeItems(stale);
+                List<AttractionItem> staleItems = deserializeItems(stale);
+                log.info("TourAPI 검색 stale 폴백 반환. key={}, size={}", cacheKey, staleItems.size());
+                return staleItems;
             }
             throw new AttractionHandler(ResponseCode.EXTERNAL_API_ERROR);
         }

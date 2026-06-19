@@ -26,7 +26,7 @@
 
       <!-- 목록 -->
       <div v-else-if="stories.length > 0" class="story-list">
-        <article v-for="story in stories" :key="story.storyId ?? story.id" class="story-card">
+        <article v-for="story in stories" :key="story.id" class="story-card">
           <div class="card-top">
             <h3 class="story-title">{{ story.title }}</h3>
             <div class="rating-stars" aria-label="별점">
@@ -179,7 +179,7 @@ function showToast(message) {
 
 // ── 헬퍼 ──────────────────────────────────────────────────────────────────────
 function storyKey(story) {
-  return story.storyId ?? story.id
+  return story.id
 }
 
 // ── 목록 조회 ─────────────────────────────────────────────────────────────────

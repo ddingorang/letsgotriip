@@ -124,6 +124,15 @@ public class CompanionService {
         CompanionPost post = findPost(postId);
         verifyAuthor(post, userId);
 
+        // 정원을 현재 참여 인원(방장 포함)보다 적게 줄이면 이미 합류한 멤버가 정원을 초과하므로 차단한다.
+        // maxMembers가 변경 요청에 포함된 경우에만 검사(부분 수정 PATCH).
+        if (request.maxMembers() != null) {
+            int currentMembers = countCurrentMembers(post);
+            if (request.maxMembers() < currentMembers) {
+                throw new GeneralException(ResponseCode.COMPANION_CAPACITY_REDUCED_BELOW_CURRENT);
+            }
+        }
+
         post.update(request.title(), request.travelDate(), request.region(),
                 request.duration(), request.maxMembers(), request.estimatedCost(), request.description());
 

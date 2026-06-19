@@ -15,7 +15,7 @@ import java.util.List;
  * GET    /api/notices       — 공지 목록 (공개)
  * GET    /api/notices/{id}  — 공지 상세 (공개)
  * POST   /api/notices       — 공지 생성 (admin)
- * PUT    /api/notices/{id}  — 공지 수정 (admin)
+ * PATCH  /api/notices/{id}  — 공지 수정 (admin, FE와 통일)
  * DELETE /api/notices/{id}  — 공지 삭제 (admin)
  *
  * 권한 강제(ADMIN)는 SecurityConfig 에서 처리된다.
@@ -45,8 +45,8 @@ public class NoticeController {
         return ResponseEntity.ok(noticeService.create(request));
     }
 
-    /** 공지 수정 (admin) */
-    @PutMapping("/{noticeId}")
+    /** 공지 수정 (admin) — FE AdminView가 PATCH를 보내므로 PATCH로 통일 */
+    @PatchMapping("/{noticeId}")
     public ResponseEntity<NoticeResponse> updateNotice(
             @PathVariable Long noticeId,
             @Valid @RequestBody NoticeUpdateRequest request

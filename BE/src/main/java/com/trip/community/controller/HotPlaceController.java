@@ -77,6 +77,11 @@ public class HotPlaceController {
             @AuthenticationPrincipal UserPrincipal principal,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
+        // 보안 매처(hasRole ADMIN)로 인증이 강제되어 principal 은 non-null 이지만,
+        // 안전하게 null 가드를 두어 NPE 대신 401 로 응답한다.
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
         return ResponseEntity.ok(hotPlaceService.getPendingHotPlaces(principal.userId(), pageable));
     }
 

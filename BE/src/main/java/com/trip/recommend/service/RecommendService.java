@@ -262,6 +262,14 @@ public class RecommendService {
             return planService.getDetail(userId, rec.getSavedPlanId());
         }
 
+        // 상태 가드: SUCCESS가 아닌(PARTIAL/FAILED) 추천은 저장을 거부한다.
+        // 부분 추천을 사용자 확인 없이 plan으로 굳히지 않도록 방어(어시스턴트 도구도 동일 가드를 둠).
+        if (rec.getStatus() != RecommendStatus.SUCCESS) {
+            log.info("savePlan 거부 — 부분/실패 추천: userId={}, recommendationId={}, status={}",
+                    userId, recommendationId, rec.getStatus());
+            throw new RecommendHandler(ResponseCode.RECO_EMPTY_RESULT);
+        }
+
         if (rec.getResultJson() == null) {
             throw new RecommendHandler(ResponseCode.RECO_EMPTY_RESULT);
         }

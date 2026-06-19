@@ -17,6 +17,7 @@ import com.trip.plan.dto.RouteReportResponseDto;
 import com.trip.plan.service.PlanService;
 import com.trip.recommend.dto.RecommendRequestDto;
 import com.trip.recommend.dto.RecommendationResponseDto;
+import com.trip.recommend.entity.RecommendStatus;
 import com.trip.recommend.service.RecommendService;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -349,6 +350,18 @@ public class AssistantService {
                         areaCode, start, end, companions, budget, themeList);
 
                 RecommendationResponseDto reco = recommendService.process(userId, req);
+
+                // PARTIAL/FAILED 추천은 사용자 확인 없이 자동 저장하지 않는다.
+                // (시스템 프롬프트의 "확실하지 않으면 먼저 확인" 원칙과 동일.)
+                // process()는 FAILED면 예외를 던지므로 여기 도달하는 비-SUCCESS는 사실상 PARTIAL이지만,
+                // SUCCESS가 아닌 모든 상태를 방어적으로 막아 부분 추천을 저장하지 않는다.
+                if (reco.status() != RecommendStatus.SUCCESS) {
+                    log.info("도구 createTravelPlan — 부분 추천이라 저장 보류: userId={}, recommendationId={}, status={}",
+                            userId, reco.id(), reco.status());
+                    return "추천 일정이 일부만 구성됐어요(예: 일자/장소 부족). 임의로 저장하지 않았어요. "
+                            + "기간을 줄이거나 지역코드를 바꿔 다시 시도해 주세요.";
+                }
+
                 PlanDetailResponseDto plan = recommendService.savePlan(userId, reco.id());
 
                 return "여행 일정을 생성했어요. planId=" + plan.id()
