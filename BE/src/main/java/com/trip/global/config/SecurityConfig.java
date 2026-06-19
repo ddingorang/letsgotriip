@@ -63,6 +63,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/companion/posts/my").authenticated()
                         // 동행 비회원 공개 조회
                         .requestMatchers(HttpMethod.GET, "/companion/posts", "/companion/posts/*").permitAll()
+                        // 여행 스토리 — 본인 소유 리소스, 인증 필수
+                        .requestMatchers("/api/stories/**").authenticated()
+                        // 단체할인 — 데모 목록은 공개(구체 매처를 그룹 인증 매처보다 먼저)
+                        .requestMatchers(HttpMethod.GET, "/api/groups/discounts").permitAll()
+                        // 그룹 — 생성/가입/탈퇴/내 목록 등 인증 필수
+                        .requestMatchers("/api/groups/**").authenticated()
                         // 업로드 파일 공개 접근
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         // API 문서

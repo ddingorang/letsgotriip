@@ -150,4 +150,62 @@ export const documentApi = {
   remove: (id) => http.delete(`/api/documents/${id}`),
 }
 
+// ── Stories (내 여행 스토리, BE: /api/stories, 인증 필요) ──────────────────────
+// GET    /api/stories               → 내 스토리 목록 (createdAt desc)
+// GET    /api/stories/{storyId}     → 스토리 상세 (소유자만)
+// POST   /api/stories               → 스토리 생성 (201 Created + Location)
+// PATCH  /api/stories/{storyId}     → 부분 수정 (소유자만, null 아닌 필드만)
+// DELETE /api/stories/{storyId}     → 삭제 (소유자만, 204)
+export const storyApi = {
+  list: () => http.get('/api/stories'),
+  get: (storyId) => http.get(`/api/stories/${storyId}`),
+  create: (data) => http.post('/api/stories', data),
+  update: (storyId, data) => http.patch(`/api/stories/${storyId}`, data),
+  remove: (storyId) => http.delete(`/api/stories/${storyId}`),
+}
+
+// ── Groups (여행 그룹/단체할인, BE: /api/groups) ──────────────────────────────
+// POST   /api/groups                → 그룹 생성 (소유자 OWNER 자동 추가, 201, auth)
+// GET    /api/groups                → 내가 속한/소유한 그룹 목록 (auth)
+// GET    /api/groups/{id}           → 그룹 단건 (public, 없으면 400)
+// GET    /api/groups/{id}/members   → 멤버 목록 (public)
+// POST   /api/groups/{id}/join      → 가입 (MEMBER, auth, 204)
+// DELETE /api/groups/{id}/leave     → 탈퇴 (auth, 204)
+// GET    /api/groups/discounts      → 단체할인 데모 목록 (public)
+export const groupApi = {
+  list: () => http.get('/api/groups'),
+  get: (id) => http.get(`/api/groups/${id}`),
+  create: (data) => http.post('/api/groups', data),
+  join: (id) => http.post(`/api/groups/${id}/join`),
+  leave: (id) => http.delete(`/api/groups/${id}/leave`),
+  members: (id) => http.get(`/api/groups/${id}/members`),
+  discounts: () => http.get('/api/groups/discounts'),
+}
+
+// ── Analysis (STT/카톡 전처리, BE: PreprocessingController @ "analysis") ───────
+// BE는 /api 프리픽스 없이 analysis/upload/kakao·analysis/upload/voice 로 서빙하며,
+// 멀티파트 필드명은 'file'(@RequestParam("file"))이다. community/companion 과 동일
+// 하게 FE는 /api/analysis/* 로 호출하고 dev 프록시/리버스 프록시가 /api 를 제거한다
+// (프록시 rewrite 추가는 Wire 단계가 담당).
+// POST /api/analysis/upload/kakao  (multipart 'file') → Long dataId
+// POST /api/analysis/upload/voice  (multipart 'file') → Long dataId
+export const analysisApi = {
+  uploadKakao: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post('/api/analysis/upload/kakao', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60_000,
+    })
+  },
+  uploadVoice: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post('/api/analysis/upload/voice', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120_000,
+    })
+  },
+}
+
 export default http
