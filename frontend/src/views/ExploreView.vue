@@ -106,13 +106,11 @@
           <div class="place-img">
             <div class="img-placeholder small">
               <img
-                v-if="place.imageUrl"
-                :src="place.imageUrl"
+                :src="thumbSrc(place)"
                 :alt="place.name"
                 class="thumb-img"
-                @error="(e) => e.target.style.display='none'"
+                @error="(e) => onThumbError(e, place)"
               />
-              <span v-else class="rank-num">{{ idx + 1 }}</span>
             </div>
           </div>
           <div class="place-info">
@@ -139,21 +137,23 @@
         <div class="sheet-header festival-header">
           <h2 class="sheet-title">
             진행중인 축제
-            <span class="count">{{ festivalStore.festivals.slice(0, 4).length }}</span>
+            <span class="count">{{ festivalStore.festivals.slice(0, 6).length }}</span>
           </h2>
         </div>
         <div class="festival-grid">
           <div
-            v-for="fest in festivalStore.festivals.slice(0, 4)"
+            v-for="fest in festivalStore.festivals.slice(0, 6)"
             :key="fest.id"
             class="festival-row"
           >
-            <div class="festival-dot" />
+            <div class="festival-thumb">
+              <img :src="festThumb(fest)" :alt="fest.title" @error="(e) => onFestError(e, fest)" />
+            </div>
             <div class="festival-info">
               <span class="festival-title">{{ fest.title }}</span>
               <span class="festival-addr">{{ fest.address }}</span>
+              <span class="festival-date">{{ formatFestDate(fest.startDate) }} ~ {{ formatFestDate(fest.endDate) }}</span>
             </div>
-            <span class="festival-date">{{ formatFestDate(fest.startDate) }}</span>
           </div>
         </div>
       </template>
@@ -266,18 +266,24 @@ function locParams() {
   }
 }
 
-// 현재 위치 확보 — 성공 시 거리순 + 근처 목록 재조회
+// 현재 위치 확보 — 성공 시 거리순 + 근처 목록 조회. 실패/미지원 시 전체 목록 폴백.
 function locateUser(forceSort = false) {
-  if (!navigator.geolocation) return
+  if (!navigator.geolocation) {
+    if (!store.attractions.length) loadAttractions()   // 위치 미지원 → 전체
+    return
+  }
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       userLoc.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       if (forceSort || sortMode.value === 'default') sortMode.value = 'distance'
-      // 위치 확보 → BE 좌표 검색으로 근처 목록 재조회 (검색 중이 아닐 때)
+      // 위치 확보 → BE 좌표 검색으로 근처 목록 조회 (검색 중이 아닐 때)
       if (!searchQuery.value.trim()) loadAttractions()
     },
-    () => {},   // 거부/실패 시 기본순 유지
-    { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+    () => {
+      // 거부/실패 → 위치 없이 전체 목록(아직 안 불러왔으면)
+      if (!store.attractions.length) loadAttractions()
+    },
+    { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
   )
 }
 
@@ -337,6 +343,28 @@ function formatDist(km) {
   return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`
 }
 
+// 썸네일 — 실제 이미지가 없으면 id 기반 결정적 사진(picsum)으로 채움
+function placePlaceholder(place) {
+  return `https://picsum.photos/seed/triip-${place.contentId ?? place.name}/240/240`
+}
+function thumbSrc(place) {
+  return place.imageUrl || placePlaceholder(place)
+}
+function onThumbError(e, place) {
+  const fb = placePlaceholder(place)
+  if (e.target.src !== fb) e.target.src = fb
+}
+function festPlaceholder(fest) {
+  return `https://picsum.photos/seed/fest-${fest.id ?? fest.title}/240/240`
+}
+function festThumb(fest) {
+  return fest.image || festPlaceholder(fest)
+}
+function onFestError(e, fest) {
+  const fb = festPlaceholder(fest)
+  if (e.target.src !== fb) e.target.src = fb
+}
+
 function formatFestDate(raw) {
   if (!raw || raw.length < 8) return raw
   return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)}`
@@ -344,10 +372,12 @@ function formatFestDate(raw) {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
-  store.list({ size: PAGE_SIZE })            // default: 전체 (matches selectedCategory 'all')
+  // 위치 우선 — 진입 즉시 내 주변부터. 위치 확보까지 스켈레톤(빈결과 깜빡임 방지),
+  // 성공 시 근처 목록, 거부/실패/미지원 시 전체 목록으로 폴백(locateUser 내부에서 처리).
+  store.loading = true
   festivalStore.loadFestivals()              // festival section (non-blocking)
   store.loadAreas()                          // area list for potential future use
-  locateUser()                               // 현재 위치 확보 → 기본 거리순 정렬
+  locateUser()
 })
 </script>
 
@@ -497,17 +527,24 @@ onMounted(() => {
 
 /* ── Place grid / rows ────────────────────────────────────────────────────── */
 .place-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px 16px;
 }
 
 .place-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
   align-items: center;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  transition: background 0.12s;
+}
+
+.place-row:active {
+  background: var(--color-surface);
 }
 
 .place-img {
@@ -515,14 +552,15 @@ onMounted(() => {
 }
 
 .img-placeholder.small {
-  width: 56px;
-  height: 56px;
+  width: 66px;
+  height: 66px;
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, #efe6e4, #e7e0d8);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .thumb-img {
@@ -652,34 +690,48 @@ onMounted(() => {
 .festival-grid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 16px 16px;
+  gap: 4px;
+  padding: 0 8px 16px;
 }
 
 .festival-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--radius-md);
 }
 
-.festival-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-peach);
+.festival-thumb {
+  width: 66px;
+  height: 66px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
   flex-shrink: 0;
+  background: linear-gradient(135deg, #efe6e4, #e7e0d8);
+}
+
+.festival-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .festival-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .festival-title {
   display: block;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--color-ink);
+  letter-spacing: -0.2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -687,13 +739,16 @@ onMounted(() => {
 
 .festival-addr {
   display: block;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--color-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .festival-date {
   font-size: 11.5px;
-  color: var(--color-ink-muted);
-  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-peach);
 }
 </style>

@@ -8,7 +8,7 @@
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
           <circle cx="12" cy="10" r="3" />
         </svg>
-        <span class="location-text">현재 위치 · 제주특별자치도</span>
+        <span class="location-text">{{ locationLabel }}</span>
       </div>
       <h1 class="home-title">오늘은 어디로<br />떠나볼까요?</h1>
       <div class="header-right">
@@ -69,16 +69,18 @@
 import { onMounted, computed, ref } from 'vue'
 import PlaceCard from '@/components/common/PlaceCard.vue'
 import PostCard from '@/components/community/PostCard.vue'
-import { usePlacesStore } from '@/stores/places.js'
+import { useAttractionStore } from '@/stores/attraction.js'
 import { usePostsStore } from '@/stores/posts.js'
 import { useAuthStore } from '@/stores/auth.js'
 
-const placesStore = usePlacesStore()
+const attractionStore = useAttractionStore()
 const postsStore = usePostsStore()
 const authStore = useAuthStore()
 
-const places = computed(() => placesStore.places.slice(0, 5))
+// 지금 뜨는 여행지 — TourAPI 관광지(내 주변 우선, 실패 시 제주 인기)
+const places = computed(() => attractionStore.attractions.slice(0, 10))
 const posts = computed(() => postsStore.posts)
+const locationLabel = ref('현재 위치 · 제주특별자치도')
 
 // 업로드한 프로필만 표시 — BE 기본값(/images/default-profile.png)은 실제 파일이 없어 깨지므로 placeholder 처리
 const avatarBroken = ref(false)
@@ -111,12 +113,38 @@ const categories = [
 ]
 
 function toggleBookmark(id) {
-  const place = placesStore.places.find((p) => p.id === id)
+  const place = attractionStore.attractions.find((p) => p.id === id)
   if (place) place.bookmarked = !place.bookmarked
 }
 
-onMounted(async () => {
-  await Promise.all([placesStore.fetchPlaces(), postsStore.fetchPosts(true)])
+// 제주 인기 관광지 — 위치 거부/미지원 시 폴백
+function loadJejuPopular() {
+  locationLabel.value = '추천 · 제주특별자치도'
+  attractionStore.list({ areaCode: 39, contentTypeId: 12, size: 10 })
+}
+
+// 내 주변 관광지 우선 — 위치 확보되면 근처, 아니면 제주 인기
+function loadNearbyAttractions() {
+  if (!navigator.geolocation) return loadJejuPopular()
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      locationLabel.value = '현재 위치 · 내 주변'
+      attractionStore.list({
+        mapX: pos.coords.longitude,
+        mapY: pos.coords.latitude,
+        radius: 20000,
+        contentTypeId: 12,
+        size: 10,
+      })
+    },
+    () => loadJejuPopular(),
+    { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
+  )
+}
+
+onMounted(() => {
+  postsStore.fetchPosts(true)
+  loadNearbyAttractions()
 })
 </script>
 

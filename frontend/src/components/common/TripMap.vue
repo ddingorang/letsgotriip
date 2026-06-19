@@ -22,6 +22,8 @@ const mapEl = ref(null)
 const error = ref('')
 let map = null
 let overlays = []
+let resizeObserver = null
+let kakaoRef = null
 
 const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY
 
@@ -93,16 +95,46 @@ function renderMarkers(kakao) {
   }
 }
 
+// 컨테이너 크기가 0이거나 늦게 잡히면 지도가 회색으로 남으므로,
+// relayout + 마커 재배치를 수행해 항상 정상 표시되도록 한다.
+function refresh() {
+  if (!map || !kakaoRef) return
+  map.relayout()
+  renderMarkers(kakaoRef)
+}
+
 onMounted(async () => {
   await nextTick()
   try {
     const kakao = await loadKakao()
+    kakaoRef = kakao
     map = new kakao.maps.Map(mapEl.value, {
       center: new kakao.maps.LatLng(props.center[0], props.center[1]),
       level: props.level,
     })
     renderMarkers(kakao)
-    setTimeout(() => map && map.relayout(), 200)
+    // 탭 전환/폰트 로드 등으로 컨테이너 크기가 늦게 잡히는 경우 대비 — 재시도
+    setTimeout(refresh, 60)
+    setTimeout(refresh, 250)
+    setTimeout(refresh, 600)
+
+    // 컨테이너 크기가 바뀔 때마다(0→실측, 탭 표시 등) relayout
+    if (window.ResizeObserver && mapEl.value) {
+      let lastW = 0
+      let lastH = 0
+      resizeObserver = new ResizeObserver((entries) => {
+        const cr = entries[0]?.contentRect
+        if (!cr) return
+        const w = Math.round(cr.width)
+        const h = Math.round(cr.height)
+        if (w > 0 && h > 0 && (w !== lastW || h !== lastH)) {
+          lastW = w
+          lastH = h
+          refresh()
+        }
+      })
+      resizeObserver.observe(mapEl.value)
+    }
 
     watch(
       () => props.places,
@@ -121,8 +153,13 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   clearOverlays()
   map = null
+  kakaoRef = null
 })
 </script>
 
