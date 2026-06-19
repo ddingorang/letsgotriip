@@ -123,6 +123,76 @@
         </div>
       </div>
 
+      <!-- ── 여행 맥락 정보 (날씨/일출일몰/충전소) ──────────────────────────── -->
+      <div v-if="hasCoords" class="context-section">
+        <!-- 날씨 + 일출·일몰 + 3일 예보 -->
+        <div v-if="weatherLoading" class="ctx-card ctx-loading">
+          <span class="ctx-loading-text">날씨 정보를 불러오는 중…</span>
+        </div>
+        <div v-else-if="weather" class="ctx-card weather-card">
+          <div class="weather-now">
+            <div class="weather-now-main">
+              <span class="weather-temp">{{ currentTempLabel }}</span>
+              <span class="weather-desc">{{ weather.currentDescription || '정보 없음' }}</span>
+            </div>
+            <div v-if="todaySun" class="weather-sun">
+              <span class="sun-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                </svg>
+                일출 {{ todaySun.rise }}
+              </span>
+              <span class="sun-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 18a5 5 0 00-10 0M12 2v7M4.22 10.22l1.42 1.42M1 18h2M21 18h2M18.36 11.64l1.42-1.42M23 22H1M16 5l-4 4-4-4" />
+                </svg>
+                일몰 {{ todaySun.set }}
+              </span>
+            </div>
+          </div>
+          <div v-if="forecast.length" class="forecast-row">
+            <div v-for="d in forecast" :key="d.date" class="forecast-cell">
+              <span class="fc-day">{{ d.dayLabel }}</span>
+              <span class="fc-desc">{{ d.description }}</span>
+              <span class="fc-temp">
+                <span class="fc-max">{{ d.maxLabel }}</span>
+                <span class="fc-min">{{ d.minLabel }}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="ctx-card ctx-empty">
+          <span class="ctx-empty-text">날씨 정보를 불러올 수 없어요.</span>
+        </div>
+
+        <!-- 근처 전기차 충전소 -->
+        <div v-if="evStations.length" class="ev-section">
+          <div class="ev-header">
+            <h3 class="ev-title">
+              근처 전기차 충전소
+              <span class="demo-badge">데모</span>
+            </h3>
+          </div>
+          <div class="ev-list">
+            <div v-for="(ev, i) in evStations" :key="i" class="ev-item">
+              <div class="ev-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" />
+                </svg>
+              </div>
+              <div class="ev-info">
+                <p class="ev-name">{{ ev.name }}</p>
+                <p class="ev-addr">{{ ev.address }}</p>
+              </div>
+              <div class="ev-meta">
+                <span class="ev-type">{{ ev.type }}</span>
+                <span class="ev-count">{{ ev.chargerCount }}대</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Reviews (static seed — no reviews API) ────────────────────────── -->
       <div class="reviews-section">
         <div class="section-header">
@@ -164,11 +234,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { usePlanStore } from '@/stores/plan.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { contextApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 
 const route = useRoute()
@@ -183,6 +254,78 @@ const loading = ref(false)
 const fetchError = ref(null)
 const addMsg = ref('')      // 'added' | 'duplicate' | 'error' | 'no-auth'
 const addLoading = ref(false)
+
+// ── 여행 맥락 정보 (날씨/일출일몰/충전소) ────────────────────────────────────
+const weather = ref(null)
+const weatherLoading = ref(false)
+const evStations = ref([])
+
+const hasCoords = computed(() => !!(place.value?.lat && place.value?.lng))
+
+// "06-19" → "19일", 오늘은 "오늘"
+function formatDayLabel(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(`${dateStr}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return dateStr
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  if (d.getTime() === today.getTime()) return '오늘'
+  const days = ['일', '월', '화', '수', '목', '금', '토']
+  return `${days[d.getDay()]}요일`
+}
+
+// "2026-06-19T05:11" → "05:11"
+function formatTime(iso) {
+  if (!iso) return '--:--'
+  const m = String(iso).match(/T(\d{2}:\d{2})/)
+  return m ? m[1] : '--:--'
+}
+
+function tempLabel(v) {
+  return v == null ? '--°' : `${Math.round(v)}°`
+}
+
+const currentTempLabel = computed(() => tempLabel(weather.value?.currentTempC))
+
+const todaySun = computed(() => {
+  const d = weather.value?.daily?.[0]
+  if (!d) return null
+  return { rise: formatTime(d.sunrise), set: formatTime(d.sunset) }
+})
+
+const forecast = computed(() => {
+  const list = weather.value?.daily ?? []
+  return list.slice(0, 3).map((d) => ({
+    date: d.date,
+    dayLabel: formatDayLabel(d.date),
+    description: d.description || '—',
+    minLabel: tempLabel(d.minTempC),
+    maxLabel: tempLabel(d.maxTempC),
+  }))
+})
+
+async function loadContext() {
+  if (!hasCoords.value) return
+  const lat = place.value.lat
+  const lng = place.value.lng
+
+  weatherLoading.value = true
+  try {
+    const { data } = await contextApi.weather(lat, lng)
+    weather.value = data
+  } catch {
+    weather.value = null
+  } finally {
+    weatherLoading.value = false
+  }
+
+  try {
+    const { data } = await contextApi.evStations(lat, lng)
+    evStations.value = Array.isArray(data) ? data.slice(0, 3) : []
+  } catch {
+    evStations.value = []
+  }
+}
 
 // Static review seed (no reviews endpoint in API)
 const STATIC_REVIEWS = [
@@ -261,6 +404,8 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  // 좌표가 있으면 날씨/충전소 맥락 정보 로드 (실패 시 위젯 숨김)
+  if (hasCoords.value) loadContext()
 })
 </script>
 
@@ -611,6 +756,213 @@ onMounted(async () => {
   color: var(--color-dark-text);
   line-height: 1.6;
   letter-spacing: -0.2px;
+}
+
+/* ── 여행 맥락 정보 ───────────────────────────────────────────────────────── */
+.context-section {
+  padding: 20px 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ctx-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.ctx-loading,
+.ctx-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ctx-loading-text,
+.ctx-empty-text {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.weather-now {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.weather-now-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.weather-temp {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.weather-desc {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.weather-sun {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.sun-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--color-ink-secondary);
+  font-family: var(--font-mono);
+}
+
+.forecast-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-line-light);
+}
+
+.forecast-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.fc-day {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.fc-desc {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  text-align: center;
+  min-height: 14px;
+}
+
+.fc-temp {
+  display: flex;
+  gap: 5px;
+}
+
+.fc-max {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+}
+
+.fc-min {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+/* ── 충전소 ──────────────────────────────────────────────────────────────── */
+.ev-header {
+  margin-bottom: 10px;
+}
+
+.ev-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+
+.demo-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-full);
+  padding: 1px 7px;
+}
+
+.ev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ev-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.ev-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-peach-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ev-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ev-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ev-addr {
+  font-size: 11.5px;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ev-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.ev-type {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+}
+
+.ev-count {
+  font-size: 11px;
+  color: var(--color-ink-muted);
 }
 
 .bottom-spacer {

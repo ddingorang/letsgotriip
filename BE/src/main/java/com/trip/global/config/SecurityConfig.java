@@ -55,6 +55,14 @@ public class SecurityConfig {
                         // 비회원 공개 조회 (탐색 도메인)
                         .requestMatchers(HttpMethod.GET, "/api/festivals/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/attractions/**").permitAll()
+                        // 여행 맥락 정보(날씨/충전소/뉴스) — 전부 비회원 공개
+                        .requestMatchers("/api/context/**").permitAll()
+                        // 공유 토큰으로 계획 공개 조회 (소유 검증 없이 접근, 토큰만으로)
+                        .requestMatchers(HttpMethod.GET, "/api/plans/shared/**").permitAll()
+                        // 공지 변경(생성/수정/삭제)은 ADMIN 전용 — GET permitAll 보다 먼저 선언
+                        .requestMatchers(HttpMethod.POST, "/api/notices", "/api/notices/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/notices/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/notices/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/notices", "/api/notices/**").permitAll()
                         // 커뮤니티 비회원 공개 조회
                         .requestMatchers(HttpMethod.GET, "/community/posts", "/community/posts/*", "/community/posts/*/comments").permitAll()

@@ -8,7 +8,12 @@
         </svg>
       </button>
       <span class="nav-title">AI 동선 리포트</span>
-      <div class="nav-spacer" />
+      <button v-if="plan" class="nav-btn" :disabled="shareLoading" title="공유하기" @click="sharePlan">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      </button>
+      <div v-else class="nav-spacer" />
     </div>
 
     <!-- Loading -->
@@ -67,8 +72,44 @@
         {{ optNote }}
       </div>
 
+      <!-- 공유 링크 (공유 후 노출) -->
+      <div v-if="shareInfo" class="share-bar">
+        <span class="share-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+        </span>
+        <code class="share-url">{{ shareInfo.url }}</code>
+        <button class="share-copy-btn" @click="copyShareUrl">{{ shareCopied ? '복사됨' : '복사' }}</button>
+      </div>
+
       <!-- Scroll area -->
       <div class="scroll-content">
+        <!-- 예산 카드 -->
+        <div v-if="budget" class="budget-card">
+          <div class="budget-head">
+            <span class="budget-title">예상 예산</span>
+            <span class="budget-total">{{ formatWon(budget.totalEstimated) }}</span>
+          </div>
+          <div class="budget-days">
+            <div v-for="d in budget.dayBudgets" :key="d.dayNo" class="budget-day-row">
+              <span class="budget-day-label">{{ d.dayNo }}일차</span>
+              <span class="budget-day-cost">{{ formatWon(d.estimatedCost) }}</span>
+            </div>
+          </div>
+          <div v-if="budget.plannedBudget != null" class="budget-planned-row">
+            <span>설정 예산 {{ formatWon(budget.plannedBudget) }}</span>
+            <span
+              v-if="budget.difference != null"
+              class="budget-diff"
+              :class="{ over: budget.difference < 0 }"
+            >
+              {{ budget.difference >= 0 ? '여유 ' : '초과 ' }}{{ formatWon(Math.abs(budget.difference)) }}
+            </span>
+          </div>
+          <p v-if="budget.note" class="budget-note">{{ budget.note }}</p>
+        </div>
+
         <!-- Per-day optimized route -->
         <div
           v-for="day in days"
@@ -155,6 +196,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
+import { planApi } from '@/api/index.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -164,6 +206,14 @@ const planId = route.params.id
 
 const applying = ref(false)
 
+// ── 예산 ─────────────────────────────────────────────────────────────────────
+const budget = ref(null)        // { planId, dayBudgets, totalEstimated, plannedBudget, difference, note }
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+const shareInfo = ref(null)     // { url }
+const shareLoading = ref(false)
+const shareCopied = ref(false)
+
 onMounted(async () => {
   try {
     await planStore.loadPlan(planId)
@@ -171,7 +221,52 @@ onMounted(async () => {
   } catch {
     // error shown via planStore.error
   }
+  // 예산은 별도로(실패해도 리포트 화면에는 영향 없음)
+  try {
+    const { data } = await planApi.getBudget(planId)
+    budget.value = data
+  } catch {
+    budget.value = null
+  }
 })
+
+/** 원(₩) 포맷 */
+function formatWon(n) {
+  if (n == null) return '-'
+  return `${Number(n).toLocaleString('ko-KR')}원`
+}
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+async function sharePlan() {
+  if (shareLoading.value) return
+  shareLoading.value = true
+  shareCopied.value = false
+  try {
+    const { data } = await planApi.share(planId)
+    const path = data?.shareUrl ?? `/plan/shared/${data?.shareToken}`
+    shareInfo.value = { url: `${window.location.origin}${path}` }
+    await copyToClipboard(shareInfo.value.url)
+  } catch {
+    // 공유 실패 — 별도 알림 없이 무시(리포트 흐름 방해 방지)
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+async function copyShareUrl() {
+  if (!shareInfo.value) return
+  await copyToClipboard(shareInfo.value.url)
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    shareCopied.value = true
+    setTimeout(() => { shareCopied.value = false }, 1500)
+  } catch {
+    // 클립보드 접근 불가 — 표시된 링크를 직접 복사
+  }
+}
 
 const plan = computed(() => planStore.current?.id == planId ? planStore.current : null)
 const days = computed(() => plan.value?.days ?? [])
@@ -632,6 +727,119 @@ async function applyRoute() {
   font-weight: 500;
   color: var(--color-peach-pressed);
   flex-shrink: 0;
+}
+
+/* ── Share bar ────────────────────────────────────────────────────────────── */
+.share-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-line-light);
+  flex-shrink: 0;
+}
+
+.share-icon {
+  flex-shrink: 0;
+  color: var(--color-peach-pressed);
+  display: flex;
+}
+
+.share-url {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--color-ink-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-copy-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  padding: 4px 8px;
+}
+
+/* ── Budget card ──────────────────────────────────────────────────────────── */
+.budget-card {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.budget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.budget-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.budget-total {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-peach-pressed);
+  letter-spacing: -0.3px;
+}
+
+.budget-days {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budget-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.budget-day-label {
+  color: var(--color-ink-muted);
+}
+
+.budget-day-cost {
+  color: var(--color-ink-secondary);
+  font-weight: 600;
+}
+
+.budget-planned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-line-light);
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+
+.budget-diff {
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+}
+
+.budget-diff.over {
+  color: var(--color-error);
+}
+
+.budget-note {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  margin-top: 10px;
 }
 
 /* ── Scroll area ──────────────────────────────────────────────────────────── */

@@ -2,13 +2,36 @@
   <div class="page">
     <header class="plan-header">
       <h1 class="header-title">내 여행 계획</h1>
-      <button class="add-btn" @click="goNewTrip" title="새 여행 만들기">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
+      <div class="header-actions">
+        <button
+          v-if="plans.length >= 2"
+          class="compare-toggle"
+          :class="{ active: compareMode }"
+          @click="toggleCompareMode"
+          title="두 계획 비교"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+        </button>
+        <button class="add-btn" @click="goNewTrip" title="새 여행 만들기">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
     </header>
+
+    <!-- 비교 모드 안내 배너 -->
+    <div v-if="compareMode" class="compare-banner">
+      <span class="compare-banner-text">
+        비교할 계획 두 개를 선택하세요 ({{ compareSelection.length }}/2)
+      </span>
+      <button class="compare-banner-cancel" @click="toggleCompareMode">취소</button>
+    </div>
 
     <div class="scroll-content">
       <!-- ── Empty state ──────────────────────────────────────────────── -->
@@ -36,11 +59,14 @@
           v-for="plan in plans"
           :key="plan.id"
           class="plan-card"
-          :class="{ expanded: selectedPlanId === plan.id }"
+          :class="{ expanded: selectedPlanId === plan.id, selectable: compareMode, selected: isCompareSelected(plan.id) }"
         >
-          <!-- Card header — always visible, click to expand/collapse -->
-          <div class="plan-thumb" @click="togglePlan(plan)">
+          <!-- Card header — click to expand/collapse (or select in compare mode) -->
+          <div class="plan-thumb" @click="onCardTap(plan)">
             <div class="thumb-gradient" />
+            <div v-if="compareMode" class="compare-check" :class="{ on: isCompareSelected(plan.id) }">
+              <svg v-if="isCompareSelected(plan.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            </div>
             <div class="plan-dates">
               <span class="date-label">{{ formatDate(plan.startDate) }}</span>
               <span class="date-sep">–</span>
@@ -48,14 +74,14 @@
             </div>
           </div>
           <div class="plan-info">
-            <div class="plan-info-main" @click="togglePlan(plan)">
+            <div class="plan-info-main" @click="onCardTap(plan)">
               <h3 class="plan-name">{{ plan.title }}</h3>
               <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
               <div class="plan-spots">
                 <span v-for="spot in plan.spots?.slice(0, 3)" :key="spot" class="spot-chip">{{ spot }}</span>
               </div>
             </div>
-            <button class="plan-delete-btn" title="여행 계획 삭제" @click.stop="confirmDeletePlan(plan)">
+            <button v-if="!compareMode" class="plan-delete-btn" title="여행 계획 삭제" @click.stop="confirmDeletePlan(plan)">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
@@ -135,6 +161,42 @@
               </template>
               <div v-else class="detail-loading">상세 정보를 불러오는 중...</div>
 
+              <!-- 예산 패널 -->
+              <div v-if="budget && budget.planId === plan.id" class="budget-panel">
+                <div class="budget-head">
+                  <span class="budget-title">예상 예산</span>
+                  <span class="budget-total">{{ formatWon(budget.totalEstimated) }}</span>
+                </div>
+                <div class="budget-days">
+                  <div v-for="d in budget.dayBudgets" :key="d.dayNo" class="budget-day-row">
+                    <span class="budget-day-label">{{ d.dayNo }}일차</span>
+                    <span class="budget-day-cost">{{ formatWon(d.estimatedCost) }}</span>
+                  </div>
+                </div>
+                <div v-if="budget.plannedBudget != null" class="budget-planned-row">
+                  <span>설정 예산 {{ formatWon(budget.plannedBudget) }}</span>
+                  <span
+                    v-if="budget.difference != null"
+                    class="budget-diff"
+                    :class="{ over: budget.difference < 0 }"
+                  >
+                    {{ budget.difference >= 0 ? '여유 ' : '초과 ' }}{{ formatWon(Math.abs(budget.difference)) }}
+                  </span>
+                </div>
+                <p v-if="budget.note" class="budget-note">{{ budget.note }}</p>
+              </div>
+
+              <!-- 공유 링크 -->
+              <div v-if="shareInfo && shareInfo.planId === plan.id" class="share-panel">
+                <span class="share-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                </span>
+                <code class="share-url">{{ shareInfo.url }}</code>
+                <button class="share-copy-btn" @click="copyShareUrl">{{ shareCopied ? '복사됨' : '복사' }}</button>
+              </div>
+
               <!-- Action buttons -->
               <div class="detail-actions">
                 <button class="detail-action-btn optimize-btn" @click="goReport(plan.id)">
@@ -143,6 +205,20 @@
                     <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
                   </svg>
                   AI 동선 최적화
+                </button>
+              </div>
+              <div class="detail-actions secondary">
+                <button class="detail-sub-btn" :disabled="budgetLoading" @click="loadBudget(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                  </svg>
+                  {{ budgetLoading ? '계산 중...' : '예산 보기' }}
+                </button>
+                <button class="detail-sub-btn" :disabled="shareLoading" @click="sharePlan(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                  </svg>
+                  {{ shareLoading ? '생성 중...' : '공유하기' }}
                 </button>
               </div>
             </div>
@@ -177,14 +253,44 @@
 
       <div class="bottom-spacer" />
     </div>
+
+    <!-- 비교 결과 모달 -->
+    <Transition name="fade">
+      <div v-if="compareResult" class="compare-overlay" @click.self="closeCompare">
+        <div class="compare-sheet">
+          <div class="compare-sheet-head">
+            <h3 class="compare-sheet-title">계획 비교</h3>
+            <button class="compare-sheet-close" @click="closeCompare">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+          <div class="compare-grid">
+            <div class="compare-col">
+              <div class="compare-plan-name">{{ compareResult.a.title }}</div>
+            </div>
+            <div class="compare-col-label" />
+            <div class="compare-col">
+              <div class="compare-plan-name">{{ compareResult.b.title }}</div>
+            </div>
+
+            <template v-for="row in compareRows" :key="row.key">
+              <div class="compare-val" :class="row.aClass">{{ row.a }}</div>
+              <div class="compare-metric">{{ row.label }}</div>
+              <div class="compare-val" :class="row.bClass">{{ row.b }}</div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
+import { planApi } from '@/api/index.js'
 
 const router = useRouter()
 const planStore = usePlanStore()
@@ -192,6 +298,20 @@ const planStore = usePlanStore()
 const { plans } = storeToRefs(planStore)
 
 const selectedPlanId = ref(null)
+
+// ── 예산 보기 ────────────────────────────────────────────────────────────────
+const budget = ref(null)        // { planId, dayBudgets, totalEstimated, plannedBudget, difference, note }
+const budgetLoading = ref(false)
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+const shareInfo = ref(null)     // { planId, url }
+const shareLoading = ref(false)
+const shareCopied = ref(false)
+
+// ── 비교 ─────────────────────────────────────────────────────────────────────
+const compareMode = ref(false)
+const compareSelection = ref([])   // 선택된 planId 최대 2개
+const compareResult = ref(null)    // { a: PlanStat, b: PlanStat }
 
 const companions = ref([
   { id: 1, category: '관광', title: '제주 동부 일주 같이 해요!', destination: '제주도', dates: '12월 28-30일', currentCount: 2, maxCount: 4, dday: 5 },
@@ -223,6 +343,15 @@ function goNewTrip() {
   router.push('/ai/plan')
 }
 
+/** 카드 탭 — 비교 모드면 선택, 아니면 펼치기/접기 */
+function onCardTap(plan) {
+  if (compareMode.value) {
+    toggleCompareSelect(plan.id)
+    return
+  }
+  togglePlan(plan)
+}
+
 /** Expand/collapse a plan card and load its detail */
 async function togglePlan(plan) {
   if (selectedPlanId.value === plan.id) {
@@ -230,6 +359,9 @@ async function togglePlan(plan) {
     return
   }
   selectedPlanId.value = plan.id
+  // 다른 계획을 펼치면 이전 계획의 예산/공유 패널은 감춘다
+  if (budget.value && budget.value.planId !== plan.id) budget.value = null
+  if (shareInfo.value && shareInfo.value.planId !== plan.id) shareInfo.value = null
   // Load plan detail if not already loaded or stale
   if (planStore.current?.id !== plan.id) {
     try {
@@ -244,6 +376,142 @@ async function togglePlan(plan) {
 function goReport(planId) {
   router.push(`/plan/${planId}/report`)
 }
+
+/** 원(₩) 포맷 */
+function formatWon(n) {
+  if (n == null) return '-'
+  return `${Number(n).toLocaleString('ko-KR')}원`
+}
+
+// ── 예산 보기 ────────────────────────────────────────────────────────────────
+async function loadBudget(planId) {
+  if (budgetLoading.value) return
+  // 토글: 이미 같은 계획 예산이 열려있으면 닫는다
+  if (budget.value && budget.value.planId === planId) {
+    budget.value = null
+    return
+  }
+  budgetLoading.value = true
+  try {
+    const { data } = await planApi.getBudget(planId)
+    budget.value = data
+  } catch {
+    budget.value = null
+  } finally {
+    budgetLoading.value = false
+  }
+}
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+async function sharePlan(planId) {
+  if (shareLoading.value) return
+  // 토글: 이미 같은 계획 공유링크가 열려있으면 닫는다
+  if (shareInfo.value && shareInfo.value.planId === planId) {
+    shareInfo.value = null
+    return
+  }
+  shareLoading.value = true
+  shareCopied.value = false
+  try {
+    const { data } = await planApi.share(planId)
+    // BE는 상대경로(/plan/shared/{token})를 주므로 절대 URL로 변환
+    const path = data?.shareUrl ?? `/plan/shared/${data?.shareToken}`
+    const url = `${window.location.origin}${path}`
+    shareInfo.value = { planId, url }
+    // 생성 직후 클립보드에 자동 복사 시도
+    await copyToClipboard(url)
+  } catch {
+    shareInfo.value = null
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+async function copyShareUrl() {
+  if (!shareInfo.value) return
+  await copyToClipboard(shareInfo.value.url)
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    shareCopied.value = true
+    setTimeout(() => { shareCopied.value = false }, 1500)
+  } catch {
+    // 클립보드 접근 불가 — 사용자가 링크를 직접 복사하면 됨
+  }
+}
+
+// ── 비교 ─────────────────────────────────────────────────────────────────────
+function toggleCompareMode() {
+  compareMode.value = !compareMode.value
+  compareSelection.value = []
+  compareResult.value = null
+  if (compareMode.value) {
+    // 비교 모드 진입 시 펼친 카드/패널 정리
+    selectedPlanId.value = null
+    budget.value = null
+    shareInfo.value = null
+  }
+}
+
+function isCompareSelected(planId) {
+  return compareSelection.value.includes(planId)
+}
+
+async function toggleCompareSelect(planId) {
+  const idx = compareSelection.value.indexOf(planId)
+  if (idx >= 0) {
+    compareSelection.value.splice(idx, 1)
+    return
+  }
+  if (compareSelection.value.length >= 2) return  // 최대 2개
+  compareSelection.value.push(planId)
+  if (compareSelection.value.length === 2) {
+    await runCompare()
+  }
+}
+
+async function runCompare() {
+  const [aId, bId] = compareSelection.value
+  try {
+    const { data } = await planApi.compare(aId, bId)
+    compareResult.value = data
+  } catch {
+    compareResult.value = null
+  }
+}
+
+function closeCompare() {
+  compareResult.value = null
+  // 모달만 닫고 비교 모드는 유지 — 선택은 초기화해 다시 고를 수 있게
+  compareSelection.value = []
+}
+
+/** 비교 표 행 — 값이 더 좋은 쪽을 강조 (낮을수록 좋은 항목은 작은 값 강조) */
+const compareRows = computed(() => {
+  const r = compareResult.value
+  if (!r) return []
+  const a = r.a
+  const b = r.b
+  const dur = (m) => {
+    const h = Math.floor(m / 60)
+    const min = m % 60
+    return h > 0 ? `${h}시간${min > 0 ? ' ' + min + '분' : ''}` : `${min}분`
+  }
+  const rows = [
+    { key: 'days', label: '일정', a: `${a.totalDays}일`, b: `${b.totalDays}일`, aBetter: null, bBetter: null },
+    { key: 'places', label: '장소 수', a: `${a.totalPlaces}곳`, b: `${b.totalPlaces}곳`, aBetter: a.totalPlaces > b.totalPlaces, bBetter: b.totalPlaces > a.totalPlaces },
+    { key: 'dist', label: '총 이동거리', a: `${a.totalDistanceKm}km`, b: `${b.totalDistanceKm}km`, aBetter: a.totalDistanceKm < b.totalDistanceKm, bBetter: b.totalDistanceKm < a.totalDistanceKm },
+    { key: 'dur', label: '예상 소요', a: dur(a.totalDurationMin), b: dur(b.totalDurationMin), aBetter: a.totalDurationMin < b.totalDurationMin, bBetter: b.totalDurationMin < a.totalDurationMin },
+    { key: 'budget', label: '예산', a: a.budget != null ? formatWon(a.budget) : '-', b: b.budget != null ? formatWon(b.budget) : '-', aBetter: null, bBetter: null },
+  ]
+  return rows.map((row) => ({
+    ...row,
+    aClass: row.aBetter ? 'better' : '',
+    bClass: row.bBetter ? 'better' : '',
+  }))
+})
 
 /** 여행 계획 삭제 — 확인 후 deletePlan 호출 */
 async function confirmDeletePlan(plan) {
@@ -307,6 +575,29 @@ async function removePlace(planId, dayNo, place) {
   letter-spacing: -0.5px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compare-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-ink-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.compare-toggle.active {
+  background: var(--color-peach);
+  color: white;
+}
+
 .add-btn {
   width: 40px;
   height: 40px;
@@ -316,6 +607,58 @@ async function removePlace(planId, dayNo, place) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ── Compare mode ─────────────────────────────────────────────────────────── */
+.compare-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--color-peach-light);
+  border-bottom: 1px solid rgba(247, 143, 87, 0.15);
+}
+
+.compare-banner-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+}
+
+.compare-banner-cancel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.plan-card.selectable {
+  outline: 2px solid transparent;
+  transition: outline-color 0.15s;
+}
+
+.plan-card.selected {
+  outline-color: var(--color-peach);
+}
+
+.compare-check {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-peach);
+  z-index: 2;
+}
+
+.compare-check.on {
+  background: white;
+  border-color: white;
 }
 
 .scroll-content {
@@ -633,6 +976,249 @@ async function removePlace(planId, dayNo, place) {
   background: linear-gradient(90deg, var(--color-peach) 0%, #f9a96a 100%);
   color: #fff;
   box-shadow: 0 3px 10px rgba(247, 143, 87, 0.3);
+}
+
+.detail-actions.secondary {
+  margin-top: 8px;
+}
+
+.detail-sub-btn {
+  flex: 1;
+  height: 38px;
+  border-radius: var(--radius-xl);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  background: var(--color-white);
+  color: var(--color-ink-secondary);
+  border: 1px solid var(--color-line-light);
+}
+
+.detail-sub-btn:hover:not(:disabled) {
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  border-color: var(--color-peach-light);
+}
+
+.detail-sub-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Budget panel ─────────────────────────────────────────────────────────── */
+.budget-panel {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-top: 14px;
+  box-shadow: var(--shadow-card);
+}
+
+.budget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.budget-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.budget-total {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-peach-pressed);
+  letter-spacing: -0.3px;
+}
+
+.budget-days {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.budget-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.budget-day-label {
+  color: var(--color-ink-muted);
+}
+
+.budget-day-cost {
+  color: var(--color-ink-secondary);
+  font-weight: 600;
+}
+
+.budget-planned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-line-light);
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.budget-diff {
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+}
+
+.budget-diff.over {
+  color: var(--color-error);
+}
+
+.budget-note {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  margin-top: 8px;
+}
+
+/* ── Share panel ──────────────────────────────────────────────────────────── */
+.share-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-peach-light);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+
+.share-icon {
+  flex-shrink: 0;
+  color: var(--color-peach-pressed);
+  display: flex;
+}
+
+.share-url {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--color-ink-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-copy-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  padding: 4px 8px;
+}
+
+/* ── Compare modal ────────────────────────────────────────────────────────── */
+.compare-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 50;
+}
+
+.compare-sheet {
+  width: 100%;
+  background: var(--color-white);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 18px 20px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  max-height: 80%;
+  overflow-y: auto;
+}
+
+.compare-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.compare-sheet-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.4px;
+}
+
+.compare-sheet-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px 8px;
+  align-items: center;
+}
+
+.compare-col {
+  text-align: center;
+}
+
+.compare-plan-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-ink);
+  line-height: 1.35;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--color-peach-light);
+}
+
+.compare-col-label {
+  border-bottom: 2px solid transparent;
+}
+
+.compare-metric {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  text-align: center;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.compare-val {
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.compare-val.better {
+  color: var(--color-peach-pressed);
+  font-weight: 800;
+}
+
+/* fade transition for overlay */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 /* expand/collapse transition */

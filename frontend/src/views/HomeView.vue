@@ -60,6 +60,39 @@
         </div>
       </section>
 
+      <!-- ── 여행 뉴스 (데모) ──────────────────────────────────────────────── -->
+      <section v-if="newsLoading || news.length" class="section">
+        <div class="section-header">
+          <h2 class="section-title">
+            여행 뉴스
+            <span class="demo-badge">데모</span>
+          </h2>
+        </div>
+        <div v-if="newsLoading" class="news-loading">여행 뉴스를 불러오는 중…</div>
+        <div v-else class="news-list">
+          <a
+            v-for="(item, i) in news"
+            :key="i"
+            class="news-card"
+            :href="item.url || undefined"
+            :target="item.url ? '_blank' : undefined"
+            rel="noopener noreferrer"
+          >
+            <div class="news-body">
+              <p class="news-title">{{ item.title }}</p>
+              <p v-if="item.summary" class="news-summary">{{ item.summary }}</p>
+              <div class="news-meta">
+                <span v-if="item.source" class="news-source">{{ item.source }}</span>
+                <span v-if="formatNewsDate(item.publishedAt)" class="news-date">{{ formatNewsDate(item.publishedAt) }}</span>
+              </div>
+            </div>
+            <svg v-if="item.url" class="news-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </a>
+        </div>
+      </section>
+
       <div class="bottom-spacer" />
     </div>
   </div>
@@ -72,6 +105,7 @@ import PostCard from '@/components/community/PostCard.vue'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { usePostsStore } from '@/stores/posts.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { contextApi } from '@/api/index.js'
 
 const attractionStore = useAttractionStore()
 const postsStore = usePostsStore()
@@ -81,6 +115,30 @@ const authStore = useAuthStore()
 const places = computed(() => attractionStore.attractions.slice(0, 10))
 const posts = computed(() => postsStore.posts)
 const locationLabel = ref('현재 위치 · 제주특별자치도')
+
+// ── 여행 뉴스 (데모) ─────────────────────────────────────────────────────────
+const news = ref([])
+const newsLoading = ref(false)
+
+// "2026-06-19..." → "6월 19일"
+function formatNewsDate(raw) {
+  if (!raw) return ''
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`
+}
+
+async function loadNews() {
+  newsLoading.value = true
+  try {
+    const { data } = await contextApi.news()
+    news.value = Array.isArray(data) ? data.slice(0, 6) : []
+  } catch {
+    news.value = []
+  } finally {
+    newsLoading.value = false
+  }
+}
 
 // 업로드한 프로필만 표시 — BE 기본값(/images/default-profile.png)은 실제 파일이 없어 깨지므로 placeholder 처리
 const avatarBroken = ref(false)
@@ -145,6 +203,7 @@ function loadNearbyAttractions() {
 onMounted(() => {
   postsStore.fetchPosts(true)
   loadNearbyAttractions()
+  loadNews()
 })
 </script>
 
@@ -295,6 +354,88 @@ onMounted(() => {
   flex-direction: column;
   gap: 1px;
   background: var(--color-line-light);
+}
+
+/* ── 여행 뉴스 (데모) ─────────────────────────────────────────────────────── */
+.demo-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-full);
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.news-loading {
+  padding: 0 20px;
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 20px;
+}
+
+.news-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+
+.news-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.news-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.2px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.news-summary {
+  font-size: 12.5px;
+  color: var(--color-ink-secondary);
+  line-height: 1.5;
+  letter-spacing: -0.2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.news-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.news-source {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+}
+
+.news-date {
+  font-size: 11.5px;
+  color: var(--color-ink-muted);
+}
+
+.news-arrow {
+  flex-shrink: 0;
 }
 
 .bottom-spacer {

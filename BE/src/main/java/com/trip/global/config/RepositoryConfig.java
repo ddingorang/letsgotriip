@@ -17,7 +17,8 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
         "com.trip.companion.repository",     // CompanionPostRepository, CompanionApplicationRepository
         "com.trip.notice.repository",        // NoticeRepository
         "com.trip.notification.repository",  // NotificationRepository
-        "com.trip.document.repository"       // TripDocumentRepository (RAG 문서)
+        "com.trip.document.repository",      // TripDocumentRepository (RAG 문서)
+        "com.trip.checklist.repository"      // ChecklistItemRepository
 })
 @EnableMongoRepositories(basePackages = {
         "com.trip.chat.repository.mongo"     // ChatMessageRepository

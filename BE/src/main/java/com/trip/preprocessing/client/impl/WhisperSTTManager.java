@@ -1,5 +1,7 @@
 package com.trip.preprocessing.client.impl;
 
+import com.trip.global.error.GeneralException;
+import com.trip.global.error.ResponseCode;
 import com.trip.preprocessing.client.STTManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,18 +53,21 @@ public class WhisperSTTManager implements STTManager {
                     .retrieve()
                     .body(Map.class);
 
-            if (response != null && response.containsKey("text")) {
-                String result = (String) response.get("text");
+            if (response != null && response.get("text") instanceof String result && !result.isBlank()) {
                 log.info("Whisper STT conversion successful");
                 return result;
             }
 
-            throw new RuntimeException("Whisper API response is empty or invalid");
+            // 응답이 없거나 text가 비어 있으면 빈 전사 → 실패로 처리(가짜 성공 문자열 반환 금지)
+            throw new GeneralException(ResponseCode._INTERNAL_SERVER_ERROR, "Whisper API 응답이 비어 있거나 유효하지 않습니다.");
 
+        } catch (GeneralException e) {
+            throw e;
         } catch (Exception e) {
+            // 과거에는 실패 메시지를 정상 전사 결과처럼 반환해 FAILED가 SUCCESS로 저장되는 버그가 있었음.
+            // API 호출 실패 시 예외를 던져 상위(PreprocessingService)에서 저장하지 않도록 한다.
             log.error("Error during Whisper STT conversion: {}", e.getMessage());
-            // 실제 서비스에서는 에러 처리를 더 세밀하게 해야 함
-            return "STT 변환 실패: " + e.getMessage();
+            throw new GeneralException(ResponseCode._INTERNAL_SERVER_ERROR, "STT 변환에 실패했습니다.", e);
         }
     }
 }

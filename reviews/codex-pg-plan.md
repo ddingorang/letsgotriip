@@ -1,0 +1,25 @@
+코드 수정 없이 정적 리뷰만 했습니다. 테스트는 실행하지 않았습니다.
+
+- [high] 이전 플랜의 동선 리포트가 현재 플랜에 적용될 수 있음 / `routeReport`는 전역 store 상태인데 `loadPlan()`이 초기화하지 않고(`frontend/src/stores/plan.js:38-43`), `loadRouteReport()`는 loading도 세팅하지 않으며(`frontend/src/stores/plan.js:53-61`), 화면은 `report = planStore.routeReport`를 planId 검증 없이 씁니다(`frontend/src/views/PlanReportView.vue:186`). 적용 시 현재 `planId`에 stale `report.days`를 돌립니다(`frontend/src/views/PlanReportView.vue:410-419`). / `routeReport`를 plan별로 초기화하고 `report.planId == planId`일 때만 사용, 리포트 로딩 상태를 분리하세요.
+
+- [high] 장소 재정렬이 기존 DB 데이터 대신 TourAPI에 다시 의존함 / FE `replacePlaces()`가 기존 `placeId` 대신 `contentId/contentType`만 보냅니다(`frontend/src/stores/plan.js:148-150`). BE는 이 경우 매 항목마다 `upsertSnapshot()`을 호출합니다(`BE/src/main/java/com/trip/plan/service/PlanService.java:217-218`), 그리고 이는 캐시/폴백 없이 TourAPI `fetchDetail()`을 직접 호출합니다(`BE/src/main/java/com/trip/attraction/service/AttractionService.java:163-169`). `RestClient` timeout 설정도 없습니다(`BE/src/main/java/com/trip/global/config/RestClientConfig.java:17-20`). / 기존 장소는 `placeId`로 교체하고, 신규 장소만 외부 API를 호출하세요. TourAPI 예외는 502로 매핑하고 timeout을 설정하세요.
+
+- [high] 동시 장소 추가에서 seq/중복 race가 500으로 터짐 / `addPlace()`는 중복 검사 후(`BE/src/main/java/com/trip/plan/service/PlanService.java:174-178`) `max(seq)+1`을 계산합니다(`BE/src/main/java/com/trip/plan/service/PlanService.java:180-183`). 동시에 두 요청이 들어오면 둘 다 같은 `seq` 또는 같은 attraction을 통과할 수 있고, DB 유니크 제약(`BE/src/main/java/com/trip/plan/entity/TripPlace.java:17-19`) 위반은 전역 catch-all 500으로 갑니다(`BE/src/main/java/com/trip/global/error/exception/handler/GlobalExceptionHandler.java:167-179`). / day 단위 잠금 또는 DB 제약 위반을 `PLAN4093/PLAN4092`로 변환하세요.
+
+- [high] `replacePlaces` 입력검증 부재로 500 유발 / `PlaceItemDto`에는 `seq`, `contentId`, `contentType`, `memo` 검증이 없습니다(`BE/src/main/java/com/trip/plan/dto/PlaceItemDto.java:9-16`), `PlacesReplaceRequestDto.places`도 `@NotNull`뿐입니다(`BE/src/main/java/com/trip/plan/dto/PlacesReplaceRequestDto.java:7-12`). 서비스는 `item.seq()`를 그대로 nullable=false 컬럼에 넣습니다(`BE/src/main/java/com/trip/plan/service/PlanService.java:239-246`, `BE/src/main/java/com/trip/plan/entity/TripPlace.java:38-39`). / `@Valid`, `@Size`, `@NotNull/@Positive`, 중복 seq/content 검증을 추가하고 400/409로 반환하세요.
+
+- [high] 좌표 없는 장소가 동선 최적화에서 거리 0으로 처리됨 / `haversineKm()`는 좌표 하나라도 없으면 0을 반환합니다(`BE/src/main/java/com/trip/plan/util/RouteCalculator.java:22-24`). 그런데 `nearestNeighborOrder()`는 좌표 없는 장소를 필터링하지 않고 그대로 최소 거리 비교에 넣습니다(`BE/src/main/java/com/trip/plan/util/RouteCalculator.java:61-78`). 리포트는 이 결과를 추천 순서로 반환합니다(`BE/src/main/java/com/trip/plan/dto/RouteReportResponseDto.java:48-54`). / 좌표 없는 장소는 추천 계산에서 제외하거나 뒤에 고정하고, 리포트에 `missingCoordinates`를 명시하세요.
+
+- [med] 여러 일자 동선 적용이 부분 커밋됨 / `applyRoute()`는 일자별로 순차 `replacePlaces()`를 호출합니다(`frontend/src/views/PlanReportView.vue:410-419`). 각 호출은 별도 PUT이고(`frontend/src/stores/plan.js:156-157`), 서버 트랜잭션도 일자별입니다(`BE/src/main/java/com/trip/plan/service/PlanService.java:204-253`). 중간 실패 시 앞 일자만 적용됩니다. / “리포트 적용” 전용 배치 API를 만들어 한 트랜잭션으로 처리하세요.
+
+- [med] FE-BE DTO 계약 불일치로 PlanView가 깨진 값을 렌더링함 / FE는 목록에서 `plan.destination`, `plan.spots`를 사용합니다(`frontend/src/views/PlanView.vue:53-55`). 하지만 `PlanSummaryResponseDto`에는 해당 필드가 없습니다(`BE/src/main/java/com/trip/plan/dto/PlanSummaryResponseDto.java:10-20`). `day.summary`도 FE에서 쓰지만(`frontend/src/views/PlanView.vue:83`, `frontend/src/views/PlanReportView.vue:80`) `DayResponseDto`에는 없습니다(`BE/src/main/java/com/trip/plan/dto/DayResponseDto.java:7-11`). / DTO에 필드를 추가하거나 FE 표시를 실제 필드 기반으로 바꾸세요.
+
+- [med] 리포트에 추천이 없으면 “확인” 버튼 로직이 죽어 있음 / 버튼은 `!canApply`면 disabled입니다(`frontend/src/views/PlanReportView.vue:145`). 서버 리포트가 있고 추천이 없으면 `canApply`는 false입니다(`frontend/src/views/PlanReportView.vue:344-346`). 그런데 `applyRoute()`에는 추천 없음 시 `/plan`으로 돌아가는 분기가 있습니다(`frontend/src/views/PlanReportView.vue:403-406`) and unreachable입니다. / 확인 버튼은 활성화하거나 라벨을 “적용할 동선 없음”으로 바꾸세요.
+
+- [med] 플랜 로드 실패를 빈 상태로 숨김 / `PlanView`는 `plans.length === 0`이면 빈 상태를 보여줍니다(`frontend/src/views/PlanView.vue:15`). `loadPlans()` 실패 시 store가 `plans=[]`로 만듭니다(`frontend/src/stores/plan.js:29-32`), 화면 mounted catch도 실패를 무시합니다(`frontend/src/views/PlanView.vue:202-207`). / `planStore.error`를 별도 오류 상태로 렌더링하세요.
+
+- [med] `replacePlaces`의 `placeId` 소속 검증이 dayNo까지 보지 않음 / 경로는 특정 day 교체인데(`BE/src/main/java/com/trip/plan/service/PlanService.java:205-211`), `placeId` 검증은 같은 plan인지까지만 확인합니다(`BE/src/main/java/com/trip/plan/service/PlanService.java:221-223`). 다른 일자의 placeId도 같은 plan이면 통과합니다. / `ref.getDay().getDayNo() == dayNo`까지 검증하세요.
+
+- [low] `/api/plans` page size 하한 검증 없음 / 컨트롤러가 `size`를 raw int로 받고(`BE/src/main/java/com/trip/plan/controller/PlanController.java:41-42`), 서비스는 상한만 clamp합니다(`BE/src/main/java/com/trip/plan/service/PlanService.java:85-87`). `size=0/-1`은 프레임워크 예외로 빠집니다. / `@Min(1)` 또는 `Math.max(1, Math.min(size, MAX_PAGE_SIZE))`로 명시 처리하세요.
+
+- [low] PlanView에 하드코딩 동행 데이터가 남아 있음 / `companions`가 정적 배열입니다(`frontend/src/views/PlanView.vue:196-200`). 실제 사용자/날짜와 무관한 카드가 pg-plan 페이지에 노출됩니다. / API 데이터로 바꾸거나 섹션을 제거하세요.

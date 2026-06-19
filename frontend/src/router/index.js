@@ -17,6 +17,8 @@ const router = createRouter({
     { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue'), meta: { requiresAuth: true } },
     // Plan 동선 리포트 — full-screen, no bottom nav
     { path: '/plan/:id/report', name: 'plan-report', component: () => import('@/views/PlanReportView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    // 공유 토큰으로 공개된 계획 상세 — 공개(인증 불필요), full-screen
+    { path: '/plan/shared/:token', name: 'plan-shared', component: () => import('@/views/PlanSharedView.vue'), meta: { tabBar: false } },
 
     // ── Community ─────────────────────────────────────────────────────────────
     { path: '/community', name: 'community', component: () => import('@/views/CommunityView.vue') },
@@ -52,6 +54,8 @@ const router = createRouter({
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { tabBar: false } },
     { path: '/signup', name: 'signup', component: () => import('@/views/SignupView.vue'), meta: { tabBar: false } },
     { path: '/oauth/callback', name: 'oauth-callback', component: () => import('@/views/OAuthCallbackView.vue'), meta: { tabBar: false } },
+    // 비밀번호 재설정 — 공개, full-screen
+    { path: '/password-reset', name: 'password-reset', component: () => import('@/views/PasswordResetView.vue'), meta: { tabBar: false } },
 
     // ── Preference survey ─────────────────────────────────────────────────────
     { path: '/survey', name: 'survey', component: () => import('@/views/PreferenceSurveyView.vue'), meta: { tabBar: false } },

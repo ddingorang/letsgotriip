@@ -20,6 +20,8 @@ import com.trip.recommend.dto.RecommendationResponseDto;
 import com.trip.recommend.entity.Recommendation;
 import com.trip.recommend.entity.RecommendStatus;
 import com.trip.recommend.repository.RecommendationRepository;
+import com.trip.user.entity.User;
+import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -103,6 +105,7 @@ public class RecommendService {
     private final StringRedisTemplate      stringRedisTemplate;
     private final ChatClient               chatClient;
     private final ObjectMapper             objectMapper;
+    private final UserRepository           userRepository;
 
     // ─────────────────────────────────────────────────────────────
     // 추천 생성
@@ -160,7 +163,10 @@ public class RecommendService {
                     .collect(Collectors.toSet());
 
             // 4. LLM 호출
-            ItineraryDraft draft = callLlm(req, candidates);
+            // 요청 테마가 비어 있으면 저장된 온보딩 취향(preferredInterests)을 프롬프트 테마로 사용한다.
+            // 캐시 해시(serializeRequest)는 req.themes() 원본만 사용하므로 영향 없음.
+            List<String> effectiveThemes = resolveThemes(userId, req.themes());
+            ItineraryDraft draft = callLlm(req, candidates, effectiveThemes);
 
             // 5. 검증
             ItineraryDraft validated = validate(draft, candidateIds, candidates, req.totalDays());
@@ -335,7 +341,7 @@ public class RecommendService {
     // 내부: LLM 호출
     // ─────────────────────────────────────────────────────────────
 
-    private ItineraryDraft callLlm(RecommendRequestDto req, List<AttractionItem> candidates) {
+    private ItineraryDraft callLlm(RecommendRequestDto req, List<AttractionItem> candidates, List<String> themes) {
         BeanOutputConverter<ItineraryDraft> converter = new BeanOutputConverter<>(ItineraryDraft.class);
 
         String catalog = candidates.stream()
@@ -347,7 +353,7 @@ public class RecommendService {
                         nvl(i.addr1())))
                 .collect(Collectors.joining("\n"));
 
-        String userPrompt = buildPrompt(req, catalog, converter.getFormat());
+        String userPrompt = buildPrompt(req, catalog, converter.getFormat(), themes);
 
         String raw = chatClient.prompt()
                 .user(userPrompt)
@@ -357,7 +363,7 @@ public class RecommendService {
         return converter.convert(raw);
     }
 
-    private String buildPrompt(RecommendRequestDto req, String catalog, String format) {
+    private String buildPrompt(RecommendRequestDto req, String catalog, String format, List<String> themes) {
         return String.format("""
                 당신은 여행 일정 전문가입니다. 아래 후보 장소 목록에서만 선택하여 %d일 여행 일정을 작성해주세요.
                 여행자의 동행·예산·테마 성향을 분석해 그에 맞는 장소를 우선 배치하고, reason에 선정 이유를 한국어로 적어주세요.
@@ -389,11 +395,27 @@ public class RecommendService {
                 req.startDate(), req.endDate(), req.totalDays(),
                 describeCompanions(req.companions()),
                 describeBudget(req.budget()),
-                describeThemes(req.themes()),
+                describeThemes(themes),
                 catalog,
                 req.totalDays(),
                 format
         );
+    }
+
+    // 요청 테마가 비어 있으면 저장된 온보딩 취향(User.preferredInterests, 콤마 구분 문자열)을 테마로 사용한다.
+    // 둘 다 비어 있으면 빈 리스트를 반환해 describeThemes가 "미지정"으로 처리하게 한다.
+    private List<String> resolveThemes(Long userId, List<String> requestThemes) {
+        if (requestThemes != null && !requestThemes.isEmpty()) {
+            return requestThemes;
+        }
+        return userRepository.findById(userId)
+                .map(User::getPreferredInterests)
+                .filter(s -> s != null && !s.isBlank())
+                .map(s -> Arrays.stream(s.split(","))
+                        .map(String::trim)
+                        .filter(t -> !t.isEmpty())
+                        .collect(Collectors.toList()))
+                .orElseGet(List::of);
     }
 
     // 테마 영문 키 목록을 한글 자연어로 변환 (매핑 없는 키는 원문 유지)

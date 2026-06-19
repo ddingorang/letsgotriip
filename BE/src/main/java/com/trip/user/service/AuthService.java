@@ -14,19 +14,28 @@ import com.trip.global.error.exception.handler.UserHandler;
 import com.trip.global.util.JwtUtil;
 import com.trip.global.util.RedisKeyNamingUtil;
 import com.trip.user.dto.*;
+import com.trip.user.entity.PasswordResetToken;
 import com.trip.user.entity.User;
+import com.trip.user.repository.PasswordResetTokenRepository;
 import com.trip.user.repository.UserRepository;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final RedisTemplate<String, RedisSessionDto> redisTemplate;
+
+    /** 비밀번호 재설정 토큰 유효시간(분) */
+    private static final long PASSWORD_RESET_TTL_MINUTES = 30L;
+    private static final String DEMO_NOTE = "데모: 실제로는 이메일로 전송됩니다";
 
     @Transactional
     public SignupResponseDto signup(SignupRequestDto signupRequestDto) {
@@ -196,5 +205,58 @@ public class AuthService {
                 .userId(sessionDto.customUserInfoDto().userId())
                 .familyId(familyId)
                 .build();
+    }
+
+    /**
+     * 비밀번호 재설정 요청 (데모).
+     * 계정 열거 방지를 위해 이메일 존재 여부와 무관하게 동일한 형태로 응답한다.
+     * - 존재하면: UUID 토큰을 생성/저장하고 토큰을 응답에 담아 반환(데모이므로 직접 노출).
+     * - 없으면: token/expiresAt 을 null 로 채워 반환.
+     */
+    @Transactional
+    public PasswordResetTokenResponse requestPasswordReset(String email) {
+
+        final Optional<User> userOpt = userRepository.findByEmail(email);
+
+        // 계정 열거 방지: 존재하지 않아도 동일 형태로 응답
+        if (userOpt.isEmpty()) {
+            return new PasswordResetTokenResponse(null, null, DEMO_NOTE);
+        }
+
+        final User user = userOpt.get();
+        final String token = UUID.randomUUID().toString();
+        final LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(PASSWORD_RESET_TTL_MINUTES);
+
+        final PasswordResetToken resetToken = PasswordResetToken.builder()
+                .token(token)
+                .userId(user.getId())
+                .expiresAt(expiresAt)
+                .used(false)
+                .build();
+        passwordResetTokenRepository.save(resetToken);
+
+        return new PasswordResetTokenResponse(token, expiresAt, DEMO_NOTE);
+    }
+
+    /**
+     * 비밀번호 재설정 확정.
+     * 토큰을 검증(존재/미사용/미만료)하고 통과하면 비밀번호를 변경한 뒤 토큰을 사용 처리한다.
+     */
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+
+        final PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
+                .orElseThrow(() -> new UserHandler(ResponseCode._BAD_REQUEST));
+
+        // 이미 사용했거나 만료된 토큰은 무효
+        if (resetToken.isUsed() || resetToken.isExpired(LocalDateTime.now())) {
+            throw new UserHandler(ResponseCode._BAD_REQUEST);
+        }
+
+        final User user = userRepository.findById(resetToken.getUserId())
+                .orElseThrow(() -> new UserHandler(ResponseCode.USER_NOT_FOUND));
+
+        user.updatePassword(passwordEncoder.encode(newPassword));
+        resetToken.markUsed();
     }
 }

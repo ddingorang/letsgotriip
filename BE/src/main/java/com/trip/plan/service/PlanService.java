@@ -96,7 +96,94 @@ public class PlanService {
     public PlanDetailResponseDto getDetail(Long userId, Long planId) {
         TripPlan plan = findPlanWithDays(planId);
         verifyOwner(plan, userId);
-        return PlanDetailResponseDto.from(plan);
+        return toDetailDto(plan);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 공유 — 토큰 발급 / 공개 조회
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 공유 토큰 발급(소유자 전용). 이미 발급된 경우 기존 토큰을 재사용(idempotent).
+     */
+    @Transactional
+    public PlanShareResponseDto createShare(Long userId, Long planId) {
+        TripPlan plan = findPlan(planId);
+        verifyOwner(plan, userId);
+        if (plan.getShareToken() == null) {
+            plan.markShared(java.util.UUID.randomUUID().toString().replace("-", ""));
+        }
+        return PlanShareResponseDto.of(plan.getShareToken());
+    }
+
+    /**
+     * 공유 토큰으로 공개 조회(소유 검증 없음). 토큰이 없으면 PLAN_NOT_FOUND.
+     */
+    public PlanDetailResponseDto getShared(String token) {
+        TripPlan plan = planRepository.findByShareToken(token)
+                .orElseThrow(() -> new PlanHandler(ResponseCode.PLAN_NOT_FOUND));
+        return toDetailDto(plan);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 비교 — 두 계획 요약 통계
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 두 계획 비교(둘 다 소유자여야 함, 아니면 PLAN_FORBIDDEN).
+     */
+    public PlanCompareResponseDto compare(Long userId, Long aId, Long bId) {
+        TripPlan a = findPlanWithDays(aId);
+        verifyOwner(a, userId);
+        TripPlan b = findPlanWithDays(bId);
+        verifyOwner(b, userId);
+        return PlanCompareResponseDto.of(a, b);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 예산 — 카테고리 기반 추정(데모)
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 카테고리(contentType)별 기본 단가로 일자별/전체 추정 비용 산출(소유자 전용).
+     * 가격 필드가 없으므로 데모 추정치다.
+     */
+    public PlanBudgetResponseDto getBudget(Long userId, Long planId) {
+        TripPlan plan = findPlanWithDays(planId);
+        verifyOwner(plan, userId);
+
+        List<PlanBudgetResponseDto.DayBudget> dayBudgets = new ArrayList<>();
+        long total = 0;
+        for (TripDay day : plan.getDays()) {
+            long cost = day.getPlaces().stream()
+                    .mapToLong(p -> estimatePlaceCost(p.getAttraction().getContentType()))
+                    .sum();
+            total += cost;
+            dayBudgets.add(new PlanBudgetResponseDto.DayBudget(day.getDayNo(), cost));
+        }
+
+        Integer planned = plan.getBudget();
+        Integer difference = planned != null ? (int) (planned - total) : null;
+
+        return new PlanBudgetResponseDto(
+                plan.getId(),
+                dayBudgets,
+                total,
+                planned,
+                difference,
+                "카테고리 기반 추정치(데모)"
+        );
+    }
+
+    /** TourAPI contentType별 기본 단가 추정. 12=관광지, 39=음식점, 32=숙박, 그 외=기타. */
+    private long estimatePlaceCost(Integer contentType) {
+        if (contentType == null) return 10000L;
+        return switch (contentType) {
+            case 12 -> 5000L;   // 관광지
+            case 39 -> 15000L;  // 음식점
+            case 32 -> 80000L;  // 숙박
+            default -> 10000L;  // 기타
+        };
     }
 
     /** 동선 리포트 — 좌표 기반 거리·소요시간 + 최근접 이웃 추천 순서 */
@@ -363,6 +450,11 @@ public class PlanService {
     // ─────────────────────────────────────────────────────────────
     // 내부 헬퍼
     // ─────────────────────────────────────────────────────────────
+
+    /** 상세 응답 변환 — getDetail/getShared 공통. */
+    private PlanDetailResponseDto toDetailDto(TripPlan plan) {
+        return PlanDetailResponseDto.from(plan);
+    }
 
     private TripPlan findPlan(Long planId) {
         return planRepository.findById(planId)

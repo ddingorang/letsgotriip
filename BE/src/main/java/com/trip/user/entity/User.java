@@ -144,4 +144,9 @@ public class User extends BaseEntity {
         this.status = false;
         this.inActiveDate = LocalDateTime.now();
     }
+
+    /** 비밀번호 변경. 이미 암호화된 값을 받는다. */
+    public void updatePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
 }

@@ -106,4 +106,35 @@ public class PlanController {
             @PathVariable Long placeId) {
         return ResponseEntity.ok(planService.removePlace(principal.userId(), planId, dayNo, placeId));
     }
+
+    /** POST /api/plans/{planId}/share — 공유 토큰 발급(소유자) */
+    @PostMapping("/{planId}/share")
+    public ResponseEntity<PlanShareResponseDto> createShare(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long planId) {
+        return ResponseEntity.ok(planService.createShare(principal.userId(), planId));
+    }
+
+    /** GET /api/plans/shared/{token} — 공유 토큰으로 공개 조회(인증 불요) */
+    @GetMapping("/shared/{token}")
+    public ResponseEntity<PlanDetailResponseDto> getShared(@PathVariable String token) {
+        return ResponseEntity.ok(planService.getShared(token));
+    }
+
+    /** GET /api/plans/compare?aId&bId — 두 계획 비교(소유자) */
+    @GetMapping("/compare")
+    public ResponseEntity<PlanCompareResponseDto> compare(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam Long aId,
+            @RequestParam Long bId) {
+        return ResponseEntity.ok(planService.compare(principal.userId(), aId, bId));
+    }
+
+    /** GET /api/plans/{planId}/budget — 카테고리 기반 예산 추정(소유자) */
+    @GetMapping("/{planId}/budget")
+    public ResponseEntity<PlanBudgetResponseDto> getBudget(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long planId) {
+        return ResponseEntity.ok(planService.getBudget(principal.userId(), planId));
+    }
 }

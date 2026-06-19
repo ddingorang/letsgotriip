@@ -7,6 +7,11 @@ export const authApi = {
   login: (data) => http.post('/auth/login', data),
   refresh: () => http.post('/auth/refresh'),
   logout: () => http.post('/auth/logout'),
+  // 비밀번호 재설정 (공개)
+  // POST /auth/password/reset-request { email } → { token, expiresAt, demoNote }
+  // POST /auth/password/reset { token, newPassword }
+  requestPasswordReset: (data) => http.post('/auth/password/reset-request', data),
+  resetPassword: (data) => http.post('/auth/password/reset', data),
 }
 
 // ── Attractions ───────────────────────────────────────────────────────────────
@@ -27,9 +32,14 @@ export const festivalApi = {
 
 // ── Notices ───────────────────────────────────────────────────────────────────
 // GET /api/notices, GET /api/notices/{id}
+// POST /api/notices, PUT /api/notices/{id}, DELETE /api/notices/{id} (관리자 전용)
 export const noticeApi = {
   list: () => http.get('/api/notices'),
   detail: (id) => http.get(`/api/notices/${id}`),
+  // body: { category?, title, content, pinned }
+  create: (data) => http.post('/api/notices', data),
+  update: (id, data) => http.put(`/api/notices/${id}`, data),
+  remove: (id) => http.delete(`/api/notices/${id}`),
 }
 
 // ── Gamification (챌린지/뱃지, 인증 필요) ─────────────────────────────────────
@@ -65,6 +75,14 @@ export const planApi = {
   replacePlaces: (id, dayNo, data) => http.put(`/api/plans/${id}/days/${dayNo}/places`, data),
   removePlace: (id, dayNo, placeId) =>
     http.delete(`/api/plans/${id}/days/${dayNo}/places/${placeId}`),
+  // 공유 토큰 발급 (소유자) → { shareToken, shareUrl }
+  share: (planId) => http.post(`/api/plans/${planId}/share`),
+  // 공유 토큰으로 공개 조회 (인증 불필요) → PlanDetailResponseDto
+  getShared: (token) => http.get(`/api/plans/shared/${token}`),
+  // 두 계획 비교 (소유자) → PlanCompareResponseDto
+  compare: (aId, bId) => http.get('/api/plans/compare', { params: { aId, bId } }),
+  // 예산 추정 (소유자) → 일자별/총 예산
+  getBudget: (planId) => http.get(`/api/plans/${planId}/budget`),
 }
 
 // ── Recommendations ───────────────────────────────────────────────────────────
@@ -148,6 +166,35 @@ export const documentApi = {
       timeout: 60_000,
     }),
   remove: (id) => http.delete(`/api/documents/${id}`),
+}
+
+// ── Checklist (여행 준비물 체크리스트, 인증 필요) ─────────────────────────────
+// GET    /api/checklists?planId=            → 내 항목 목록(sortOrder/id 정렬)
+// POST   /api/checklists { title, ... }     → 201 + Location
+// PATCH  /api/checklists/{id}                → 부분 수정(null 필드 유지)
+// PATCH  /api/checklists/{id}/toggle         → 완료/미완료 토글
+// DELETE /api/checklists/{id}                → 204
+// GET    /api/checklists/templates           → 내장 템플릿 3종
+// POST   /api/checklists/apply?templateKey=&planId=  → 201 + 생성된 항목 목록
+export const checklistApi = {
+  list: (params) => http.get('/api/checklists', { params }),
+  create: (data) => http.post('/api/checklists', data),
+  update: (id, data) => http.patch(`/api/checklists/${id}`, data),
+  toggle: (id) => http.patch(`/api/checklists/${id}/toggle`),
+  remove: (id) => http.delete(`/api/checklists/${id}`),
+  templates: () => http.get('/api/checklists/templates'),
+  // templateKey: 'domestic' | 'overseas' | 'camping', planId 선택
+  applyTemplate: (params) => http.post('/api/checklists/apply', null, { params }),
+}
+
+// ── Context (맥락 정보: 날씨/충전소/뉴스, 공개) ───────────────────────────────
+// GET /api/context/weather?lat=&lng=        → 현재 날씨 + 3일 예보
+// GET /api/context/ev-stations?lat=&lng=    → 주변 데모 전기차 충전소(~5)
+// GET /api/context/news                     → 데모 한국어 여행 뉴스(~6)
+export const contextApi = {
+  weather: (lat, lng) => http.get('/api/context/weather', { params: { lat, lng } }),
+  evStations: (lat, lng) => http.get('/api/context/ev-stations', { params: { lat, lng } }),
+  news: () => http.get('/api/context/news'),
 }
 
 export default http

@@ -84,5 +84,27 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * 비밀번호 재설정 요청 (데모). 공개.
+     * 계정 열거 방지를 위해 이메일 존재 여부와 무관하게 200으로 동일 형태 응답.
+     */
+    @PostMapping("password/reset-request")
+    public ResponseEntity<PasswordResetTokenResponse> requestPasswordReset(
+            @Valid @RequestBody final PasswordResetRequest request
+    ) {
+        return ResponseEntity.ok(authService.requestPasswordReset(request.email()));
+    }
+
+    /**
+     * 비밀번호 재설정 확정 (토큰 + 새 비밀번호). 공개.
+     */
+    @PostMapping("password/reset")
+    public ResponseEntity<Void> resetPassword(
+            @Valid @RequestBody final PasswordResetConfirm request
+    ) {
+        authService.resetPassword(request.token(), request.newPassword());
+        return ResponseEntity.ok().build();
+    }
+
     // TODO: 이메일 인증 로직 추가
 }
