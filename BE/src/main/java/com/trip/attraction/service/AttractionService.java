@@ -8,10 +8,12 @@ import com.trip.attraction.dto.AttractionTourApiResponse.AttractionItem;
 import com.trip.attraction.dto.AttractionTourApiResponse.AreaItem;
 import com.trip.attraction.entity.Attraction;
 import com.trip.attraction.repository.AttractionRepository;
+import com.trip.global.config.CacheConfig;
 import com.trip.global.error.ResponseCode;
 import com.trip.global.error.exception.handler.AttractionHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -53,6 +55,24 @@ public class AttractionService {
     // 검색 (areaBasedList2 / searchKeyword2)
     // ─────────────────────────────────────────────────────────────
 
+    /**
+     * 지역/키워드/위치 기반 검색.
+     * 외부 TourAPI 왕복을 Redis("attractions", 15분)에 캐시한다.
+     * 캐시 키는 모든 쿼리 파라미터(areaCode/sigunguCode/contentTypeId/keyword/page/size/mapX/mapY/radius)를 포함한다.
+     * 빈 결과는 캐시하지 않는다(unless).
+     */
+    @Cacheable(
+            value = CacheConfig.CACHE_ATTRACTIONS,
+            key = "T(java.util.Objects).toString(#req.areaCode(),'') + ':' + " +
+                  "T(java.util.Objects).toString(#req.sigunguCode(),'') + ':' + " +
+                  "T(java.util.Objects).toString(#req.contentTypeId(),'') + ':' + " +
+                  "T(java.util.Objects).toString(#req.keyword(),'').trim().toLowerCase() + ':' + " +
+                  "(#req.page() <= 0 ? 1 : #req.page()) + ':' + #req.clampedSize() + ':' + " +
+                  "T(java.util.Objects).toString(#req.mapX(),'') + ':' + " +
+                  "T(java.util.Objects).toString(#req.mapY(),'') + ':' + " +
+                  "(#req.hasCoords() ? #req.clampedRadius() : 0)",
+            unless = "#result == null || #result.isEmpty()"
+    )
     public List<AttractionItem> search(AttractionSearchRequestDto req) {
         // keyword 유효성 검사
         String keyword = req.keyword() == null ? "" : req.keyword().trim();
@@ -63,16 +83,10 @@ public class AttractionService {
         int size = req.clampedSize();
         int page = req.page() <= 0 ? 1 : req.page();
 
-        // 캐시 키 생성 — 파라미터 정규화 후 SHA-256
+        // stale 폴백용 키 — 파라미터 정규화 후 SHA-256
         String cacheKey = PREFIX_SEARCH + buildSearchHash(keyword, req, size, page);
 
-        // 1) 캐시 히트
-        String cached = stringRedisTemplate.opsForValue().get(cacheKey);
-        if (cached != null) {
-            return deserializeItems(cached);
-        }
-
-        // 2) TourAPI 호출
+        // TourAPI 호출
         try {
             List<AttractionItem> items;
             if (!keyword.isEmpty()) {
@@ -84,13 +98,13 @@ public class AttractionService {
                 items = tourApiClient.fetchAreaBased(req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size);
             }
 
-            String json = serializeItems(items);
-            stringRedisTemplate.opsForValue().set(cacheKey, json, TTL_SEARCH);
+            // 성공 응답은 stale 폴백 캐시에도 백업(외부 장애 시 만료 캐시 반환용)
+            stringRedisTemplate.opsForValue().set(cacheKey, serializeItems(items), TTL_SEARCH);
             return items;
 
         } catch (Exception e) {
             log.warn("TourAPI 검색 실패 — stale 캐시 반환 시도. key={}, error={}", cacheKey, e.getMessage());
-            // stale 재시도 (TTL 만료 직전 캐시가 있을 수 있음 — 이미 체크했지만 재확인)
+            // stale 재시도 (TTL 만료 직전 캐시가 있을 수 있음)
             String stale = stringRedisTemplate.opsForValue().get(cacheKey);
             if (stale != null) {
                 return deserializeItems(stale);
@@ -103,19 +117,24 @@ public class AttractionService {
     // 상세 조회 (detailCommon2)
     // ─────────────────────────────────────────────────────────────
 
+    /**
+     * 상세(detailCommon2) 조회 — Redis("attractionDetail", 30분) 캐시.
+     * 키는 contentId. null 결과는 캐시하지 않는다(unless).
+     */
+    @Cacheable(
+            value = CacheConfig.CACHE_ATTRACTION_DETAIL,
+            key = "#contentId",
+            unless = "#result == null"
+    )
     public AttractionItem getDetail(String contentId) {
         String cacheKey = PREFIX_DETAIL + contentId;
-
-        String cached = stringRedisTemplate.opsForValue().get(cacheKey);
-        if (cached != null) {
-            return deserializeItem(cached);
-        }
 
         try {
             AttractionItem item = tourApiClient.fetchDetail(contentId);
             if (item == null) {
                 throw new AttractionHandler(ResponseCode.ATTRACTION_NOT_FOUND);
             }
+            // 성공 응답은 stale 폴백 캐시에도 백업(외부 장애 시 만료 캐시 반환용)
             stringRedisTemplate.opsForValue().set(cacheKey, serializeItem(item), TTL_DETAIL);
             return item;
 
@@ -135,14 +154,18 @@ public class AttractionService {
     // 지역코드 목록 (areaCode2)
     // ─────────────────────────────────────────────────────────────
 
+    /**
+     * 지역코드(areaCode2) 목록 — Redis("attractionAreas", 24시간) 캐시.
+     * 인자가 없으므로 단일 키(SimpleKey.EMPTY)로 캐시된다. 빈 결과는 캐시하지 않는다(unless).
+     */
+    @Cacheable(
+            value = CacheConfig.CACHE_ATTRACTION_AREAS,
+            unless = "#result == null || #result.isEmpty()"
+    )
     public List<AreaItem> getAreas() {
-        String cached = stringRedisTemplate.opsForValue().get(KEY_AREAS);
-        if (cached != null) {
-            return deserializeAreaItems(cached);
-        }
-
         try {
             List<AreaItem> areas = tourApiClient.fetchAreaCodes(null);
+            // 성공 응답은 stale 폴백 캐시에도 백업(외부 장애 시 만료 캐시 반환용)
             stringRedisTemplate.opsForValue().set(KEY_AREAS, serializeAreaItems(areas), TTL_AREAS);
             return areas;
 

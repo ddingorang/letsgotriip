@@ -165,10 +165,12 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { useFestivalStore } from '@/stores/festival.js'
+import { useLocationStore } from '@/stores/location.js'
 import TripMap from '@/components/common/TripMap.vue'
 
 const store = useAttractionStore()
 const festivalStore = useFestivalStore()
+const locationStore = useLocationStore()
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const searchQuery = ref('')
@@ -266,25 +268,22 @@ function locParams() {
   }
 }
 
-// 현재 위치 확보 — 성공 시 거리순 + 근처 목록 조회. 실패/미지원 시 전체 목록 폴백.
+// 현재 위치 확보 — 공유 location store 사용(앱 시작 시 프리페치된 좌표를 즉시 재사용).
+// 성공 시 거리순 + 근처 목록 조회(캐시 적중 시 네트워크 없이 즉시 표시).
+// 실패/미지원 시 전체 목록 폴백.
 function locateUser(forceSort = false) {
-  if (!navigator.geolocation) {
-    if (!store.attractions.length) loadAttractions()   // 위치 미지원 → 전체
-    return
-  }
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      userLoc.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+  locationStore.ensureLocation().then((coords) => {
+    if (coords) {
+      userLoc.value = { lat: coords.lat, lng: coords.lng }
       if (forceSort || sortMode.value === 'default') sortMode.value = 'distance'
-      // 위치 확보 → BE 좌표 검색으로 근처 목록 조회 (검색 중이 아닐 때)
+      // 위치 확보 → BE 좌표 검색으로 근처 목록 조회 (검색 중이 아닐 때).
+      // 프리페치 캐시가 있으면 store.list 가 즉시 캐시를 표시한다.
       if (!searchQuery.value.trim()) loadAttractions()
-    },
-    () => {
-      // 거부/실패 → 위치 없이 전체 목록(아직 안 불러왔으면)
+    } else {
+      // 거부/실패/미지원 → 위치 없이 전체 목록(아직 안 불러왔으면)
       if (!store.attractions.length) loadAttractions()
-    },
-    { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
-  )
+    }
+  })
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────

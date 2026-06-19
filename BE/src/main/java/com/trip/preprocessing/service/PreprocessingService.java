@@ -6,6 +6,7 @@ import com.trip.preprocessing.client.STTManager;
 import com.trip.preprocessing.entity.UserAnalysisData;
 import com.trip.preprocessing.entity.enums.AnalysisDataType;
 import com.trip.preprocessing.repository.UserAnalysisDataRepository;
+import com.trip.rag.UserDataIndexer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,16 +29,21 @@ public class PreprocessingService {
 
     private final UserAnalysisDataRepository userAnalysisDataRepository;
     private final STTManager sttManager;
+    private final UserDataIndexer userDataIndexer;
 
     private final String uploadDir = "temp_uploads/";
 
     // PII 마스킹 정규식: 전화번호 / 주민등록번호 / 이메일
+    // 전화/주민번호는 양화 구간이 리터럴('-'·'@')과 고정 길이로 분리되어 겹침이 없어 백트래킹 안전.
     private static final Pattern PHONE_PATTERN =
             Pattern.compile("01[016789]-?\\d{3,4}-?\\d{4}");
     private static final Pattern RRN_PATTERN =
             Pattern.compile("\\d{6}-?\\d{7}");
+    // ReDoS 수정: 기존 도메인부 "[A-Za-z0-9.-]+\\.[A-Za-z]{2,}" 는 '.' 가 char class 와
+    // 뒤따르는 "\\.{2,}" 양쪽에서 매칭되어(겹치는 양화) 매칭 실패 시 파국적 백트래킹을 일으킴.
+    // 도메인을 라벨 단위 "([A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}" 로 바꿔 '.' 의 중복 매칭을 제거.
     private static final Pattern EMAIL_PATTERN =
-            Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
+            Pattern.compile("[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}");
 
     @Transactional
     public Long uploadAndProcess(Long userId, AnalysisDataType dataType, MultipartFile file) throws IOException {
@@ -78,6 +84,19 @@ public class PreprocessingService {
             }
             // PII 마스킹 후 저장
             analysisData.updateRawText(maskPii(sttResult));
+        }
+
+        // 분석 결과(마스킹된 rawText)를 RAG 벡터스토어에 색인 → 챗봇이 분석데이터를 참조 가능.
+        // 빈 텍스트(예: 빈 카톡 파일)는 색인하지 않는다. 색인 실패가 업로드/저장 트랜잭션을
+        // 깨뜨리지 않도록 방어적으로 감싼다.
+        String maskedText = analysisData.getRawText();
+        if (maskedText != null && !maskedText.isBlank()) {
+            try {
+                userDataIndexer.indexAnalysis(analysisData.getUserId(), analysisData.getId(), maskedText);
+            } catch (Exception e) {
+                log.warn("분석데이터 RAG 색인 실패 — analysisId={}, error={}",
+                        analysisData.getId(), e.getMessage());
+            }
         }
     }
 

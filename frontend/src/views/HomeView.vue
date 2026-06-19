@@ -105,11 +105,13 @@ import PostCard from '@/components/community/PostCard.vue'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { usePostsStore } from '@/stores/posts.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useLocationStore } from '@/stores/location.js'
 import { contextApi } from '@/api/index.js'
 
 const attractionStore = useAttractionStore()
 const postsStore = usePostsStore()
 const authStore = useAuthStore()
+const locationStore = useLocationStore()
 
 // 지금 뜨는 여행지 — TourAPI 관광지(내 주변 우선, 실패 시 제주 인기)
 const places = computed(() => attractionStore.attractions.slice(0, 10))
@@ -181,23 +183,20 @@ function loadJejuPopular() {
   attractionStore.list({ areaCode: 39, contentTypeId: 12, size: 10 })
 }
 
-// 내 주변 관광지 우선 — 위치 확보되면 근처, 아니면 제주 인기
+// 내 주변 관광지 우선 — 공유 location store 사용(앱 시작 시 프리페치된 좌표 재사용).
+// 위치 확보되면 근처(캐시 적중 시 즉시 표시), 아니면 제주 인기 폴백.
 function loadNearbyAttractions() {
-  if (!navigator.geolocation) return loadJejuPopular()
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      locationLabel.value = '현재 위치 · 내 주변'
-      attractionStore.list({
-        mapX: pos.coords.longitude,
-        mapY: pos.coords.latitude,
-        radius: 20000,
-        contentTypeId: 12,
-        size: 10,
-      })
-    },
-    () => loadJejuPopular(),
-    { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
-  )
+  locationStore.ensureLocation().then((coords) => {
+    if (!coords) return loadJejuPopular()
+    locationLabel.value = '현재 위치 · 내 주변'
+    attractionStore.list({
+      mapX: coords.lng,
+      mapY: coords.lat,
+      radius: 20000,
+      contentTypeId: 12,
+      size: 10,
+    })
+  })
 }
 
 onMounted(() => {

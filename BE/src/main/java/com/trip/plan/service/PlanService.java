@@ -11,11 +11,13 @@ import com.trip.plan.entity.TripDay;
 import com.trip.plan.entity.TripPlace;
 import com.trip.plan.entity.TripPlan;
 import com.trip.plan.repository.PlanRepository;
+import com.trip.rag.UserDataIndexer;
 import com.trip.recommend.dto.ItineraryDraft;
 import com.trip.recommend.dto.RecommendRequestDto;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -37,6 +39,7 @@ import java.util.List;
  *   entityManager.lock(plan, LockModeType.OPTIMISTIC_FORCE_INCREMENT) 호출.
  *   이 방식은 트랜잭션 커밋 시 Hibernate가 version을 강제 증가시킨다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -48,6 +51,7 @@ public class PlanService {
     private final PlanRepository planRepository;
     private final AttractionService attractionService;
     private final EntityManager entityManager;
+    private final UserDataIndexer userDataIndexer;
 
     // ─────────────────────────────────────────────────────────────
     // 생성
@@ -75,6 +79,9 @@ public class PlanService {
         }
 
         planRepository.save(plan);
+
+        indexPlanSafely(userId, plan.getId());
+
         return PlanDetailResponseDto.from(plan);
     }
 
@@ -230,6 +237,9 @@ public class PlanService {
         }
 
         plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget());
+
+        indexPlanSafely(userId, plan.getId());
+
         return PlanDetailResponseDto.from(plan);
     }
 
@@ -444,6 +454,8 @@ public class PlanService {
             }
         }
 
+        indexPlanSafely(userId, plan.getId());
+
         return PlanDetailResponseDto.from(plan);
     }
 
@@ -454,6 +466,18 @@ public class PlanService {
     /** 상세 응답 변환 — getDetail/getShared 공통. */
     private PlanDetailResponseDto toDetailDto(TripPlan plan) {
         return PlanDetailResponseDto.from(plan);
+    }
+
+    /**
+     * 플랜을 RAG 벡터스토어에 색인한다("내 지난 여행" 검색용).
+     * 임베딩(외부) 호출 실패가 본 트랜잭션을 깨면 안 되므로 예외는 로그만 남기고 삼킨다.
+     */
+    private void indexPlanSafely(Long userId, Long planId) {
+        try {
+            userDataIndexer.indexPlan(userId, planId);
+        } catch (Exception e) {
+            log.warn("plan RAG 색인 실패 — userId={}, planId={}, error={}", userId, planId, e.getMessage());
+        }
     }
 
     private TripPlan findPlan(Long planId) {

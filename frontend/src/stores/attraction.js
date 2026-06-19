@@ -111,6 +111,47 @@ export function mapAttraction(item, rank = null) {
   }
 }
 
+// ── 경량 리스트 캐시 (sessionStorage + TTL) ───────────────────────────────────
+// 동일 파라미터 조회를 세션 내 재사용해 첫 탐색을 즉시 표시한다.
+const LIST_CACHE_PREFIX = 'triip.attraction.list.'
+const LIST_CACHE_TTL = 10 * 60 * 1000 // 10분
+
+// 파라미터 객체 → 안정적인 캐시 키 (키 정렬로 순서 무관)
+function cacheKey(params = {}) {
+  const norm = {}
+  Object.keys(params)
+    .filter((k) => params[k] !== undefined && params[k] !== null && params[k] !== '')
+    .sort()
+    .forEach((k) => {
+      norm[k] = String(params[k])
+    })
+  return LIST_CACHE_PREFIX + JSON.stringify(norm)
+}
+
+function readListCache(params) {
+  try {
+    const raw = sessionStorage.getItem(cacheKey(params))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || !Array.isArray(parsed.raw)) return null
+    if (!parsed.savedAt || Date.now() - parsed.savedAt > LIST_CACHE_TTL) return null
+    return parsed.raw
+  } catch {
+    return null
+  }
+}
+
+function writeListCache(params, raw) {
+  try {
+    sessionStorage.setItem(
+      cacheKey(params),
+      JSON.stringify({ raw, savedAt: Date.now() }),
+    )
+  } catch {
+    // 용량 초과/사용 불가 — 캐시 없이 정상 동작
+  }
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 export const useAttractionStore = defineStore('attraction', () => {
   const attractions = ref([])        // mapped list for ExploreView
@@ -121,26 +162,71 @@ export const useAttractionStore = defineStore('attraction', () => {
   const searchParams = ref({})
   const areas = ref([])
 
+  // 주어진 raw 배열을 상태에 반영
+  function applyRaw(raw, params) {
+    searchResults.value = raw
+    attractions.value = raw.map((item, i) => mapAttraction(item, i + 1))
+    searchParams.value = params
+  }
+
+  // 네트워크에서 받아 상태/캐시에 저장. 성공 시 raw 반환, 실패 시 null.
+  async function fetchAndStore(params) {
+    const { data } = await attractionApi.list(params)
+    const raw = Array.isArray(data) ? data : (data?.content ?? data?.items ?? [])
+    writeListCache(params, raw)
+    return raw
+  }
+
   /**
    * Load a filtered/searched list of attractions.
    * params: { areaCode, sigunguCode, contentTypeId, keyword, page, size }
+   *
+   * 캐시 우선(stale-while-revalidate): 동일 파라미터 캐시가 있으면 즉시 표시한 뒤
+   * 백그라운드로 최신화한다. 캐시가 없으면 기존처럼 로딩 후 조회한다.
    * Falls back to MOCK_ATTRACTIONS on network failure.
    */
   async function list(params = {}) {
-    loading.value = true
     error.value = null
     searchParams.value = params
+
+    const cached = readListCache(params)
+    if (cached) {
+      // 캐시 즉시 반영 — 로딩 스피너 없이 바로 표시
+      applyRaw(cached, params)
+      loading.value = false
+      // 백그라운드 갱신 (조용히, 실패해도 캐시 유지)
+      fetchAndStore(params)
+        .then((raw) => {
+          if (raw) applyRaw(raw, params)
+        })
+        .catch(() => {})
+      return
+    }
+
+    loading.value = true
     try {
-      const { data } = await attractionApi.list(params)
-      const raw = Array.isArray(data) ? data : (data?.content ?? data?.items ?? [])
-      searchResults.value = raw
-      attractions.value = raw.map((item, i) => mapAttraction(item, i + 1))
+      const raw = await fetchAndStore(params)
+      applyRaw(raw, params)
     } catch (e) {
       error.value = e.response?.data?.message ?? e.message ?? '검색 중 오류가 발생했습니다.'
       searchResults.value = MOCK_ATTRACTIONS
       attractions.value = MOCK_ATTRACTIONS.map((item, i) => mapAttraction(item, i + 1))
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * 백그라운드 프리페치 — 현재 화면 상태(attractions/loading)를 건드리지 않고
+   * 결과를 캐시에만 저장한다. 앱 시작 시 호출되어 첫 탐색을 즉시 표시하기 위함.
+   * 실패는 조용히 무시한다.
+   */
+  async function prefetch(params = {}) {
+    if (readListCache(params)) return // 이미 신선한 캐시가 있으면 생략
+    try {
+      await fetchAndStore(params)
+    } catch {
+      // 프리페치 실패는 무시 — 실제 진입 시 정상 경로로 재시도
     }
   }
 
@@ -194,6 +280,7 @@ export const useAttractionStore = defineStore('attraction', () => {
     areas,
     // actions
     list,
+    prefetch,
     search,
     fetchDetail,
     loadAreas,

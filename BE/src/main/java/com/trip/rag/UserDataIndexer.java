@@ -25,6 +25,7 @@ import java.util.List;
 public class UserDataIndexer {
 
     private static final String SOURCE_LABEL = "내 여행기록";
+    private static final String ANALYSIS_SOURCE_LABEL = "내 분석데이터";
     private static final int MAX_PLANS = 50;
 
     private final PlanRepository planRepository;
@@ -58,6 +59,17 @@ public class UserDataIndexer {
             String text = toSummaryText(plan);
             ingestionService.ingest(userId, "plan:" + plan.getId(), SOURCE_LABEL, text);
         });
+    }
+
+    /**
+     * STT/카카오톡 분석데이터(PII 마스킹된 텍스트)를 RAG 벡터스토어에 적재한다.
+     *
+     * <p>분석데이터 1건 = 문서 1건(docId="analysis:{id}")으로 인덱싱되어, 챗봇이
+     * 사용자의 통화/대화 맥락("내가 통화에서 가고 싶다 했던 곳" 등)을 참조할 수 있게 한다.
+     * 빈 텍스트는 IngestionService.ingest 내부에서 스킵된다.</p>
+     */
+    public void indexAnalysis(Long userId, Long analysisId, String text) {
+        ingestionService.ingest(userId, "analysis:" + analysisId, ANALYSIS_SOURCE_LABEL, text);
     }
 
     /** plan을 임베딩하기 좋은 한국어 요약 텍스트로 변환한다. */
