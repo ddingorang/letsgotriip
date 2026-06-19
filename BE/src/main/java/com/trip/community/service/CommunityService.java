@@ -30,6 +30,7 @@ public class CommunityService {
     private final PostImageRepository postImageRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // ─── 게시글 ───────────────────────────────────────────────
 
@@ -179,8 +180,19 @@ public class CommunityService {
                 .author(author)
                 .content(request.content())
                 .build();
+        Comment saved = commentRepository.save(comment);
 
-        return CommentResponse.of(commentRepository.save(comment), false);
+        // 게시글 작성자에게 알림 (본인 댓글 제외, 커밋 후 적재)
+        if (!post.getAuthor().getId().equals(userId)) {
+            eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
+                    post.getAuthor().getId(),
+                    "community",
+                    "내 글에 댓글이 달렸어요",
+                    "‘" + post.getTitle() + "’에 " + author.getNickname() + "님이 댓글을 남겼어요.",
+                    "/community/" + post.getId()));
+        }
+
+        return CommentResponse.of(saved, false);
     }
 
     @Transactional

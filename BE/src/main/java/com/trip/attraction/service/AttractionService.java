@@ -74,9 +74,15 @@ public class AttractionService {
 
         // 2) TourAPI 호출
         try {
-            List<AttractionItem> items = keyword.isEmpty()
-                    ? tourApiClient.fetchAreaBased(req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size)
-                    : tourApiClient.fetchByKeyword(keyword, req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size);
+            List<AttractionItem> items;
+            if (!keyword.isEmpty()) {
+                items = tourApiClient.fetchByKeyword(keyword, req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size);
+            } else if (req.hasCoords()) {
+                // 내 위치 근처 — 좌표 기반 거리순 조회
+                items = tourApiClient.fetchLocationBased(req.mapX(), req.mapY(), req.clampedRadius(), req.contentTypeId(), page, size);
+            } else {
+                items = tourApiClient.fetchAreaBased(req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size);
+            }
 
             String json = serializeItems(items);
             stringRedisTemplate.opsForValue().set(cacheKey, json, TTL_SEARCH);
@@ -248,6 +254,9 @@ public class AttractionService {
         params.put("contentTypeId", nvl(req.contentTypeId()));
         params.put("size",          String.valueOf(size));
         params.put("page",          String.valueOf(page));
+        params.put("mapX",          nvl(req.mapX()));
+        params.put("mapY",          nvl(req.mapY()));
+        params.put("radius",        req.hasCoords() ? String.valueOf(req.clampedRadius()) : "");
 
         String raw = params.toString();
         try {

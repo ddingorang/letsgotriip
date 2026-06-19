@@ -9,7 +9,7 @@
       </button>
       <div class="nav-title-col">
         <span class="nav-title">이달의 챌린지</span>
-        <span class="nav-sub">6월 · 여행자 뱃지 챌린지</span>
+        <span class="nav-sub">{{ ch?.month ?? '' }} · 여행자 뱃지 챌린지</span>
       </div>
       <div style="width: 40px" />
     </header>
@@ -26,22 +26,22 @@
 
       <!-- Title -->
       <div class="challenge-body">
-        <h1 class="challenge-title">6월에 10곳 방문하기</h1>
-        <p class="challenge-desc">이번 달 새로운 장소를 10곳 다녀오면 보상 뱃지를 드려요</p>
+        <h1 class="challenge-title">{{ ch?.title ?? '이달의 챌린지' }}</h1>
+        <p class="challenge-desc">이번 달 계획에 새로운 장소를 {{ ch?.goal ?? 10 }}곳 담으면 보상 뱃지를 드려요</p>
 
         <!-- Progress display -->
         <div class="progress-display">
-          <span class="progress-current">7</span>
+          <span class="progress-current">{{ ch?.current ?? 0 }}</span>
           <span class="progress-sep"> / </span>
-          <span class="progress-total">10곳</span>
+          <span class="progress-total">{{ ch?.goal ?? 10 }}곳</span>
         </div>
 
         <div class="progress-bar-wrap">
           <div class="progress-bar">
-            <div class="progress-fill" style="width: 70%" />
+            <div class="progress-fill" :style="{ width: (ch?.percent ?? 0) + '%' }" />
           </div>
         </div>
-        <p class="progress-hint">3곳 남았어요 · 6월 30일까지</p>
+        <p class="progress-hint">{{ ch?.hint ?? '' }}</p>
 
         <!-- 달성 조건 -->
         <div class="section">
@@ -98,6 +98,13 @@
 </template>
 
 <script setup>
+import { computed, onMounted } from 'vue'
+import { useGamificationStore } from '@/stores/gamification.js'
+
+const gamiStore = useGamificationStore()
+const ch = computed(() => gamiStore.summary?.challenge)
+
+onMounted(() => gamiStore.load())
 </script>
 
 <style scoped>

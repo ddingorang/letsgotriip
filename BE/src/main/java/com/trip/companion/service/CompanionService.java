@@ -36,6 +36,7 @@ public class CompanionService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMembershipRepository chatRoomMembershipRepository;
     private final UserRepository userRepository;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // ─── 게시글 ───────────────────────────────────────────────
 
@@ -156,6 +157,15 @@ public class CompanionService {
                 .build();
 
         companionApplicationRepository.save(application);
+
+        // 모집글 작성자에게 알림 (커밋 후 적재)
+        eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
+                post.getAuthor().getId(),
+                "companion",
+                "동행 신청이 도착했어요",
+                "‘" + post.getTitle() + "’에 " + applicant.getNickname() + "님이 신청했어요.",
+                "/community?tab=companion"));
+
         return CompanionApplicationResponse.of(application);
     }
 

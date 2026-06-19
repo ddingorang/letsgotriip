@@ -33,10 +33,13 @@ public class AttractionController {
             @RequestParam(required = false) String contentTypeId,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1")  int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String mapX,    // 경도(lng) — 내 위치 근처 검색
+            @RequestParam(required = false) String mapY,    // 위도(lat)
+            @RequestParam(required = false) Integer radius) {  // 반경(m, 기본 5000)
 
         AttractionSearchRequestDto req = new AttractionSearchRequestDto(
-                areaCode, sigunguCode, contentTypeId, keyword, page, size);
+                areaCode, sigunguCode, contentTypeId, keyword, page, size, mapX, mapY, radius);
         return ResponseEntity.ok(attractionService.search(req));
     }
 

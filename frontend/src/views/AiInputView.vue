@@ -121,6 +121,7 @@
           <div class="loading-spinner" />
           <div class="loading-title">AI가 일정을 만들고 있어요</div>
           <div class="loading-sub">최대 30초 소요돼요. 잠시만 기다려 주세요.</div>
+          <button class="cancel-btn" @click="handleCancel">취소</button>
         </div>
       </div>
     </Transition>
@@ -189,8 +190,12 @@ async function handleGenerate() {
     await recommendStore.generate(payload)
     router.push('/ai/result')
   } catch {
-    // error already in store
+    // 취소/실패 — 취소면 store.error=null, 실패면 store.error에 메시지 (둘 다 화면 유지)
   }
+}
+
+function handleCancel() {
+  recommendStore.cancelGenerate()
 }
 </script>
 
@@ -499,6 +504,23 @@ async function handleGenerate() {
 .loading-sub {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.6);
+}
+
+.cancel-btn {
+  margin-top: 20px;
+  padding: 9px 24px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cancel-btn:active {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .fade-enter-active,

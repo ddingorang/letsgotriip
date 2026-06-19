@@ -5,11 +5,11 @@
       <!-- Top icons -->
       <div class="top-bar">
         <div style="flex:1" />
-        <button class="icon-btn bell-wrap">
+        <button class="icon-btn bell-wrap" @click="$router.push('/notifications')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          <span class="notif-dot" />
+          <span v-if="notifStore.hasUnread" class="notif-dot" />
         </button>
         <button class="icon-btn" @click="$router.push('/mypage/edit')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -41,17 +41,17 @@
       <!-- Stats -->
       <div class="stats-row">
         <div class="stat">
-          <span class="stat-num">{{ planCount }}</span>
+          <span class="stat-num">{{ gami?.stats?.plans ?? planCount }}</span>
           <span class="stat-label">여행 계획</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">{{ completedCount }}</span>
+          <span class="stat-num">{{ gami?.stats?.completedPlans ?? completedCount }}</span>
           <span class="stat-label">다녀온 여행</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">{{ unlockedBadgeCount }}</span>
+          <span class="stat-num">{{ gami?.stats?.badges ?? unlockedBadgeCount }}</span>
           <span class="stat-label">뱃지</span>
         </div>
       </div>
@@ -63,14 +63,14 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--color-peach)" stroke="none">
               <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" />
             </svg>
-            <span class="challenge-title">이달의 챌린지 · 6월</span>
+            <span class="challenge-title">이달의 챌린지 · {{ gami?.challenge?.month ?? '' }}</span>
           </div>
-          <span class="challenge-phase">준비 중 · Phase 2</span>
+          <span class="challenge-phase">{{ gami?.challenge?.current ?? 0 }} / {{ gami?.challenge?.goal ?? 10 }}곳</span>
         </div>
         <div class="challenge-bar">
-          <div class="challenge-fill" style="width: 0%" />
+          <div class="challenge-fill" :style="{ width: (gami?.challenge?.percent ?? 0) + '%' }" />
         </div>
-        <p class="challenge-hint">챌린지 기능은 곧 만나요. 여행을 기록하면 뱃지를 모을 수 있어요.</p>
+        <p class="challenge-hint">{{ gami?.challenge?.hint ?? '계획을 만들어 챌린지를 시작해보세요!' }}</p>
       </div>
 
       <!-- Main tabs -->
@@ -188,15 +188,15 @@
 
       <!-- ③ 뱃지 -->
       <div v-show="activeMain === 2" class="tab-content">
-        <div class="badge-header">획득한 뱃지 <strong>{{ unlockedBadgeCount }}</strong> / {{ badges.length }}</div>
+        <div class="badge-header">획득한 뱃지 <strong>{{ gami?.stats?.badges ?? 0 }}</strong> / {{ badgeList.length }}</div>
         <div class="badges-grid">
-          <div v-for="badge in badges" :key="badge.key" class="badge-item">
+          <div v-for="badge in badgeList" :key="badge.key" class="badge-item">
             <div :class="['badge-circle', badge.unlocked ? 'unlocked' : 'locked']">
-              <span v-if="badge.unlocked" v-html="badge.icon" />
+              <svg v-if="badge.unlocked" width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z"/></svg>
               <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
             </div>
             <span class="badge-name">{{ badge.name }}</span>
-            <span v-if="!badge.unlocked && badge.progress" class="badge-progress">{{ badge.progress }}</span>
+            <span v-if="!badge.unlocked && badge.progressText" class="badge-progress">{{ badge.progressText }}</span>
           </div>
         </div>
       </div>
@@ -221,10 +221,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationStore } from '@/stores/notification.js'
+import { useGamificationStore } from '@/stores/gamification.js'
 import { http } from '@/api/http.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const notifStore = useNotificationStore()
+const gamiStore = useGamificationStore()
+
+const gami = computed(() => gamiStore.summary)
 
 async function handleLogout() {
   await authStore.logout()
@@ -312,33 +318,23 @@ async function loadAlbums() {
 }
 
 // ── 뱃지 ────────────────────────────────────────────────────────────────────
-// BE 뱃지 시스템 미구현 — 모두 잠금 상태로 표시(가짜 진행도/획득 수치 제거).
-const badges = ref([
-  {
-    key: 'first', name: '첫 여행', unlocked: false,
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z"/></svg>`,
-  },
-  {
-    key: 'foodie', name: '미식가', unlocked: false,
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
-  },
-  { key: 'explorer', name: '탐험가', unlocked: false, progress: '' },
-  { key: 'spots10', name: '10곳 달성', unlocked: false, progress: '' },
-  { key: 'companion', name: '동행 메이커', unlocked: false, progress: '' },
-  { key: 'photo', name: '사진가', unlocked: false, progress: '' },
-])
+// 게임화 API(GET /api/gamification/summary)의 실데이터 뱃지 목록.
+// 미로그인/로딩 시 빈 배열 → 화면은 빈 상태로 정직하게 표시.
+const badgeList = computed(() => gami.value?.badges ?? [])
 const unlockedBadgeCount = computed(
-  () => badges.value.filter((b) => b.unlocked).length,
+  () => badgeList.value.filter((b) => b.unlocked).length,
 )
 
 // 탭 라벨에 실제 개수를 표시
 const mainTabs = computed(() => [
   '내 계획',
   `앨범 ${albums.value.length}`,
-  `뱃지 ${unlockedBadgeCount.value}`,
+  `뱃지 ${gami.value?.stats?.badges ?? unlockedBadgeCount.value}`,
 ])
 
 onMounted(() => {
+  notifStore.load()
+  gamiStore.load()
   loadPlans()
   loadAlbums()
 })

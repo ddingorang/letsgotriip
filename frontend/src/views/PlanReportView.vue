@@ -46,7 +46,7 @@
           <div class="banner-tags">
             <span class="banner-tag">총 {{ totalPlaces }}개 장소</span>
             <span class="banner-tag">{{ totalDays }}일 일정</span>
-            <span v-if="plan.destination" class="banner-tag">{{ plan.destination }}</span>
+            <span v-if="report?.totalDistanceKm" class="banner-tag">이동 {{ report.totalDistanceKm }}km</span>
           </div>
         </div>
         <div class="route-badge">
@@ -64,7 +64,7 @@
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        거리·시간은 장소 좌표 기준 직선거리 추정값이에요 (도보 {{ WALK_THRESHOLD_KM }}km 이하·차량 가정)
+        {{ optNote }}
       </div>
 
       <!-- Scroll area -->
@@ -89,12 +89,12 @@
             <div class="stat-dot" />
             <div class="stat-item">
               <span class="stat-label">예상 이동</span>
-              <span class="stat-value">{{ estimatedDistance(day.places) }}</span>
+              <span class="stat-value">{{ estimatedDistance(day.dayNo) }}</span>
             </div>
             <div class="stat-dot" />
             <div class="stat-item">
               <span class="stat-label">소요 시간</span>
-              <span class="stat-value">{{ estimatedDuration(day.places) }}</span>
+              <span class="stat-value">{{ estimatedDuration(day.dayNo) }}</span>
             </div>
           </div>
 
@@ -122,8 +122,8 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     {{ place.visitTime }}
                   </div>
-                  <div v-if="idx < day.places.length - 1" class="travel-hint">
-                    다음 장소까지 약 {{ travelTime(idx, day.places) }}
+                  <div v-if="idx < day.places.length - 1 && travelTime(idx, day.dayNo)" class="travel-hint">
+                    다음 장소까지 {{ travelTime(idx, day.dayNo) }}
                   </div>
                 </div>
               </div>
@@ -142,13 +142,9 @@
 
       <!-- Bottom action bar -->
       <div class="bottom-bar">
-        <button
-          class="btn-apply"
-          :disabled="!hasOptimizable || planStore.loading"
-          @click="applyRoute"
-        >
+        <button class="btn-apply" :disabled="applying || planStore.loading || !canApply" @click="applyRoute">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-          {{ hasOptimizable ? '거리 기반 동선 적용' : '좌표가 없어 적용 불가' }}
+          {{ applyLabel }}
         </button>
       </div>
     </template>
@@ -156,7 +152,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
 
@@ -166,10 +162,12 @@ const planStore = usePlanStore()
 
 const planId = route.params.id
 
+const applying = ref(false)
+
 onMounted(async () => {
-  // Always reload to get fresh data
   try {
     await planStore.loadPlan(planId)
+    await planStore.loadRouteReport(planId)   // 좌표 기반 거리·추천순서 (BE Haversine)
   } catch {
     // error shown via planStore.error
   }
@@ -180,12 +178,23 @@ const days = computed(() => plan.value?.days ?? [])
 const totalDays = computed(() => days.value.length)
 const totalPlaces = computed(() => days.value.reduce((acc, d) => acc + (d.places?.length ?? 0), 0))
 
-// ── 실거리 기반 동선 계산 ────────────────────────────────────────────────────
-// 장소의 위경도(attraction.latitude / attraction.longitude, TourAPI mapy/mapx)를
-// 사용해 Haversine 거리를 합산한다. 좌표가 없으면 '추정/계산 불가'로 정직하게 표시한다.
-// 이동시간은 거리 기반 단순 추정(도보 ≤2km 4.5km/h, 그 이상 차량 30km/h 가정)이며
-// 실제 도로 경로가 아닌 직선거리 기준임을 명시한다.
+// ── 동선 리포트: BE 실데이터를 주 데이터원으로, 좌표 기반 Haversine을 폴백으로 ──
+// 우선순위 1) 서버 동선 리포트(planStore.routeReport, BE RouteCalculator 계산값)
+//          2) 서버 리포트가 없거나 해당 일자가 비면 FE Haversine 추정(좌표 보유 시)
+// 이동시간/거리는 외부 라우팅 API가 아닌 직선거리 기반 추정값이다.
 
+const report = computed(() => planStore.routeReport)
+function dayReport(dayNo) {
+  return report.value?.days?.find((d) => d.dayNo === dayNo) ?? null
+}
+// 서버가 한 곳이라도 추천 순서가 현재와 다르다고 하면 "대체 동선 적용" 가능
+const hasSuggestion = computed(() =>
+  (report.value?.days ?? []).some((d) => d.reorderSuggested),
+)
+
+// ── FE 폴백용 Haversine 계산 ────────────────────────────────────────────────
+// 장소의 위경도(attraction.latitude / attraction.longitude, TourAPI mapy/mapx)를
+// 사용해 직선거리를 합산한다. 도보 ≤2km 4.5km/h, 그 이상 차량 30km/h를 가정.
 const WALK_THRESHOLD_KM = 2   // 이 거리 이하면 도보로 가정
 const WALK_SPEED_KMH = 4.5
 const DRIVE_SPEED_KMH = 30
@@ -217,9 +226,14 @@ function legMinutes(km) {
   return (km / speed) * 60
 }
 
+/** 해당 일자의 place 배열을 dayNo로 조회 */
+function placesOf(dayNo) {
+  return days.value.find((d) => d.dayNo === dayNo)?.places ?? []
+}
+
 /**
  * 하루 일정의 총 직선 이동거리(km)와 좌표 보유 여부를 계산.
- * coords: 좌표가 있는 장소 목록, missing: 좌표가 없는 장소 수
+ * coords: 좌표가 있는 장소 목록 수, missing: 좌표가 없는 장소 수
  */
 function dayDistance(places) {
   const list = places ?? []
@@ -237,32 +251,7 @@ function dayDistance(places) {
   return { km, usable: coords.length, missing }
 }
 
-/** 예상 이동 거리 텍스트 (직선거리 기준) */
-function estimatedDistance(places) {
-  const n = places?.length ?? 0
-  if (n <= 1) return '–'
-  const { km, usable, missing } = dayDistance(places)
-  if (usable < 2) return '좌표 없음'      // 거리 계산 불가
-  const txt = km < 1 ? `약 ${Math.round(km * 1000)}m` : `약 ${km.toFixed(1)}km`
-  // 일부 장소만 좌표가 있으면 부분 추정임을 표시
-  return missing > 0 ? `${txt}~` : txt
-}
-
-/** 예상 소요 시간 텍스트 (직선 이동시간 추정 + 장소당 체류 60분 가정) */
-function estimatedDuration(places) {
-  const n = places?.length ?? 0
-  if (n === 0) return '–'
-  const { km, usable } = dayDistance(places)
-  if (usable < 2) return '추정 불가'      // 이동시간 계산 불가
-  const STAY_MIN = 60                      // 장소당 평균 체류시간 가정
-  const moveMin = legSumMinutes(places)
-  const mins = Math.round(n * STAY_MIN + moveMin)
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return h > 0 ? `약 ${h}시간${m > 0 ? ' ' + m + '분' : ''}` : `약 ${m}분`
-}
-
-/** 하루 전체 구간 이동시간 합(분) */
+/** 하루 전체 구간 이동시간 합(분, FE 추정) */
 function legSumMinutes(places) {
   const list = places ?? []
   let mins = 0
@@ -274,9 +263,60 @@ function legSumMinutes(places) {
   return mins
 }
 
-/** 구간별 이동시간 텍스트 — 좌표 없으면 '추정 불가' */
-function travelTime(idx, places) {
-  if (!places || idx >= places.length - 1) return ''
+// ── 화면용 텍스트: 서버 리포트 우선, 없으면 FE 폴백 ───────────────────────────
+
+/** 예상 이동 거리 텍스트 */
+function estimatedDistance(dayNo) {
+  const r = dayReport(dayNo)
+  if (r) {
+    if (r.placeCount <= 1) return '–'
+    return `약 ${r.totalDistanceKm ?? r.distanceKm}km`
+  }
+  // 폴백: FE Haversine
+  const places = placesOf(dayNo)
+  if ((places.length ?? 0) <= 1) return '–'
+  const { km, usable, missing } = dayDistance(places)
+  if (usable < 2) return '좌표 없음'
+  const txt = km < 1 ? `약 ${Math.round(km * 1000)}m` : `약 ${km.toFixed(1)}km`
+  return missing > 0 ? `${txt}~` : txt
+}
+
+/** 예상 소요 시간 텍스트 */
+function estimatedDuration(dayNo) {
+  const r = dayReport(dayNo)
+  if (r) {
+    if (r.placeCount === 0) return '–'
+    return formatMinutes(r.estimatedMinutes)
+  }
+  // 폴백: FE Haversine (장소당 체류 60분 가정)
+  const places = placesOf(dayNo)
+  const n = places.length ?? 0
+  if (n === 0) return '–'
+  const { usable } = dayDistance(places)
+  if (usable < 2) return '추정 불가'
+  const STAY_MIN = 60
+  const mins = Math.round(n * STAY_MIN + legSumMinutes(places))
+  return formatMinutes(mins)
+}
+
+/** 분(minutes) → "약 N시간 M분" 텍스트 */
+function formatMinutes(mins) {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return h > 0 ? `약 ${h}시간${m > 0 ? ' ' + m + '분' : ''}` : `약 ${m}분`
+}
+
+/** 구간별 이동시간 텍스트 — 서버 leg 우선, 없으면 FE 추정 */
+function travelTime(idx, dayNo) {
+  const r = dayReport(dayNo)
+  const leg = r?.legs?.[idx]
+  if (leg) {
+    const mins = Math.max(1, Math.round((leg.distanceKm / DRIVE_SPEED_KMH) * 60)) // 30km/h 가정
+    return `${leg.distanceKm}km · 약 ${mins}분`
+  }
+  // 폴백: FE Haversine
+  const places = placesOf(dayNo)
+  if (!places.length || idx >= places.length - 1) return ''
   const a = coordOf(places[idx])
   const b = coordOf(places[idx + 1])
   if (!a || !b) return '거리 추정 불가'
@@ -287,7 +327,9 @@ function travelTime(idx, places) {
   return `${dist} · ${mode} ${mins}분`
 }
 
-/** 하루 일정 중 좌표를 가진 장소가 2곳 이상이면 거리기반 재정렬이 가능 */
+// ── 대체 동선 적용 (재정렬) ──────────────────────────────────────────────────
+
+/** 하루 일정 중 좌표를 가진 장소가 2곳 이상이면 FE 거리기반 재정렬 가능 */
 function canOptimize(places) {
   const list = places ?? []
   let usable = 0
@@ -295,11 +337,32 @@ function canOptimize(places) {
   return usable >= 2
 }
 
-/** 거리기반(최근접 이웃) 재정렬이 가능한 날이 하나라도 있는지 */
+/** FE 폴백으로라도 재정렬 가능한 날이 하나라도 있는지 */
 const hasOptimizable = computed(() => days.value.some((d) => canOptimize(d.places)))
 
+// 서버 추천이 있거나, 서버 리포트가 없더라도 FE로 재정렬할 수 있으면 적용 버튼 활성
+const canApply = computed(() => {
+  if (report.value) return hasSuggestion.value
+  return hasOptimizable.value
+})
+
+const optNote = computed(() => {
+  if (report.value) {
+    return hasSuggestion.value
+      ? '더 짧은 동선을 찾았어요. 아래에서 적용해 보세요.'
+      : '장소 간 좌표 거리로 계산한 동선이에요'
+  }
+  return `거리·시간은 장소 좌표 기준 직선거리 추정값이에요 (도보 ${WALK_THRESHOLD_KM}km 이하·차량 가정)`
+})
+
+const applyLabel = computed(() => {
+  if (applying.value) return '적용 중...'
+  if (report.value) return hasSuggestion.value ? '대체 동선 적용' : '확인'
+  return hasOptimizable.value ? '거리 기반 동선 적용' : '좌표가 없어 적용 불가'
+})
+
 /**
- * 최근접 이웃(greedy nearest-neighbor)으로 장소 순서를 재정렬.
+ * 최근접 이웃(greedy nearest-neighbor)으로 장소 순서를 재정렬 (FE 폴백).
  * 첫 장소를 출발점으로 고정하고, 가장 가까운 장소를 차례로 잇는다.
  * 좌표가 없는 장소는 원래 상대순서를 유지하며 뒤에 붙인다.
  */
@@ -324,17 +387,51 @@ function reorderByDistance(places) {
     })
     ordered.push(remaining.splice(bestIdx, 1)[0])
   }
-  // 좌표 없는 장소는 끝에 추가(거리 계산 불가하므로 임의 배치 대신 후순위)
+  // 좌표 없는 장소는 끝에 추가(거리 계산 불가하므로 후순위)
   return [...ordered, ...without]
 }
 
 /**
- * "대체 동선 적용" — 좌표가 있는 날에 한해 거리기반으로 순서를 재정렬하고
- * replacePlaces로 저장한다. 좌표가 전혀 없으면 버튼은 비활성(아래 :disabled) 상태.
+ * "대체 동선 적용" — 서버 추천 순서(suggestedOrder)가 있으면 그것으로,
+ * 서버 리포트가 없으면 FE 거리기반(nearest-neighbor)으로 각 일자를 재배치.
+ * 기존 PUT /api/plans/{id}/days/{dayNo}/places(replacePlaces)를 재사용한다.
  */
 async function applyRoute() {
+  if (applying.value) return
+
+  // 서버 리포트가 있는 경우
+  if (report.value) {
+    if (!hasSuggestion.value) {
+      router.replace('/plan')
+      return
+    }
+    applying.value = true
+    try {
+      for (const dr of report.value.days) {
+        if (!dr.reorderSuggested) continue
+        const day = days.value.find((d) => d.dayNo === dr.dayNo)
+        if (!day?.places?.length) continue
+        // suggestedOrder(placeId 목록) → 실제 place 객체 순서로 매핑
+        const byId = new Map(day.places.map((p) => [p.id, p]))
+        const reordered = dr.suggestedOrder.map((id) => byId.get(id)).filter(Boolean)
+        if (reordered.length === day.places.length) {
+          await planStore.replacePlaces(planId, dr.dayNo, reordered)
+        }
+      }
+      await planStore.loadRouteReport(planId).catch(() => {})
+      router.replace('/plan')
+    } catch {
+      // error in planStore.error
+    } finally {
+      applying.value = false
+    }
+    return
+  }
+
+  // 폴백: 서버 리포트가 없을 때 FE 거리기반 재정렬
   const targets = days.value.filter((d) => canOptimize(d.places))
   if (!targets.length) return
+  applying.value = true
   try {
     for (const day of targets) {
       const reordered = reorderByDistance(day.places)
@@ -343,6 +440,8 @@ async function applyRoute() {
     router.replace('/plan')
   } catch {
     // 오류는 planStore.error에 반영됨 (상단 에러 상태로 표시)
+  } finally {
+    applying.value = false
   }
 }
 </script>

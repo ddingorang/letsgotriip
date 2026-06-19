@@ -154,7 +154,7 @@
       <div class="companion-section">
         <div class="section-header">
           <h2 class="section-title">동행 구하기</h2>
-          <button class="see-all">전체보기</button>
+          <button class="see-all" @click="router.push({ path: '/community', query: { tab: 'companion' } })">전체보기</button>
         </div>
         <div class="companion-list">
           <div v-for="comp in companions" :key="comp.id" class="companion-card">
@@ -169,7 +169,7 @@
                 <div v-for="i in comp.currentCount" :key="i" class="member-dot" />
                 <span class="member-text">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
               </div>
-              <button class="join-btn">참여하기</button>
+              <button class="join-btn" @click="router.push({ path: '/community', query: { tab: 'companion' } })">참여하기</button>
             </div>
           </div>
         </div>

@@ -4,6 +4,11 @@
     <header class="ai-header">
       <div class="ai-hero-glow" />
       <div class="ai-hero-glow2" />
+      <button class="ai-back-btn" aria-label="뒤로가기" @click="goBack">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
       <div class="ai-badge">
         <span class="ai-badge-dot" />
         AI 분석 준비 완료
@@ -178,6 +183,12 @@ import { useRouter } from 'vue-router'
 import { http } from '@/api/http.js'
 
 const router = useRouter()
+
+// 뒤로가기 — 직접 진입(history 없음) 시 홈으로 안전 폴백
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push('/')
+}
 
 // ── 지역 ──────────────────────────────────────────────────────────────────────
 const areas = ref([])
@@ -365,6 +376,26 @@ function handleNext() {
   height: 110px;
   background: radial-gradient(circle, rgba(100, 180, 240, 0.15) 0%, transparent 70%);
   pointer-events: none;
+}
+
+.ai-back-btn {
+  position: relative;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  margin: 0 0 8px -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ai-back-btn:active {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .ai-badge {

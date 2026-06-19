@@ -99,6 +99,13 @@ public class PlanService {
         return PlanDetailResponseDto.from(plan);
     }
 
+    /** 동선 리포트 — 좌표 기반 거리·소요시간 + 최근접 이웃 추천 순서 */
+    public com.trip.plan.dto.RouteReportResponseDto getRouteReport(Long userId, Long planId) {
+        TripPlan plan = findPlanWithDays(planId);
+        verifyOwner(plan, userId);
+        return com.trip.plan.dto.RouteReportResponseDto.from(plan);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // 메타 수정
     // ─────────────────────────────────────────────────────────────
