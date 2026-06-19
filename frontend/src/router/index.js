@@ -59,6 +59,8 @@ const router = createRouter({
     { path: '/mypage/edit', name: 'profile-edit', component: () => import('@/views/ProfileEditView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/mypage/challenge', name: 'challenge-detail', component: () => import('@/views/ChallengeDetailView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/mypage/album/:id', name: 'album-detail', component: () => import('@/views/AlbumDetailView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    // 공유 토큰으로 공개된 앨범 — 공개(인증 불필요), full-screen
+    { path: '/album/shared/:token', name: 'album-shared', component: () => import('@/views/AlbumSharedView.vue'), meta: { tabBar: false } },
     { path: '/place/:id', name: 'place-detail', component: () => import('@/views/PlaceDetailView.vue'), meta: { tabBar: false } },
 
     // ── Auth ──────────────────────────────────────────────────────────────────

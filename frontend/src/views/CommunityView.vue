@@ -169,7 +169,7 @@
 
     <!-- ③ 동행 -->
     <div v-show="activeMain === 2" class="tab-pane companion-pane">
-      <div class="scroll-content">
+      <div class="scroll-content" @scroll="onCompanionScroll">
         <div class="section-header">
           <span class="section-title">참여 중인 방</span>
           <button class="see-all-btn" @click="$router.push('/chat')">전체보기</button>
@@ -232,6 +232,13 @@
             </div>
           </div>
         </div>
+        <div v-if="companionStore.loadingMore" class="loading-row">
+          <div class="spinner" />
+        </div>
+        <div
+          v-else-if="!companionStore.hasMore && companionStore.companions.length > 0"
+          class="end-msg"
+        >모든 동행을 불러왔어요</div>
         <div class="bottom-spacer" />
       </div>
 
@@ -283,6 +290,12 @@ function selectFilter(f) {
 function onScroll(e) {
   const el = e.target
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) postsStore.fetchPosts()
+}
+
+// 동행 탭 무한스크롤 — 하단 근접 시 다음 페이지 로드(스토어가 hasMore/중복 호출 가드).
+function onCompanionScroll(e) {
+  const el = e.target
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) companionStore.fetchMoreCompanions()
 }
 
 // 핫플

@@ -79,6 +79,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/community/posts", "/community/posts/*", "/community/posts/*/comments").permitAll()
                         // 핫플 승인 대기 목록은 ADMIN 전용 — 아래 hotplaces/* permitAll 와일드카드에 포함되지 않도록 먼저 선언
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces/pending").hasRole("ADMIN")
+                        // 핫플 승인/거절은 매처 레벨에서 ADMIN 강제 — GET hotplaces permitAll 와일드카드보다 먼저 선언
+                        .requestMatchers(HttpMethod.POST, "/community/hotplaces/*/approve", "/community/hotplaces/*/reject").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces", "/community/hotplaces/*").permitAll()
                         // 동행 — 내 참여 방은 인증 필수 (공개 매처보다 먼저 선언해 /my가 permitAll에 포함되지 않도록)
                         .requestMatchers(HttpMethod.GET, "/companion/posts/my").authenticated()
@@ -90,6 +92,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/groups/discounts").permitAll()
                         // 그룹 — 생성/가입/탈퇴/내 목록 등 인증 필수
                         .requestMatchers("/api/groups/**").authenticated()
+                        // 앨범 공유 토큰 공개뷰 — 인증 없이 공유 링크로 앨범 조회 (다른 스트림이 구현)
+                        .requestMatchers(HttpMethod.GET, "/api/albums/shared/**").permitAll()
                         // 업로드 파일 공개 접근
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         // API 문서

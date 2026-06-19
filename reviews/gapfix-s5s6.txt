@@ -1,0 +1,40 @@
+=== S5 — BE 신규: 내 리뷰 목록(G11) + 앨범 공유(G12) [done]
+FILES: ['BE/src/main/java/com/trip/review/repository/AttractionReviewRepository.java', 'BE/src/main/java/com/trip/review/dto/MyReviewResponse.java', 'BE/src/main/java/com/trip/review/dto/MyReviewListResponse.java', 'BE/src/main/java/com/trip/review/service/ReviewService.java', 'BE/src/main/java/com/trip/review/controller/MyReviewController.java', 'BE/src/main/java/com/trip/user/entity/Album.java', 'BE/src/main/java/com/trip/user/repository/AlbumRepository.java', 'BE/src/main/java/com/trip/user/dto/AlbumShareResponse.java', 'BE/src/main/java/com/trip/user/service/AlbumService.java', 'BE/src/main/java/com/trip/user/controller/AlbumController.java', 'BE/src/main/java/com/trip/user/controller/AlbumShareController.java']
+SUMMARY: G11(내 리뷰 목록)과 G12(앨범 공유)를 소유 파일 범위 내에서 구현했고, `./gradlew compileJava` BUILD SUCCESSFUL(exit 0)로 컴파일 검증 완료.
+
+[G11 — 내 리뷰 목록 GET /api/reviews/me]
+- 신규 컨트롤러 MyReviewController(@RequestMapping("/api/reviews"), GET /me, @AuthenticationPrincipal UserPrincipal). 기존 ReviewController는 클래스 매핑이 /api/attractions/{contentId}/reviews라 분리.
+- ReviewService.listByUser(userId): 작성일 내림차순 전체 리뷰 + 관광지명 매핑 후 반환.
+- AttractionReviewRepository: findByUserIdOrderByCreatedAtDesc 추가, 그리고 관광지명 해석을 위해 ContentTitleView 투영 인터페이스 + findAttractionTitlesByContentIds(JPQL 크로스조인) 추가. (리뷰 엔티티는 contentType을 안 들고 있어 contentId로만 조회, 동일 contentId 다중 스냅샷은 1건 병합.)
+- 응답 DTO MyReviewResponse(id, contentId, attractionName, rating, content, createdAt, updatedAt) + MyReviewListResponse(reviewCount, reviews). attractionName은 스냅샷 미보유 시 null.
+- AttractionRepository는 소유 파일이 아니므로 수정하지 않고, 대신 소유한 AttractionReviewRepository에 조인 쿼리를 넣어 관광지명을 해석했다.
+
+[G12 — 앨범 공유]
+- Album 엔티티: share_token(String, nullable, unique, length=64) 필드 + markShared(token) 추가. Plan/TripPlan 공유 패턴과 동일 스타일.
+- AlbumRepository: findByShareToken 추가.
+- AlbumService.share(albumId,userId): 소유자 검증(findAlbum) 후 토큰 없으면 UUID 발급, idempotent하게 {token} 반환. getShared(token): 비인증, 토큰 조회 실패 시 ALBUM_NOT_FOUND, 앨범+사진(displayOrder asc) 반환.
+- AlbumController: POST /users/me/albums/{albumId}/share (인증·소유자) → AlbumShareResponse{token}.
+- 신규 AlbumShareController(@RequestMapping("/api/albums"), GET /shared/{token}) — 비인증 공개 조회. 경로는 지시대로 정확히 /api/albums/shared/{token}.
+- AlbumShareResponse{token} DTO 신규.
+
+경로 규칙 준수: reviews/albums는 /api 유지(/api/reviews/me, /api/albums/shared/{token}), 소유자 앨범 share는 기존 AlbumController 클래스 매핑(/users/me/albums) 그대로 사용. SecurityConfig(permitAll)·api/index.js·RepositoryConfig는 건드리지 않음(다른 스트림 담당, RepositoryConfig엔 attraction/review/user 모두 이미 화이트리스트).
+NOTES: 컴파일 검증: BE에서 ./gradlew compileJava → BUILD SUCCESSFUL, exit 0. 런타임/DB 검증은 미수행(ddl-auto=update가 albums.share_token 컬럼 추가 예정). 다른 스트림 의존: SecurityConfig의 /api/albums/shared/** permitAll, FE api/index.js의 albumApi.share/getShared 배선이 이 경로(POST /users/me/albums/{albumId}/share, GET /api/albums/shared/{token})와 일치해야 함. 참고: getShared가 비공유 토큰 부재 시 404(ALBUM_NOT_FOUND)를 반환하는 것은 PlanService.getShared(PLAN_NOT_FOUND) 패턴과 동일. ReviewService에서 미사용이던 java.util.function.Function import는 정리했다.
+
+=== S6 — api/index.js 배선 + 앨범 공유 버튼(FE) [done]
+FILES: ['C:\\Users\\te\\Desktop\\next\\springaitrip\\.claude\\worktrees\\elated-leakey-81a1ee\\frontend\\src\\api\\index.js', 'C:\\Users\\te\\Desktop\\next\\springaitrip\\.claude\\worktrees\\elated-leakey-81a1ee\\frontend\\src\\views\\AlbumDetailView.vue']
+SUMMARY: S6 완료. 두 소유 파일만 수정.
+
+[api/index.js]
+- G11: reviewApi 에 myReviews: () => http.get('/api/reviews/me') 추가 (reviews → /api 유지). 기존 list/create/update/remove 무손상.
+- G12: albumApi 에 share: (albumId) => http.post(`/users/me/albums/${albumId}/share`) (users → /api 미사용) 와 getShared: (token) => http.get(`/api/albums/shared/${token}`) (albums → /api 유지) 추가. 기존 list/get/create/uploadImage 무손상.
+- G9: companionApi.getList 는 이미 getList: (params) => http.get('/api/companion/posts', { params }) 로 cursor/page/size params 를 전달하며 무인자 호출(undefined params)과도 호환 — 추가 변경 불필요. 그대로 보장됨.
+- 다른 export 손상 없음, default export 유지.
+
+[AlbumDetailView.vue] (최근 실API 연동본 다시 읽고 작업)
+- 헤더 우측 nav-spacer('공유 미구현' 자리) 를 실제 share-btn 으로 교체. 클릭 시 onShare() 호출.
+- 스크립트: import { albumApi as centralAlbumApi } from '@/api/index.js' 추가(기존 로컬 albumApi=get/uploadImage/addPhoto 는 업로드 흐름 보존 위해 유지). sharing/shareMsg/shareErr ref + flashShareMsg + onShare 추가.
+- onShare: centralAlbumApi.share(album.id) 로 실제 토큰 발급 → 응답에서 token/shareToken(또는 shareUrl) 방어적 추출 → 공개 링크 `${location.origin}/album/shared/${token}` 를 navigator.clipboard.writeText 로 복사하고 '링크 복사됨' 피드백. 공개 뷰 라우트(/album/shared/:token)는 라우터에 미존재 확인 → 지시대로 토큰 포함 링크 복사까지만(토큰 발급은 실제로 됨). 클립보드 거부 시 '생성됐지만 복사 실패' 정직 안내, share API 실패 시 서버 메시지/에러 그대로 노출(가짜 성공 위장 없음).
+- CSS: .share-btn/.disabled/:disabled, .share-spinner-label, .share-msg(.err) 추가. .nav-spacer 스타일은 무해하여 잔존(템플릿에서는 미사용).
+
+자가점검: import 경로(@/api/index.js, @/api/http.js) 유효, 새 ref/함수 모두 정의·바인딩 일치, JS/Vue 블록 괄호 균형 확인. 경로 규칙(reviews·albums=/api, users=무/api) 준수. 스트림 보장 엔드포인트 3개를 정확히 이대로 호출.
+NOTES: 참고(소유 밖이라 미수정): 라우터에 /plan/shared/:token 은 있으나 /album/shared/:token 공개 뷰 라우트는 없음 → 향후 공개 앨범 뷰 라우트/뷰 추가 스트림이 있다면 onShare 의 링크가 바로 동작함. BE 앨범 share 응답 필드명이 미확정이라(plan 은 shareToken/shareUrl) token/shareToken/shareUrl 모두 방어적으로 처리함.

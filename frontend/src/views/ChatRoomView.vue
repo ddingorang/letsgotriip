@@ -185,6 +185,39 @@
           <span>방 설정</span>
           <button class="sheet-close" @click="settingsOpen = false">닫기</button>
         </div>
+        <!-- 방 이미지 변경(방장 전용) -->
+        <div class="settings-field">
+          <label class="settings-label">방 이미지</label>
+          <button
+            type="button"
+            class="room-image-picker"
+            :disabled="roomImageUploading"
+            @click="triggerRoomImagePicker"
+          >
+            <img
+              v-if="roomImageUrl"
+              :src="roomImageUrl"
+              class="room-image-preview"
+              alt="방 이미지"
+              @error="onRoomImageError"
+            />
+            <div v-else class="room-image-placeholder">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" />
+              </svg>
+            </div>
+            <span class="room-image-overlay">
+              {{ roomImageUploading ? '업로드 중…' : '이미지 변경' }}
+            </span>
+          </button>
+          <input
+            ref="roomImageInput"
+            type="file"
+            accept="image/*"
+            class="file-input-hidden"
+            @change="onRoomImageSelected"
+          />
+        </div>
         <div class="settings-field">
           <label class="settings-label">방 이름</label>
           <input
@@ -353,11 +386,56 @@ const settingsOpen = ref(false)
 const settingsTitle = ref('')
 const settingsDescription = ref('')
 const savingSettings = ref(false)
+// 방 이미지 변경(방장 전용) — 현재 이미지 미리보기 + 업로드 상태
+const roomImageInput = ref(null)
+const roomImageUrl = ref(null)
+const roomImageUploading = ref(false)
 function openSettings() {
   menuOpen.value = false
   settingsTitle.value = room.value?.title ?? ''
   settingsDescription.value = room.value?.description ?? ''
+  roomImageUrl.value = room.value?.imageUrl ?? null
   settingsOpen.value = true
+}
+
+// 숨김 file input 트리거(업로드 중이면 무시)
+function triggerRoomImagePicker() {
+  if (roomImageUploading.value) return
+  roomImageInput.value?.click()
+}
+
+async function onRoomImageSelected(e) {
+  const file = e.target.files?.[0]
+  // 동일 파일 재선택 시에도 change 가 발생하도록 입력값 초기화
+  e.target.value = ''
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    window.alert('이미지 파일만 업로드할 수 있어요.')
+    return
+  }
+  roomImageUploading.value = true
+  try {
+    // chatApi.uploadRoomImage 는 File 을 받아 내부에서 FormData(field 'file')로 감싸 전송한다.
+    const { data } = await chatApi.uploadRoomImage(roomId.value, file)
+    const imageUrl = data?.imageUrl
+    if (!imageUrl) {
+      window.alert('업로드 응답이 올바르지 않아요.')
+      return
+    }
+    // 미리보기 + 방 객체 갱신(헤더/목록에서도 즉시 반영)
+    roomImageUrl.value = imageUrl
+    if (room.value) room.value.imageUrl = imageUrl
+    showToast('방 이미지를 변경했어요.')
+  } catch (err) {
+    window.alert(err.response?.data?.message ?? '이미지 업로드에 실패했어요.')
+  } finally {
+    roomImageUploading.value = false
+  }
+}
+
+function onRoomImageError(e) {
+  // 깨진 이미지면 플레이스홀더로 되돌아가도록 미리보기 해제
+  e.target.classList.add('img-broken')
 }
 async function saveSettings() {
   const title = settingsTitle.value.trim()
@@ -881,6 +959,47 @@ onBeforeUnmount(() => {
 
 /* ── 방 설정 시트 ─────────────────────────────────────────────── */
 .settings-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+
+/* 방 이미지 변경 — 미리보기 + 오버레이 라벨 */
+.room-image-picker {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.room-image-picker:disabled { opacity: 0.6; }
+.room-image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.room-image-preview.img-broken {
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.room-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.room-image-overlay {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  background: rgba(0,0,0,0.55);
+  border-radius: var(--radius-full);
+  padding: 4px 12px;
+}
 .settings-label { font-size: 12px; font-weight: 600; color: var(--color-ink-secondary); }
 .settings-input,
 .settings-textarea {

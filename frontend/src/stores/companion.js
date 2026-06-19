@@ -12,6 +12,13 @@ export const useCompanionStore = defineStore('companion', () => {
   const messages = ref({})
   const loading = ref(false)
   const error = ref(null)
+  // ── 동행 목록 커서 페이지네이션 상태 ───────────────────────────────────────────
+  // BE GET /companion/posts 는 CursorPageResponse { content, nextCursor, hasNext } 를 반환한다.
+  // nextCursor = 다음 페이지 요청에 넘길 마지막 글 id(없으면 null), hasMore = 더 불러올 수 있는지.
+  const nextCursor = ref(null)
+  const hasMore = ref(true)
+  // 추가 로딩(무한스크롤) 전용 상태 — 초기 loading 과 분리해 스피너를 따로 제어한다.
+  const loadingMore = ref(false)
   // 상세 로드 상태 — 실패/404를 가짜 "동행 모집" 객체로 위장하지 않도록 분리한다.
   const detailLoading = ref(false)
   const detailError = ref(null)
@@ -82,6 +89,32 @@ export const useCompanionStore = defineStore('companion', () => {
     }
   }
 
+  // 상세 조회 전용 정규화.
+  // normalizeItem(목록/카드용)은 화이트리스트라 BE CompanionPostResponse 의 상세 필드
+  // (linkedPlan, chatRoomId, myApplicationStatus, myApplicationId, pendingCount,
+  //  approvedCount, isOwner 등)를 strip 한다. 그러면 CompanionDetailView 가 store 경유로
+  // 받을 때 일정 지도 마커(linkedPlan 좌표)·승인 배너(myApplicationStatus)가 안 뜬다.
+  // → 상세는 raw 응답을 먼저 펼쳐 보존한 뒤, 카드 정규화의 파생값(상태 라벨/비용 포맷/
+  //   author 등)을 그 위에 덮어 일관성을 유지한다(목록은 기존대로 가벼운 카드용으로 둔다).
+  function normalizeDetail(item) {
+    const base = normalizeItem(item)
+    return {
+      // 1) BE 상세 응답 원본을 먼저 펼쳐 풀 필드를 보존(미래 추가 필드 포함)
+      ...item,
+      // 2) 카드 정규화 파생값(상태 라벨/비용 포맷/author/location/dateRange 등)으로 덮어쓰기
+      ...base,
+      // 3) 상세 전용 필드는 raw 우선으로 명시 보존(카드 정규화 기본값에 덮이지 않게)
+      linkedPlan: item.linkedPlan ?? base.linkedPlan ?? null,
+      chatRoomId: item.chatRoomId ?? base.chatRoomId ?? null,
+      myApplicationStatus: item.myApplicationStatus ?? base.myApplicationStatus ?? null,
+      myApplicationId: item.myApplicationId ?? base.myApplicationId ?? null,
+      pendingCount: item.pendingCount ?? base.pendingCount ?? 0,
+      approvedCount: item.approvedCount ?? base.approvedCount ?? 0,
+      // isOwner 는 authorId↔내 userId 비교 파생값(base)을 우선. 둘 다 없으면 raw 사용.
+      isOwner: base.isOwner ?? item.isOwner ?? false,
+    }
+  }
+
   // ── actions ───────────────────────────────────────────────────────────────────
 
   async function fetchMyRooms() {
@@ -105,18 +138,46 @@ export const useCompanionStore = defineStore('companion', () => {
     }
   }
 
-  async function getList(params) {
-    loading.value = true
+  // 동행 목록 조회. reset=true 면 처음부터(커서 초기화) 다시 불러오고, false 면 다음 페이지를 이어 붙인다.
+  // BE 응답이 CursorPageResponse({content,nextCursor,hasNext}) 인 경우 커서/더보기 상태를 갱신하고,
+  // (구버전 호환) 배열로 내려오면 페이지네이션 없이 전체 교체한다.
+  async function getList(params = {}, { reset = true } = {}) {
+    // 추가 로딩은 loadingMore, 초기/리셋 로딩은 loading 으로 분리해 UI 스피너를 따로 제어한다.
+    if (reset) loading.value = true
+    else loadingMore.value = true
     error.value = null
     try {
-      const { data } = await companionApi.getList(params)
-      const items = Array.isArray(data) ? data : (data?.content ?? [])
-      companions.value = items.map(normalizeItem)
+      const query = { ...params }
+      // 다음 페이지 요청 시에만 커서를 실어 보낸다(리셋이면 커서 없이 첫 페이지).
+      if (!reset && nextCursor.value != null) query.cursor = nextCursor.value
+      const { data } = await companionApi.getList(query)
+      const isCursorPage = data && !Array.isArray(data) && Array.isArray(data.content)
+      const items = isCursorPage ? data.content : (Array.isArray(data) ? data : [])
+      const normalized = items.map(normalizeItem)
+      if (reset) companions.value = normalized
+      else companions.value.push(...normalized)
+      if (isCursorPage) {
+        nextCursor.value = data.nextCursor ?? null
+        hasMore.value = data.hasNext === true
+      } else {
+        // 배열 응답(구버전)은 페이지네이션을 지원하지 않으므로 더보기 종료로 간주.
+        nextCursor.value = null
+        hasMore.value = false
+      }
     } catch (e) {
       error.value = e.response?.data?.message ?? e.message ?? '목록을 불러오지 못했어요.'
+      // 추가 로딩 실패 시 무한 재시도 루프를 막기 위해 더보기를 멈춘다(리셋 실패는 상태 유지).
+      if (!reset) hasMore.value = false
     } finally {
-      loading.value = false
+      if (reset) loading.value = false
+      else loadingMore.value = false
     }
+  }
+
+  // 다음 페이지 로드(무한스크롤). 더 없거나 이미 로딩 중이면 무시한다.
+  async function fetchMoreCompanions() {
+    if (!hasMore.value || loading.value || loadingMore.value) return
+    await getList({}, { reset: false })
   }
 
   async function getDetail(id) {
@@ -127,7 +188,9 @@ export const useCompanionStore = defineStore('companion', () => {
     detailNotFound.value = false
     try {
       const { data } = await companionApi.getDetail(id)
-      const normalized = normalizeItem(data)
+      // 상세는 풀 필드 보존 정규화(normalizeDetail)를 사용한다.
+      // 목록 정규화(normalizeItem)는 카드용이라 linkedPlan/myApplicationStatus 등을 strip 한다.
+      const normalized = normalizeDetail(data)
       const idx = companions.value.findIndex(c => c.id === normalized.id)
       if (idx !== -1) companions.value[idx] = normalized
       else companions.value.unshift(normalized)
@@ -296,17 +359,24 @@ export const useCompanionStore = defineStore('companion', () => {
     return companions.value.find(c => c.id === Number(id))
   }
 
-  function fetchCompanions() {
-    return getList({})
+  // 동행 목록 초기 로드/새로고침. reset=true(기본) 면 커서를 초기화하고 첫 페이지부터 불러온다.
+  // 호출 측이 인자를 안 넘기거나 true 를 넘기면 동일하게 처음부터 재조회한다(S1 호출 호환).
+  function fetchCompanions(reset = true) {
+    if (reset) {
+      nextCursor.value = null
+      hasMore.value = true
+    }
+    return getList({}, { reset: true })
   }
 
   return {
     myRooms, companions, applicants, messages,
     loading, error,
+    nextCursor, hasMore, loadingMore,
     detailLoading, detailError, detailNotFound,
     applicantsLoading, applicantsError, applicantsForbidden,
     getList, getDetail, create, join, cancel,
-    fetchMyRooms, fetchCompanions,
+    fetchMyRooms, fetchCompanions, fetchMoreCompanions,
     getApplications, approveApplicant, rejectApplicant, getById,
     getMyApplication, cancelApplication,
   }

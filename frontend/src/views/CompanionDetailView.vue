@@ -170,25 +170,24 @@
         <p class="intro-text">{{ comp.intro }}</p>
       </div>
 
-      <!-- Linked plan: map + day-by-day route (연결된 계획이 있을 때만) -->
-      <div v-if="linkedPlan" class="section plan-section">
+      <!-- 모집 위치/일정 지도 — 연결된 계획 장소(좌표) 또는 모집 위치 단일 마커 -->
+      <!-- 표시할 좌표가 하나도 없으면 지도 섹션 자체를 숨긴다(가짜 핀 금지). -->
+      <div v-if="hasMapPlaces" class="section plan-section">
         <div class="cond-head">
-          <h3 class="section-title">정해진 일정</h3>
-          <span class="plan-fixed-pill">계획 연동</span>
+          <h3 class="section-title">{{ linkedPlan ? '정해진 일정' : '모집 위치' }}</h3>
+          <span v-if="linkedPlan" class="plan-fixed-pill">계획 연동</span>
         </div>
-        <p v-if="linkedPlan.title" class="plan-meta">
+        <p v-if="linkedPlan?.title" class="plan-meta">
           {{ linkedPlan.title }}
           <span v-if="planDateRange" class="plan-date">· {{ planDateRange }}</span>
         </p>
 
-        <!-- Kakao map -->
+        <!-- Kakao 지도(공통 TripMap 컴포넌트) -->
         <div class="plan-map-wrap">
-          <div ref="mapEl" class="plan-map" />
-          <div v-if="mapError" class="plan-map-error">{{ mapError }}</div>
-          <div v-else-if="!hasPlaces" class="plan-map-error">표시할 장소 좌표가 없어요.</div>
+          <TripMap :places="tripMapPlaces" :numbered="hasPlaces" />
         </div>
 
-        <!-- Day-by-day place list -->
+        <!-- Day-by-day place list (연결된 계획이 있을 때만) -->
         <div v-for="day in placesByDay" :key="day.dayNo" class="plan-day">
           <div class="plan-day-head">
             <span class="plan-day-pill">{{ day.dayNo }}일차</span>
@@ -258,9 +257,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -357,15 +357,36 @@ const planDateRange = computed(() => {
     : lp.startDate
 })
 
-// ── Kakao 지도 ──────────────────────────────────────────────────────────────
-const mapEl = ref(null)
-const mapError = ref('')
+// ── 지도(공통 TripMap) ───────────────────────────────────────────────────────
+// 연결된 계획 장소(좌표)를 TripMap props({ id, name, lat, lng })로 변환.
+// 좌표가 하나라도 있으면 그 마커들을, 없으면 모집 위치(region)를 지오코딩한
+// 단일 마커를 표시한다. 둘 다 없으면 지도 섹션을 숨긴다.
 const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY
-let map = null
-let markers = []
-let mapReady = false
 
-// HotplaceRegisterView 와 동일한 SDK 로딩 패턴(전역 캐시 + autoload=false)
+// linkedPlan 장소 → TripMap 형식
+const linkedTripPlaces = computed(() =>
+  mapPlaces.value.map((p, i) => ({
+    id: `${p.dayNo ?? 1}-${i}`,
+    name: p.title ?? '',
+    lat: Number(p.lat),
+    lng: Number(p.lng),
+  })),
+)
+
+// 모집 위치(region) 지오코딩 결과 단일 마커(연결 계획 좌표가 없을 때만 사용)
+const regionPlace = ref(null) // { id, name, lat, lng } | null
+
+// 최종 TripMap에 넘길 장소 목록
+const tripMapPlaces = computed(() =>
+  hasPlaces.value
+    ? linkedTripPlaces.value
+    : (regionPlace.value ? [regionPlace.value] : []),
+)
+// 지도에 찍을 좌표가 하나라도 있는지(없으면 섹션 자체를 숨김)
+const hasMapPlaces = computed(() => tripMapPlaces.value.length > 0)
+
+// HotplaceRegisterView 와 동일한 SDK 로딩 패턴(전역 캐시 + autoload=false).
+// services 라이브러리(지오코더)를 보장한다.
 function loadKakao() {
   if (window.kakao?.maps?.services) return Promise.resolve(window.kakao)
   if (window.__kakaoMapLoading && !window.kakao?.maps?.services) {
@@ -383,71 +404,50 @@ function loadKakao() {
   return window.__kakaoMapLoading
 }
 
-function clearMarkers() {
-  markers.forEach(m => m.setMap(null))
-  markers = []
-}
-
-// 장소 좌표로 마커를 찍고 bounds 에 맞춰 화면을 맞춘다
-function renderMarkers() {
-  if (!map || !window.kakao?.maps) return
-  clearMarkers()
-  const places = mapPlaces.value
-  if (!places.length) return
-  const bounds = new window.kakao.maps.LatLngBounds()
-  places.forEach((p, i) => {
-    const pos = new window.kakao.maps.LatLng(Number(p.lat), Number(p.lng))
-    const marker = new window.kakao.maps.Marker({ position: pos, map })
-    markers.push(marker)
-    bounds.extend(pos)
-    // 방문 순서/장소명 인포 라벨
-    const overlay = new window.kakao.maps.CustomOverlay({
-      position: pos,
-      yAnchor: 2.1,
-      content: `<div class="map-label">${i + 1}. ${escapeHtml(p.title ?? '')}</div>`,
-    })
-    overlay.setMap(map)
-    markers.push(overlay)
-  })
-  if (places.length === 1) {
-    map.setCenter(new window.kakao.maps.LatLng(Number(places[0].lat), Number(places[0].lng)))
-    map.setLevel(5)
-  } else {
-    map.setBounds(bounds)
-  }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ))
-}
-
-// linkedPlan 이 준비되면(상세 비동기 로드 후) 지도를 초기화/갱신한다
-async function ensureMap() {
-  if (!hasPlaces.value) return
-  await nextTick()
-  if (!mapEl.value) return
+// 모집 위치(region 문자열)를 좌표로 지오코딩 → 단일 마커.
+// 연결 계획 좌표가 있으면 불필요하므로 건너뛴다. 실패 시 조용히 무시(지도 숨김).
+async function geocodeRegion() {
+  if (hasPlaces.value) { regionPlace.value = null; return }
+  const region = comp.value.location
+  if (!region || region === '-') { regionPlace.value = null; return }
   try {
-    if (!map) {
-      const kakao = await loadKakao()
-      if (!mapEl.value) return
-      map = new kakao.maps.Map(mapEl.value, {
-        center: new kakao.maps.LatLng(Number(mapPlaces.value[0].lat), Number(mapPlaces.value[0].lng)),
-        level: 7,
+    const kakao = await loadKakao()
+    const geocoder = new kakao.maps.services.Geocoder()
+    // 주소 검색 우선, 실패 시 키워드(장소) 검색으로 보강
+    const byAddress = await new Promise((resolve) => {
+      geocoder.addressSearch(region, (res, status) => {
+        if (status === kakao.maps.services.Status.OK && res[0]) {
+          resolve({ lat: Number(res[0].y), lng: Number(res[0].x) })
+        } else resolve(null)
       })
-      mapReady = true
-      setTimeout(() => map?.relayout(), 200)
+    })
+    let coord = byAddress
+    if (!coord && kakao.maps.services.Places) {
+      coord = await new Promise((resolve) => {
+        const ps = new kakao.maps.services.Places()
+        ps.keywordSearch(region, (res, status) => {
+          if (status === kakao.maps.services.Status.OK && res[0]) {
+            resolve({ lat: Number(res[0].y), lng: Number(res[0].x) })
+          } else resolve(null)
+        })
+      })
     }
-    renderMarkers()
-  } catch (e) {
-    mapError.value = e.message || '지도를 불러올 수 없습니다.'
+    if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
+      regionPlace.value = { id: 'region', name: region, lat: coord.lat, lng: coord.lng }
+    } else {
+      regionPlace.value = null
+    }
+  } catch {
+    // SDK 로드/키 누락 등 — 지도는 숨김 처리(가짜 마커 금지)
+    regionPlace.value = null
   }
 }
 
-watch(hasPlaces, (ready) => {
-  if (ready) ensureMap()
-})
+// 상세 로드 후 좌표 상태가 바뀌면 지오코딩 갱신
+watch(
+  () => [hasPlaces.value, comp.value.location],
+  () => { geocodeRegion() },
+)
 
 // 내 신청 상태 조회(origin /applications/me 경로) — 방장이 아닐 때만.
 // 상세 응답에 isApplied/myApplicationStatus 가 없을 때 보강한다.
@@ -466,21 +466,16 @@ async function refreshMyApplication() {
 onMounted(async () => {
   await companionStore.getDetail(route.params.id)
   await refreshMyApplication()
-  if (hasPlaces.value) ensureMap()
+  // 연결 계획 좌표가 없으면 모집 위치를 지오코딩해 단일 마커 준비
+  geocodeRegion()
 })
 
 /** 상세 재시도 — 로드 실패 화면의 "다시 시도" 버튼용 */
 async function reloadDetail() {
   await companionStore.getDetail(route.params.id)
   await refreshMyApplication()
-  if (hasPlaces.value) ensureMap()
+  geocodeRegion()
 }
-
-onBeforeUnmount(() => {
-  clearMarkers()
-  map = null
-  mapReady = false
-})
 
 async function apply() {
   applyError.value = ''
@@ -848,17 +843,6 @@ function share() {
   background: var(--color-surface);
   margin-bottom: 16px;
 }
-.plan-map { width: 100%; height: 100%; }
-.plan-map-error {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: var(--color-ink-muted);
-  background: var(--color-surface);
-}
 
 .plan-day { margin-bottom: 14px; }
 .plan-day-head { margin-bottom: 8px; }
@@ -960,18 +944,5 @@ function share() {
 .detail-state-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-/* Kakao CustomOverlay 라벨 — scoped 밖에서 렌더되므로 :deep 사용 */
-:deep(.map-label) {
-  background: rgba(30, 30, 30, 0.86);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  white-space: nowrap;
-  transform: translateX(-50%);
-  pointer-events: none;
 }
 </style>

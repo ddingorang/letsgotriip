@@ -2,12 +2,15 @@ package com.trip.review.service;
 
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
+import com.trip.review.dto.MyReviewListResponse;
+import com.trip.review.dto.MyReviewResponse;
 import com.trip.review.dto.ReviewCreateRequest;
 import com.trip.review.dto.ReviewListResponse;
 import com.trip.review.dto.ReviewResponse;
 import com.trip.review.dto.ReviewUpdateRequest;
 import com.trip.review.entity.AttractionReview;
 import com.trip.review.repository.AttractionReviewRepository;
+import com.trip.review.repository.AttractionReviewRepository.ContentTitleView;
 import com.trip.user.entity.User;
 import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,6 +29,32 @@ public class ReviewService {
 
     private final AttractionReviewRepository reviewRepository;
     private final UserRepository userRepository;
+
+    /** 내 리뷰 목록 (G11) — 인증 사용자의 전체 리뷰 최신순. 가능하면 관광지명 포함. */
+    public MyReviewListResponse listByUser(Long userId) {
+        final List<AttractionReview> reviews = reviewRepository.findByUserIdOrderByCreatedAtDesc(userId);
+
+        // contentId → 관광지명 매핑. 리뷰는 contentType을 보관하지 않으므로 contentId로만 조회한다.
+        // 동일 contentId에 여러 스냅샷(유형별)이 있을 수 있으나 표시용 이름이므로 임의 1건을 사용한다.
+        final List<String> contentIds = reviews.stream()
+                .map(AttractionReview::getContentId)
+                .distinct()
+                .toList();
+        final Map<String, String> names = contentIds.isEmpty()
+                ? Map.of()
+                : reviewRepository.findAttractionTitlesByContentIds(contentIds).stream()
+                        .collect(Collectors.toMap(
+                                ContentTitleView::getContentId,
+                                ContentTitleView::getTitle,
+                                (a, b) -> a
+                        ));
+
+        final List<MyReviewResponse> responses = reviews.stream()
+                .map(r -> MyReviewResponse.from(r, names.get(r.getContentId())))
+                .toList();
+
+        return MyReviewListResponse.of(responses);
+    }
 
     /** 관광지 리뷰 목록 + 평균/개수 (공개) */
     public ReviewListResponse listByContent(String contentId) {

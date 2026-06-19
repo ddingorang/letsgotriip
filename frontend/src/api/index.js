@@ -42,6 +42,10 @@ export const albumApi = {
     http.post('/users/me/albums/images', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  // 공유 토큰 발급 (소유자) → { token, ... } (앨범 공개 링크용)
+  share: (albumId) => http.post(`/users/me/albums/${albumId}/share`),
+  // 공유 토큰으로 공개 조회 (인증 불필요) → GET /api/albums/shared/{token}
+  getShared: (token) => http.get(`/api/albums/shared/${token}`),
 }
 
 // ── Attractions ───────────────────────────────────────────────────────────────
@@ -66,6 +70,8 @@ export const reviewApi = {
     http.patch(`/api/attractions/${contentId}/reviews/${reviewId}`, data),
   remove: (contentId, reviewId) =>
     http.delete(`/api/attractions/${contentId}/reviews/${reviewId}`),
+  // 내가 쓴 리뷰 전체 (인증 필요) → GET /api/reviews/me
+  myReviews: () => http.get('/api/reviews/me'),
 }
 
 // ── Favorites (즐겨찾기/찜, BE: /api/favorites, 인증 필요) ─────────────────────

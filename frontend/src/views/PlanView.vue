@@ -184,6 +184,13 @@
               </template>
               <div v-else class="detail-loading">상세 정보를 불러오는 중...</div>
 
+              <!-- 일정 지도 — 좌표가 있는 장소가 하나라도 있을 때만 표시(가짜 핀 금지) -->
+              <div v-if="currentPlanPlaces.length" class="plan-map-section">
+                <div class="plan-map-wrap">
+                  <TripMap :places="currentPlanPlaces" :numbered="true" />
+                </div>
+              </div>
+
               <!-- 예산 패널 -->
               <div v-if="budget && budget.planId === plan.id" class="budget-panel">
                 <div class="budget-head">
@@ -270,22 +277,40 @@
           <h2 class="section-title">동행 구하기</h2>
           <button class="see-all" @click="router.push({ path: '/community', query: { tab: 'companion' } })">전체보기</button>
         </div>
-        <div class="companion-list">
-          <div v-for="comp in companions" :key="comp.id" class="companion-card">
+        <div v-if="companions.length" class="companion-list">
+          <div
+            v-for="comp in companions.slice(0, 3)"
+            :key="comp.id"
+            class="companion-card"
+            @click="router.push(`/companion/${comp.id}`)"
+          >
             <div class="comp-header">
-              <span class="comp-badge">{{ comp.category }}</span>
-              <span class="comp-dday" :class="{ urgent: comp.dday <= 3 }">D-{{ comp.dday }}</span>
+              <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
+              <span
+                v-if="companionDday(comp.dateRange) != null"
+                class="comp-dday"
+                :class="{ urgent: companionDday(comp.dateRange) <= 3 }"
+              >
+                D-{{ companionDday(comp.dateRange) }}
+              </span>
             </div>
             <h4 class="comp-title">{{ comp.title }}</h4>
-            <p class="comp-sub">{{ comp.destination }} · {{ comp.dates }}</p>
+            <p class="comp-sub">{{ comp.location }}<span v-if="comp.dateRange"> · {{ comp.dateRange }}</span></p>
             <div class="comp-footer">
               <div class="comp-members">
-                <div v-for="i in comp.currentCount" :key="i" class="member-dot" />
+                <div v-for="i in Math.min(comp.currentCount, 6)" :key="i" class="member-dot" />
                 <span class="member-text">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
               </div>
-              <button class="join-btn" @click="router.push({ path: '/community', query: { tab: 'companion' } })">참여하기</button>
+              <button class="join-btn" @click.stop="router.push(`/companion/${comp.id}`)">참여하기</button>
             </div>
           </div>
+        </div>
+        <!-- 동행 목록 비어있음(미로그인/없음/로드 실패) — 가짜 목업 대신 빈상태 노출 -->
+        <div v-else class="companion-empty">
+          <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
+          <button class="companion-empty-btn" @click="router.push({ path: '/community', query: { tab: 'companion' } })">
+            동행 둘러보기
+          </button>
         </div>
       </div>
 
@@ -328,12 +353,17 @@ import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
+import { useCompanionStore } from '@/stores/companion.js'
 import { planApi } from '@/api/index.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const router = useRouter()
 const planStore = usePlanStore()
+const companionStore = useCompanionStore()
 // storeToRefs로 반응성 유지 — 비반응적 destructure 시 loadPlans() 후 목록이 갱신되지 않음
 const { plans } = storeToRefs(planStore)
+// 동행 목록도 store 기준으로 반응성 유지(하드코딩 목업 제거 → 실 API 연동)
+const { companions } = storeToRefs(companionStore)
 
 const selectedPlanId = ref(null)
 
@@ -357,13 +387,11 @@ const compareMode = ref(false)
 const compareSelection = ref([])   // 선택된 planId 최대 2개
 const compareResult = ref(null)    // { a: PlanStat, b: PlanStat }
 
-const companions = ref([
-  { id: 1, category: '관광', title: '제주 동부 일주 같이 해요!', destination: '제주도', dates: '12월 28-30일', currentCount: 2, maxCount: 4, dday: 5 },
-  { id: 2, category: '맛집', title: '부산 로컬 맛집 투어 동행 구해요', destination: '부산', dates: '1월 4-5일', currentCount: 1, maxCount: 3, dday: 12 },
-  { id: 3, category: '액티비티', title: '한라산 백록담 등반 파티 모집', destination: '제주도', dates: '1월 10일', currentCount: 3, maxCount: 6, dday: 2 },
-])
-
-onMounted(reloadPlans)
+onMounted(() => {
+  reloadPlans()
+  // 실제 동행 목록 로드(하드코딩 목업 제거). 실패 시 store가 조용히 빈 배열 유지 → 빈상태 노출.
+  companionStore.fetchCompanions()
+})
 
 /** 계획 목록 로드 — 로딩/에러를 분리 추적해 빈상태 위장을 막는다 */
 async function reloadPlans() {
@@ -390,6 +418,46 @@ function formatDate(str) {
 function dayCount(start, end) {
   if (!start || !end) return 0
   return Math.round((new Date(end) - new Date(start)) / 86400000)
+}
+
+// ── 펼친 계획의 지도 마커 ─────────────────────────────────────────────────────
+// planStore.current(상세)의 days[].places[].attraction(latitude/longitude)에서 좌표를 모은다.
+// TripMap props 형태({ id, name, lat, lng })로 변환하고, 좌표 없는 항목은 제외한다.
+// dayNo를 함께 담아 day별 구분(향후 색/라벨)에 활용한다.
+const currentPlanPlaces = computed(() => {
+  const cur = planStore.current
+  if (!cur || cur.id !== selectedPlanId.value) return []
+  const out = []
+  for (const day of cur.days ?? []) {
+    for (const place of day.places ?? []) {
+      const a = place.attraction
+      const lat = Number(a?.latitude)
+      const lng = Number(a?.longitude)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+      out.push({
+        id: place.id ?? a?.contentId ?? `${day.dayNo}-${out.length}`,
+        name: a?.title ?? place.title ?? '장소',
+        lat,
+        lng,
+        dayNo: day.dayNo,
+      })
+    }
+  }
+  return out
+})
+
+// ── 동행 카드용 D-day 계산 ─────────────────────────────────────────────────────
+// store companion의 dateRange(=travelDate, 'YYYY-MM-DD')에서 남은 일수를 구한다.
+// 날짜 파싱 불가/과거면 null → 배지 미표시.
+function companionDday(dateStr) {
+  if (!dateStr) return null
+  const target = new Date(dateStr)
+  if (Number.isNaN(target.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target - today) / 86400000)
+  return diff >= 0 ? diff : null
 }
 
 /** Navigate to /ai/plan (new AI trip flow) */
@@ -1101,6 +1169,20 @@ async function removePlace(planId, dayNo, place) {
   cursor: not-allowed;
 }
 
+/* ── Plan map (일정 지도) ─────────────────────────────────────────────────── */
+.plan-map-section {
+  margin-top: 14px;
+}
+
+.plan-map-wrap {
+  width: 100%;
+  height: 200px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-line-light);
+  background: var(--color-surface);
+}
+
 /* ── Budget panel ─────────────────────────────────────────────────────────── */
 .budget-panel {
   background: var(--color-white);
@@ -1359,6 +1441,7 @@ async function removePlace(planId, dayNo, place) {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   padding: 16px;
+  cursor: pointer;
 }
 
 .comp-header {
@@ -1375,6 +1458,38 @@ async function removePlace(planId, dayNo, place) {
   font-weight: 600;
   padding: 3px 10px;
   border-radius: var(--radius-full);
+}
+
+.comp-badge.urgent {
+  background: #fff0e8;
+  color: #d04010;
+}
+
+/* ── Companion empty state ────────────────────────────────────────────────── */
+.companion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+
+.companion-empty-text {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+
+.companion-empty-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+  background: var(--color-white);
+  border: 1px solid var(--color-line-light);
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
 }
 
 .comp-dday {

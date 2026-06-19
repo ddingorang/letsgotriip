@@ -210,6 +210,63 @@
         </div>
       </div>
 
+      <!-- ④ 내 여행 스토리 (인라인 목록/카운트) -->
+      <div v-show="activeMain === 3" class="tab-content">
+        <div class="story-tab-header">
+          <span class="story-tab-count">스토리 {{ stories.length }}</span>
+          <button class="story-tab-more" @click="$router.push('/stories')">전체 보기</button>
+        </div>
+
+        <p v-if="storyLoading" class="story-state">불러오는 중…</p>
+        <p v-else-if="storyError" class="story-state">{{ storyError }}</p>
+
+        <template v-else-if="stories.length > 0">
+          <div
+            v-for="story in stories"
+            :key="story.id"
+            class="story-row"
+            @click="$router.push('/stories')"
+          >
+            <div class="story-row-top">
+              <span class="story-row-title">{{ story.title }}</span>
+              <div class="story-row-stars" aria-label="별점">
+                <svg
+                  v-for="n in 5"
+                  :key="n"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  :fill="n <= (story.rating ?? 0) ? 'var(--color-peach)' : 'none'"
+                  stroke="var(--color-peach)"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+            </div>
+            <p v-if="story.beforeNote || story.afterNote" class="story-row-note">
+              {{ story.afterNote || story.beforeNote }}
+            </p>
+          </div>
+        </template>
+
+        <div v-else class="empty-plans">
+          <div class="empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+            </svg>
+          </div>
+          <h3 class="empty-title">아직 작성한 스토리가 없어요</h3>
+          <p class="empty-sub">여행 전 기대와 다녀온 뒤 회고를<br />기록으로 남겨보세요.</p>
+          <button class="create-plan-btn" @click="$router.push('/stories')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            스토리 작성하기
+          </button>
+        </div>
+      </div>
+
       <!-- 내 활동 메뉴 -->
       <div class="menu-section">
         <p class="menu-section-title">내 활동</p>
@@ -401,9 +458,41 @@
           </button>
         </div>
         <div class="sheet-body">
-          <div class="sheet-empty">
+          <p v-if="reviewLoading" class="sheet-hint">불러오는 중…</p>
+          <p v-else-if="reviewError" class="sheet-hint">{{ reviewError }}</p>
+          <template v-else-if="myReviews.length > 0">
+            <button
+              v-for="rv in myReviews"
+              :key="rv.id"
+              class="review-item"
+              @click="goReviewPlace(rv)"
+            >
+              <div class="review-head">
+                <span class="review-place">{{ reviewPlaceLabel(rv) }}</span>
+                <span class="review-date">{{ fmtReviewDate(rv.createdAt) }}</span>
+              </div>
+              <div class="review-stars" aria-label="별점">
+                <svg
+                  v-for="n in 5"
+                  :key="n"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  :fill="n <= (rv.rating ?? 0) ? 'var(--color-peach)' : 'none'"
+                  stroke="var(--color-peach)"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+              <p v-if="rv.content" class="review-content">{{ rv.content }}</p>
+            </button>
+          </template>
+          <div v-else class="sheet-empty">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" /></svg>
-            <p class="sheet-hint">관광지 상세 화면에서 별점과 리뷰를 남길 수 있어요.<br />작성한 리뷰는 각 관광지 상세에서 확인·수정할 수 있어요.</p>
+            <p class="sheet-hint">아직 작성한 리뷰가 없어요.<br />관광지 상세 화면에서 별점과 리뷰를 남겨보세요.</p>
             <button class="sheet-cta" @click="reviewSheetOpen = false; $router.push('/explore')">
               관광지 둘러보기
             </button>
@@ -454,7 +543,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationStore } from '@/stores/notification.js'
 import { useGamificationStore } from '@/stores/gamification.js'
 import { http } from '@/api/http.js'
-import { favoriteApi, followApi } from '@/api/index.js'
+import { favoriteApi, followApi, reviewApi, storyApi } from '@/api/index.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -576,11 +665,33 @@ const unlockedBadgeCount = computed(
   () => badgeList.value.filter((b) => b.unlocked).length,
 )
 
+// ── 내 여행 스토리 탭 (GET /api/stories) ─────────────────────────────────────
+// 메뉴 → 외부 라우트(/stories)뿐이던 스토리를 마이페이지 본문 탭에 인라인 노출.
+// 작성/수정은 기존 스토리 화면에서 처리하고, 여기서는 목록/카운트만 보여준다.
+const stories = ref([])
+const storyLoading = ref(false)
+const storyError = ref('')
+
+async function loadStories() {
+  storyLoading.value = true
+  storyError.value = ''
+  try {
+    const { data } = await storyApi.list()
+    stories.value = Array.isArray(data) ? data : (data?.content ?? data?.stories ?? [])
+  } catch (e) {
+    storyError.value = e.response?.data?.message ?? e.message ?? '스토리를 불러오지 못했어요.'
+    stories.value = []
+  } finally {
+    storyLoading.value = false
+  }
+}
+
 // 탭 라벨에 실제 개수를 표시
 const mainTabs = computed(() => [
   '내 계획',
   `앨범 ${albums.value.length}`,
   `뱃지 ${gami.value?.stats?.badges ?? unlockedBadgeCount.value}`,
+  `스토리 ${stories.value.length}`,
 ])
 
 // ── 찜 목록 시트 (GET /api/favorites) ───────────────────────────────────────
@@ -629,12 +740,48 @@ async function removeFavorite(fav) {
   }
 }
 
-// ── 내 리뷰 시트 ────────────────────────────────────────────────────────────
-// 리뷰는 관광지별로 조회/작성되므로(전체 내 리뷰 목록 엔드포인트 미제공),
-// 안내 시트로 관광지 상세로 유도한다.
+// ── 내 리뷰 시트 (GET /api/reviews/me) ──────────────────────────────────────
+// 내가 작성한 관광지 리뷰 전체를 로드해 별점·내용·관광지·작성일로 렌더한다.
 const reviewSheetOpen = ref(false)
-function openReviews() {
+const myReviews = ref([])
+const reviewLoading = ref(false)
+const reviewError = ref('')
+
+// 작성일 'YYYY.MM.DD' 포맷
+function fmtReviewDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}.${mm}.${dd}`
+}
+
+// 관광지명: 응답에 이름이 있으면 사용, 없으면 contentId로 식별 라벨 표시
+function reviewPlaceLabel(r) {
+  return r.attractionName ?? r.title ?? r.placeName ?? (r.contentId ? `관광지 #${r.contentId}` : '관광지')
+}
+
+async function openReviews() {
   reviewSheetOpen.value = true
+  reviewLoading.value = true
+  reviewError.value = ''
+  try {
+    const { data } = await reviewApi.myReviews()
+    myReviews.value = Array.isArray(data) ? data : (data?.content ?? data?.reviews ?? [])
+  } catch (e) {
+    reviewError.value = e.response?.data?.message ?? e.message ?? '내 리뷰를 불러오지 못했어요.'
+    myReviews.value = []
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+// 항목 클릭 → 해당 관광지 상세로 이동(가능할 때만)
+function goReviewPlace(r) {
+  if (!r.contentId) return
+  reviewSheetOpen.value = false
+  router.push(`/place/${r.contentId}`)
 }
 
 // ── 팔로잉 시트 (GET /api/follows/me/following) ──────────────────────────────
@@ -670,6 +817,7 @@ onMounted(() => {
   loadPlans()
   loadAlbums()
   loadFollowing()
+  loadStories()
 })
 </script>
 
@@ -1370,6 +1518,116 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .fav-remove:active { opacity: 0.6; }
+
+/* 내 리뷰 시트 아이템 */
+.review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.review-item:active { background: var(--color-surface); }
+.review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.review-place {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.review-date {
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.review-stars {
+  display: flex;
+  gap: 1px;
+}
+.review-content {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  line-height: 1.55;
+  letter-spacing: -0.2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 스토리 탭 */
+.story-tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 10px;
+}
+.story-tab-count {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+.story-tab-more {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach);
+}
+.story-state {
+  padding: 28px 20px;
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  text-align: center;
+}
+.story-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+  cursor: pointer;
+}
+.story-row:active { background: var(--color-surface); }
+.story-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.story-row-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.story-row-stars {
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.story-row-note {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  line-height: 1.55;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 
 /* 메뉴 행 우측 카운트 배지 (팔로잉 등) */
 .menu-count {

@@ -11,8 +11,19 @@
         <span class="nav-title">{{ album?.name ?? '앨범' }}</span>
         <span class="nav-sub">사진 {{ photos.length }}장</span>
       </div>
-      <!-- 우측 액션 자리(공유 등 미구현) — 가짜 장식 버튼 대신 빈 칸으로 균형만 맞춘다 -->
-      <div class="nav-spacer" />
+      <!-- 우측 공유 버튼 — 실제 토큰 발급 후 공개 링크를 클립보드에 복사한다 -->
+      <button
+        class="share-btn"
+        :class="{ disabled: sharing }"
+        :disabled="sharing || !album"
+        @click="onShare"
+      >
+        <svg v-if="!sharing" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+        <span v-else class="share-spinner-label">…</span>
+      </button>
     </header>
 
     <!-- 로딩 -->
@@ -67,6 +78,9 @@
         @change="onFileSelected"
       />
 
+      <!-- 공유 토큰 발급/복사 결과 피드백 (성공/실패 모두 정직하게 노출) -->
+      <p v-if="shareMsg" class="share-msg" :class="{ err: shareErr }">{{ shareMsg }}</p>
+
       <!-- Bottom actions -->
       <div class="action-bar">
         <button class="action-link" @click="copyLink">
@@ -84,6 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { http } from '@/api/http.js'
+import { albumApi as centralAlbumApi } from '@/api/index.js'
 
 const route = useRoute()
 
@@ -112,6 +127,12 @@ const error = ref('')
 const fileInput = ref(null)
 const uploading = ref(false)
 const copied = ref(false)
+
+// 공유 상태
+const sharing = ref(false)
+const shareMsg = ref('')
+const shareErr = ref(false)
+let shareMsgTimer = null
 
 async function loadAlbum() {
   loading.value = true
@@ -172,6 +193,42 @@ async function copyLink() {
   }
 }
 
+function flashShareMsg(text, isErr) {
+  shareMsg.value = text
+  shareErr.value = isErr
+  if (shareMsgTimer) clearTimeout(shareMsgTimer)
+  shareMsgTimer = setTimeout(() => { shareMsg.value = '' }, 2500)
+}
+
+// 공유: 실제 토큰을 발급받아 공개 링크를 클립보드에 복사한다.
+// 공개 뷰 라우트(/album/shared/:token)는 아직 없으므로 토큰 포함 링크 복사까지만 수행한다
+// (가짜 동작 금지 — 토큰 발급/복사 실패는 그대로 노출).
+async function onShare() {
+  if (sharing.value || !album.value) return
+  sharing.value = true
+  try {
+    const { data } = await centralAlbumApi.share(album.value.id)
+    // 응답 필드명이 스트림별로 다를 수 있어 방어적으로 토큰을 추출한다.
+    const token = data?.token ?? data?.shareToken
+    const shareUrl = data?.shareUrl
+      ? (data.shareUrl.startsWith('http') ? data.shareUrl : `${location.origin}${data.shareUrl}`)
+      : (token ? `${location.origin}/album/shared/${token}` : null)
+    if (!shareUrl) throw new Error('공유 응답에 토큰이 없어요.')
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      flashShareMsg('링크 복사됨', false)
+    } catch {
+      // 클립보드 거부/미지원 — 토큰은 발급됐으나 자동 복사는 실패. 정직하게 안내.
+      flashShareMsg('링크가 생성됐지만 복사에 실패했어요. 직접 복사해 주세요.', true)
+    }
+  } catch (err) {
+    flashShareMsg(err.response?.data?.message ?? err.message ?? '공유 링크 생성에 실패했어요.', true)
+  } finally {
+    sharing.value = false
+  }
+}
+
 onMounted(loadAlbum)
 </script>
 
@@ -200,6 +257,21 @@ onMounted(loadAlbum)
   color: var(--color-ink);
 }
 .nav-spacer { width: 40px; height: 40px; flex-shrink: 0; }
+.share-btn {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.share-btn.disabled { opacity: 0.5; cursor: default; }
+.share-btn:disabled { opacity: 0.5; cursor: default; }
+.share-spinner-label { font-size: 18px; color: var(--color-ink-muted); line-height: 1; }
 .nav-title-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .nav-title { font-size: 15px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.3px; }
 .nav-sub { font-size: 11.5px; color: var(--color-ink-muted); }
@@ -279,6 +351,15 @@ onMounted(loadAlbum)
   justify-content: center;
 }
 .empty-hint { font-size: 12px; color: var(--color-ink-muted); }
+
+.share-msg {
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  padding: 6px 20px 0;
+}
+.share-msg.err { color: var(--color-error); }
 
 .action-bar {
   display: flex;
