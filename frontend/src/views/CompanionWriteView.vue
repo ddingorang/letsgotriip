@@ -32,9 +32,9 @@
         <div class="field">
           <label class="field-label">여행 날짜 <span class="req">*</span></label>
           <div class="date-range-row">
-            <input v-model="form.startDate" type="date" class="field-input date-input" />
+            <input v-model="form.startDate" type="date" class="field-input date-input" :min="todayStr" :max="maxDateStr" />
             <span class="date-sep">~</span>
-            <input v-model="form.endDate" type="date" class="field-input date-input" :min="form.startDate" />
+            <input v-model="form.endDate" type="date" class="field-input date-input" :min="form.startDate || todayStr" :max="maxDateStr" />
           </div>
           <p v-if="computedDuration" class="duration-hint">{{ computedDuration }}</p>
         </div>
@@ -155,6 +155,8 @@ watch(() => form.value.startDate, (newStart) => {
 })
 
 const submitError = ref('')
+const todayStr = new Date().toISOString().slice(0, 10)
+const maxDateStr = new Date(Date.now() + 1000 * 60 * 60 * 24 * 730).toISOString().slice(0, 10) // 오늘+약 2년
 const isValid = computed(() =>
   form.value.title &&
   form.value.location &&
@@ -176,9 +178,24 @@ function parseMax(val) {
   return isNaN(n) ? 4 : n
 }
 
+// 날짜 검증 — 5자리 연도 등 잘못된 값으로 BE LocalDate 파싱(500)이 깨지는 것 방지
+function isSaneDate(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+  const d = new Date(s + 'T00:00:00')
+  return !isNaN(d.getTime()) && d.getFullYear() >= 2020 && d.getFullYear() <= 2100
+}
+
 async function submit() {
   if (!isValid.value) return
   submitError.value = ''
+  if (!isSaneDate(form.value.startDate) || !isSaneDate(form.value.endDate)) {
+    submitError.value = '여행 날짜를 올바르게 선택해 주세요 (예: 2026-07-01).'
+    return
+  }
+  if (form.value.endDate < form.value.startDate) {
+    submitError.value = '종료일이 시작일보다 빠를 수 없어요.'
+    return
+  }
   const payload = {
     title: form.value.title,
     region: form.value.location,
