@@ -91,8 +91,8 @@
         </div>
       </div>
 
-      <!-- Pending state for applied user -->
-      <div v-if="isApplied && !comp.isOwner" class="pending-banner">
+      <!-- Pending state -->
+      <div v-if="myApplicationStatus === 'PENDING' && !comp.isOwner" class="pending-banner">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
         </svg>
@@ -102,7 +102,18 @@
         </div>
       </div>
 
-      <!-- 모집 조건 -->
+      <!-- Approved state (origin) -->
+      <div v-if="myApplicationStatus === 'APPROVED' && !comp.isOwner" class="approved-banner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2a7a4b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+        <div>
+          <div class="approved-title">동행이 확정됐어요!</div>
+          <div class="approved-sub">채팅방에서 일정을 조율해보세요.</div>
+        </div>
+      </div>
+
+      <!-- 모집 조건 (HEAD) -->
       <div class="cond-head">
         <h3 class="section-title">모집 조건</h3>
         <span v-if="seatsLeft > 0" class="cond-seats">남은 자리 {{ seatsLeft }}명</span>
@@ -216,7 +227,7 @@
         <button class="cta-main" disabled>모집이 마감되었어요</button>
       </template>
 
-      <!-- Visitor: approved — 취소 불가, 채팅방 입장 -->
+      <!-- Visitor: approved — 취소 불가, 채팅방 입장(동적 chatRoomId) -->
       <template v-else-if="!comp.isOwner && isApplied && isApproved">
         <button class="cta-main" :disabled="comp.chatRoomId == null" @click="openChat">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
@@ -281,15 +292,31 @@ const comp = computed(() => realComp.value ?? {
   isApplied: false, myApplicationId: null, myApplicationStatus: null, chatRoomId: null,
 })
 
-// 신청 여부는 서버 응답(comp.isApplied)을 기준으로 하되,
+// 내 신청 상태/ID — origin 의 /applications/me 조회(getMyApplication) 결과를 보관.
+// 신청/취소 직후 낙관적으로 갱신하고, 상세 재조회로 서버 기준 동기화한다.
+const fetchedStatus = ref(null) // null | 'PENDING' | 'APPROVED' | 'REJECTED'
+const fetchedAppId = ref(null)
+
+// 신청 여부는 서버 응답(comp.isApplied) 또는 /applications/me 조회를 기준으로 하되,
 // 신청/취소 직후에는 재조회 전까지 낙관적 오버라이드를 적용한다.
 const appliedOverride = ref(null)
-const isApplied = computed(() =>
-  appliedOverride.value !== null ? appliedOverride.value : !!comp.value.isApplied,
+const isApplied = computed(() => {
+  if (appliedOverride.value !== null) return appliedOverride.value
+  if (comp.value.isApplied) return true
+  return !!fetchedStatus.value && fetchedStatus.value !== 'REJECTED'
+})
+
+// 신청 상태(PENDING/APPROVED/REJECTED) — 상세 응답값을 우선하고, 없으면 /me 조회값 사용.
+const myApplicationStatus = computed(
+  () => comp.value.myApplicationStatus ?? fetchedStatus.value ?? null,
+)
+// 신청 ID — 상세 응답값을 우선하고, 없으면 /me 조회값 사용(취소 시 사용).
+const myApplicationId = computed(
+  () => comp.value.myApplicationId ?? fetchedAppId.value ?? null,
 )
 // 승인된 신청은 채팅방 멤버십이 생성되어 취소가 불가하다(BE에서 409 반환).
 // → 취소 버튼 대신 채팅방 입장 안내를 노출한다.
-const isApproved = computed(() => comp.value.myApplicationStatus === 'APPROVED')
+const isApproved = computed(() => myApplicationStatus.value === 'APPROVED')
 const applyError = ref('')
 
 // 남은 모집 자리 — 모집 조건 카드와 하단 CTA에서 공유(중복 계산 방지)
@@ -422,14 +449,30 @@ watch(hasPlaces, (ready) => {
   if (ready) ensureMap()
 })
 
+// 내 신청 상태 조회(origin /applications/me 경로) — 방장이 아닐 때만.
+// 상세 응답에 isApplied/myApplicationStatus 가 없을 때 보강한다.
+async function refreshMyApplication() {
+  if (comp.value.isOwner) return
+  const app = await companionStore.getMyApplication(route.params.id)
+  if (app) {
+    fetchedStatus.value = app.status ?? null
+    fetchedAppId.value = app.id ?? null
+  } else {
+    fetchedStatus.value = null
+    fetchedAppId.value = null
+  }
+}
+
 onMounted(async () => {
   await companionStore.getDetail(route.params.id)
+  await refreshMyApplication()
   if (hasPlaces.value) ensureMap()
 })
 
 /** 상세 재시도 — 로드 실패 화면의 "다시 시도" 버튼용 */
 async function reloadDetail() {
   await companionStore.getDetail(route.params.id)
+  await refreshMyApplication()
   if (hasPlaces.value) ensureMap()
 }
 
@@ -442,10 +485,14 @@ onBeforeUnmount(() => {
 async function apply() {
   applyError.value = ''
   try {
-    await companionStore.join(comp.value.id)
+    const app = await companionStore.join(comp.value.id)
+    // origin: join 응답(status/id)을 우선 반영
+    fetchedStatus.value = app?.status ?? 'PENDING'
+    fetchedAppId.value = app?.id ?? null
     appliedOverride.value = true
     // 서버 기준 isApplied/myApplicationId 동기화
     await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
     appliedOverride.value = null
   } catch {
     applyError.value = companionStore.error || '신청에 실패했어요.'
@@ -454,20 +501,24 @@ async function apply() {
 
 async function cancelApply() {
   applyError.value = ''
-  const applicationId = comp.value.myApplicationId
-  if (!applicationId) {
-    // 신청 ID를 모르면 최신 상세를 다시 받아 확인
+  // 신청 ID를 모르면 최신 상세 + /me 조회로 확인
+  if (!myApplicationId.value) {
     await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
   }
-  const id = comp.value.myApplicationId
+  const id = myApplicationId.value
   if (!id) {
     applyError.value = '신청 정보를 찾을 수 없어요.'
     return
   }
   try {
+    // BE DELETE /companion/posts/{postId}/applications/{applicationId}
     await companionStore.cancel(comp.value.id, id)
     appliedOverride.value = false
+    fetchedStatus.value = null
+    fetchedAppId.value = null
     await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
     appliedOverride.value = null
   } catch {
     applyError.value = companionStore.error || '신청 취소에 실패했어요.'
@@ -621,6 +672,18 @@ function share() {
 }
 .pending-title { font-size: 13.5px; font-weight: 700; color: var(--color-peach-pressed); margin-bottom: 2px; }
 .pending-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
+
+.approved-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 20px;
+  padding: 14px;
+  background: #edfaf3;
+  border-radius: var(--radius-md);
+}
+.approved-title { font-size: 13.5px; font-weight: 700; color: #2a7a4b; margin-bottom: 2px; }
+.approved-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
 
 .cond-head {
   display: flex;

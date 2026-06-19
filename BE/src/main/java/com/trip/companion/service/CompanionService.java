@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -202,6 +203,13 @@ public class CompanionService {
                 "/community?tab=companion"));
 
         return CompanionApplicationResponse.of(application);
+    }
+
+    public Optional<CompanionApplicationResponse> getMyApplication(Long postId, Long userId) {
+        CompanionPost post = findPost(postId);
+        User applicant = findUser(userId);
+        return companionApplicationRepository.findByCompanionPostAndApplicant(post, applicant)
+                .map(CompanionApplicationResponse::of);
     }
 
     public List<CompanionApplicationResponse> getApplications(Long postId, Long userId) {

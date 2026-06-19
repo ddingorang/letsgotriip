@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/companion/posts")
@@ -96,6 +97,15 @@ public class CompanionController {
     }
 
     // ─── 동행 신청 ────────────────────────────────────────────
+
+    @GetMapping("/{postId}/applications/me")
+    public ResponseEntity<CompanionApplicationResponse> getMyApplication(
+            @PathVariable Long postId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        Optional<CompanionApplicationResponse> result = companionService.getMyApplication(postId, principal.userId());
+        return result.map(ResponseEntity::ok).orElse(ResponseEntity.noContent().build());
+    }
 
     @PostMapping("/{postId}/applications")
     public ResponseEntity<CompanionApplicationResponse> apply(

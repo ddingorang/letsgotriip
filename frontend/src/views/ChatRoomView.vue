@@ -9,7 +9,7 @@
       </button>
       <div class="header-center">
         <span class="header-title">{{ room?.title }}</span>
-        <span class="header-sub">여행 D-{{ room?.daysLeft }}</span>
+        <span class="header-sub">{{ connectionLabel }}</span>
       </div>
       <div class="more-wrap" ref="moreWrap">
         <button class="more-btn" @click="toggleMenu">
@@ -44,11 +44,11 @@
 
     <div class="msg-scroll" ref="msgScroll">
       <div class="date-separator">
-        <span>6월 10일 화요일</span>
+        <span>{{ todayLabel }}</span>
       </div>
 
       <template v-for="msg in messages" :key="msg.id">
-        <!-- Outgoing (내 메시지) -->
+        <!-- Outgoing -->
         <div v-if="isMyMessage(msg)" class="msg-row outgoing">
           <div class="msg-col-out">
             <span class="msg-status">
@@ -87,7 +87,7 @@
           </div>
         </div>
 
-        <!-- Incoming (상대방 메시지) -->
+        <!-- Incoming -->
         <div v-else class="msg-row incoming">
           <div class="msg-avatar" />
           <div class="msg-col">
@@ -241,14 +241,26 @@ const msgScroll = ref(null)
 const inputText = ref('')
 
 const roomId = computed(() => route.params.id)
+const room = computed(() => companionStore.myRooms.find((r) => r.id === Number(route.params.id)))
+// 실시간 메시지는 chatStore(STOMP)가 단일 소스로 관리한다.
+const messages = computed(() => chatStore.messages[String(route.params.id)] ?? [])
+
+// 헤더 연결 상태 라벨 — STOMP 연결 여부(chatStore.connected)를 기준으로 표시.
+const connectionLabel = computed(() => {
+  if (chatStore.connected) {
+    return room.value?.daysLeft != null ? `여행 D-${room.value.daysLeft}` : '연결됨'
+  }
+  return '연결 중...'
+})
+
+const todayLabel = computed(() => {
+  return new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+})
 
 function isMyMessage(msg) {
   const myId = authStore.user?.userId
-  return myId != null ? Number(msg.senderId) === Number(myId) : msg.senderId === 'me'
+  return myId != null ? Number(msg.senderId) === Number(myId) : false
 }
-
-const room = computed(() => companionStore.myRooms.find((r) => r.id === Number(route.params.id)))
-const messages = computed(() => chatStore.messages[String(route.params.id)] ?? [])
 
 // 방장 여부: myRooms 의 isHost(있으면) 우선, 없으면 false
 const isHost = computed(() => room.value?.isHost === true)
@@ -262,10 +274,12 @@ function scrollToBottom() {
 function sendMessage() {
   const text = inputText.value.trim()
   if (!text) return
+  // STOMP 송신은 chatStore.sendMessage가 수행한다.
+  // 내부에서 낙관적 버블을 1개만 push하고, 동일 correlationId 에코 수신 시
+  // 실제 메시지로 교체(중복 방지)하므로 메시지는 한 번만 전송·표시된다.
   const sent = chatStore.sendMessage(roomId.value, text)
   if (sent) {
     inputText.value = ''
-    // 실제 메시지는 STOMP 브로드캐스트(에코)로 수신되어 목록에 추가된다.
   }
 }
 

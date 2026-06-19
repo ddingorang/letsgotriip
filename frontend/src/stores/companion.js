@@ -67,6 +67,7 @@ export const useCompanionStore = defineStore('companion', () => {
       isOwner: myUserId != null && item.authorId != null
         ? Number(item.authorId) === Number(myUserId)
         : (item.isOwner ?? false),
+      chatRoomId: item.chatRoomId ?? null,
       pendingCount: item.pendingCount ?? item.pending_count ?? 0,
       approvedCount: item.approvedCount ?? item.approved_count ?? 0,
       // 신청 여부/취소용 신청 ID/신청 상태/채팅방 ID (상세 응답 기준)
@@ -166,11 +167,14 @@ export const useCompanionStore = defineStore('companion', () => {
     loading.value = true
     error.value = null
     try {
-      // companionApi.join 은 메시지 인자를 받지 않으므로 메시지가 있으면 http로 직접 호출
+      // companionApi.join 은 메시지 인자를 받지 않으므로 메시지가 있으면 http로 직접 호출.
+      // 어느 경로든 BE 응답(data)을 반환해 호출 측이 신청 결과를 사용할 수 있게 한다.
       if (message && message.trim()) {
-        await http.post(`/api/companion/posts/${id}/applications`, { message: message.trim() })
+        const { data } = await http.post(`/api/companion/posts/${id}/applications`, { message: message.trim() })
+        return data
       } else {
-        await companionApi.join(id)
+        const { data } = await companionApi.join(id)
+        return data
       }
     } catch (e) {
       error.value = e.response?.data?.message ?? e.message ?? '신청에 실패했어요.'
@@ -180,13 +184,25 @@ export const useCompanionStore = defineStore('companion', () => {
     }
   }
 
+  // 내 신청 조회 — BE GET /companion/posts/{postId}/applications/me (origin/master)
+  // 204(신청 없음)는 null 로 정규화한다.
+  async function getMyApplication(postId) {
+    try {
+      const { data, status } = await companionApi.getMyApplication(postId)
+      if (status === 204) return null
+      return data
+    } catch {
+      return null
+    }
+  }
+
   // 신청 취소 — BE DELETE /companion/posts/{postId}/applications/{applicationId}
-  // companionApi 에 cancel 이 없어 http로 직접 호출한다.
+  // cancel/cancelApplication 은 동일 기능. 뷰가 어느 이름을 부르든 깨지지 않게 둘 다 export 한다.
   async function cancel(postId, applicationId) {
     loading.value = true
     error.value = null
     try {
-      await http.delete(`/api/companion/posts/${postId}/applications/${applicationId}`)
+      await companionApi.cancelApplication(postId, applicationId)
     } catch (e) {
       error.value = e.response?.data?.message ?? e.message ?? '신청 취소에 실패했어요.'
       throw e
@@ -194,6 +210,9 @@ export const useCompanionStore = defineStore('companion', () => {
       loading.value = false
     }
   }
+
+  // cancelApplication: cancel 의 별칭(동일 기능). origin/master 호환.
+  const cancelApplication = cancel
 
   // ── applicant normalization ───────────────────────────────────────────────────
 
@@ -289,5 +308,6 @@ export const useCompanionStore = defineStore('companion', () => {
     getList, getDetail, create, join, cancel,
     fetchMyRooms, fetchCompanions,
     getApplications, approveApplicant, rejectApplicant, getById,
+    getMyApplication, cancelApplication,
   }
 })

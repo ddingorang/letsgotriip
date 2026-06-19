@@ -282,6 +282,11 @@ export const companionApi = {
   // planId(optional)가 있으면 작성자 소유 계획과 연결된다(BE 검증).
   create: (data) => http.post('/api/companion/posts', data),
   join: (id) => http.post(`/api/companion/posts/${id}/applications`),
+  // 내 신청 현황 조회 (신청자 본인) — GET .../applications/me
+  getMyApplication: (id) => http.get(`/api/companion/posts/${id}/applications/me`),
+  // 내 신청 취소 (신청자 본인) — DELETE .../applications/{applicationId}
+  cancelApplication: (postId, applicationId) =>
+    http.delete(`/api/companion/posts/${postId}/applications/${applicationId}`),
   // 신청자 목록/승인/반려 (방장만)
   getApplications: (postId) => http.get(`/api/companion/posts/${postId}/applications`),
   approve: (postId, applicationId) =>
@@ -307,8 +312,10 @@ export const followApi = {
 }
 
 // ── Chat (BE: /api/chat/rooms) ────────────────────────────────────────────────
-// 히스토리는 chat store(loadHistory)가 직접 호출. 여기에는 부가 액션만 둔다.
+// 실시간 전송은 STOMP/WebSocket 경로(chat store)를 쓰고, 히스토리/부가 액션은 REST.
 export const chatApi = {
+  // 메시지 히스토리(Mongo 영속) — GET /api/chat/rooms/{roomId}/messages
+  getMessages: (roomId) => http.get(`/api/chat/rooms/${roomId}/messages`),
   getParticipants: (roomId) => http.get(`/api/chat/rooms/${roomId}/participants`),
   leaveRoom: (roomId) => http.delete(`/api/chat/rooms/${roomId}/membership`),
   // 방 정보(제목/소개) 수정 — 방장만. body { title(<=18), description?(<=200) } → 204
