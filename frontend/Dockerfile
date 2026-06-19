@@ -14,6 +14,12 @@ RUN npm install --no-audit --no-fund
 ARG VITE_KAKAO_MAP_KEY=
 ENV VITE_KAKAO_MAP_KEY=$VITE_KAKAO_MAP_KEY
 
+# 데모 로그인 프리필 — 비어있지 않으면 로그인 폼을 미리 채움(운영은 빈 값으로 두면 빈칸)
+ARG VITE_DEMO_EMAIL=
+ENV VITE_DEMO_EMAIL=$VITE_DEMO_EMAIL
+ARG VITE_DEMO_PASSWORD=
+ENV VITE_DEMO_PASSWORD=$VITE_DEMO_PASSWORD
+
 # API base URL은 빈 값 → axios baseURL='' → 모든 호출이 상대경로
 # (nginx 리버스 프록시가 /api·/auth 등을 backend로 라우팅)
 ENV VITE_API_BASE_URL=

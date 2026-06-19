@@ -112,6 +112,9 @@ services:
       context: ./frontend
       args:
         VITE_KAKAO_MAP_KEY: ${VITE_KAKAO_MAP_KEY}
+        # 데모 로그인 프리필(기본 demo 계정). 빈칸 원하면 .env 에 VITE_DEMO_EMAIL= (빈값) 지정.
+        VITE_DEMO_EMAIL: ${VITE_DEMO_EMAIL-demo@triip.com}
+        VITE_DEMO_PASSWORD: ${VITE_DEMO_PASSWORD-demo1234}
     container_name: trip-frontend
     depends_on:
       - backend
