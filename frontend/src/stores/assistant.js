@@ -8,15 +8,19 @@
 // - conversationId 는 첫 응답에서 받아 이후 요청에 재사용.
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { assistantApi } from '@/api/index.js'
+import { assistantApi, recommendApi } from '@/api/index.js'
 
 export const useAssistantStore = defineStore('assistant', () => {
-  // { id, role: 'user' | 'assistant', content, time } 형태의 메시지 배열
+  // 메시지 배열. 일반 텍스트는 { id, role:'user'|'assistant', content, time },
+  // 계획 카드는 { id, role:'assistant', type:'plan', plan:{...}, time } 형태.
   const messages = ref([])
   const conversationId = ref(null)
   const loading = ref(false) // 요청 시작 ~ 첫 토큰 도착 전(typing 인디케이터)
   const streaming = ref(false) // 첫 토큰 ~ 응답 종료(취소 가능 구간)
   const error = ref(null)
+
+  // 계획 폼 제출 → recommendApi.create 진행 중 여부(폼/버튼 잠금용)
+  const planning = ref(false)
 
   // 진행 중인 스트리밍 취소용 컨트롤러
   let abortController = null
@@ -35,6 +39,23 @@ export const useAssistantStore = defineStore('assistant', () => {
     const msg = { id: makeId(), role, content, time: nowTime() }
     messages.value.push(msg)
     return msg
+  }
+
+  /** 임의 형태(계획 카드 등)의 메시지를 그대로 추가한다. */
+  function pushRaw(partial) {
+    const msg = { id: makeId(), time: nowTime(), ...partial }
+    messages.value.push(msg)
+    return msg
+  }
+
+  /** 화면에만 사용자 말풍선을 추가한다(LLM 전송 없이 폼 요약 등 표시용). */
+  function pushUserText(text) {
+    return pushMessage('user', text)
+  }
+
+  /** 화면에만 어시스턴트 안내 말풍선을 추가한다(LLM 전송 없이). */
+  function pushAssistantText(text) {
+    return pushMessage('assistant', text)
   }
 
   async function send(message) {
@@ -117,6 +138,68 @@ export const useAssistantStore = defineStore('assistant', () => {
     }
   }
 
+  /**
+   * 계획 폼 제출 → recommendApi.create(conditions) 로 일정을 생성하고
+   * 결과를 'plan' 타입 어시스턴트 메시지(카드)로 추가한다.
+   * @param {object} conditions  recommendApi.create payload({ areaCode, startDate, ... })
+   * @param {string} [summary]   사용자 말풍선에 표시할 사람용 요약
+   * @returns {Promise<object|null>} 생성된 recommendation(저장/평가에 id 사용)
+   */
+  async function createPlan(conditions, summary) {
+    if (planning.value) return null
+    // 폼 선택 내용을 사용자 말풍선으로 먼저 표시(구조화 입력의 흔적)
+    if (summary) pushUserText(summary)
+
+    planning.value = true
+    loading.value = true // 카드 생성 전까지 typing 인디케이터 노출
+    error.value = null
+    try {
+      const { data } = await recommendApi.create(conditions)
+      const days = data?.draft?.days ?? []
+      pushRaw({
+        role: 'assistant',
+        type: 'plan',
+        plan: {
+          recommendationId: data?.id ?? null,
+          status: data?.status ?? null,
+          totalSummary: data?.draft?.totalSummary ?? '나만의 여행 일정',
+          days,
+        },
+      })
+      return data
+    } catch (e) {
+      if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') return null
+      const code = e.response?.data?.code
+      let msg
+      if (code === 'RECO409') msg = '이미 생성 중이에요. 잠시 후 다시 시도해 주세요.'
+      else if (code === 'RECO422' || code === 'RECO502') msg = '일정 생성에 실패했어요. 다시 시도해 주세요.'
+      else msg = e.response?.data?.message ?? e.message ?? '일정 생성에 실패했어요.'
+      error.value = msg
+      pushAssistantText(`일정을 만들지 못했어요. ${msg}`)
+      return null
+    } finally {
+      planning.value = false
+      loading.value = false
+    }
+  }
+
+  /**
+   * 계획 카드를 실제 계획으로 저장한다(recommendApi.savePlan).
+   * @param {number|string} recommendationId
+   * @returns {Promise<object|null>} 저장된 PlanDetail({ id, ... })
+   */
+  async function savePlanFromCard(recommendationId) {
+    if (!recommendationId) return null
+    error.value = null
+    try {
+      const { data } = await recommendApi.savePlan(recommendationId)
+      return data
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '저장 중 오류가 발생했어요.'
+      throw e
+    }
+  }
+
   /** 진행 중인 응답 스트리밍을 중단한다(부분 응답은 화면에 유지). */
   function cancel() {
     if (abortController) {
@@ -134,6 +217,7 @@ export const useAssistantStore = defineStore('assistant', () => {
     error.value = null
     loading.value = false
     streaming.value = false
+    planning.value = false
   }
 
   return {
@@ -141,9 +225,14 @@ export const useAssistantStore = defineStore('assistant', () => {
     conversationId,
     loading,
     streaming,
+    planning,
     error,
     send,
     cancel,
     reset,
+    createPlan,
+    savePlanFromCard,
+    pushUserText,
+    pushAssistantText,
   }
 })

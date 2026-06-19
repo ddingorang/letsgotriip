@@ -67,6 +67,13 @@
         </div>
       </div>
 
+      <!-- 모집 조건 -->
+      <div class="cond-head">
+        <h3 class="section-title">모집 조건</h3>
+        <span v-if="seatsLeft > 0" class="cond-seats">남은 자리 {{ seatsLeft }}명</span>
+        <span v-else class="cond-seats cond-seats-full">모집 마감</span>
+      </div>
+
       <!-- Info grid -->
       <div class="info-grid">
         <div class="info-cell">
@@ -74,33 +81,40 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
             <span class="info-label">일정</span>
           </div>
-          <span class="info-val">{{ comp.dateRange }}</span>
-        </div>
-        <div class="info-cell">
-          <div class="info-icon-row">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
-            <span class="info-label">지역</span>
-          </div>
-          <span class="info-val">{{ comp.location }}</span>
+          <span class="info-val">{{ comp.dateRange || '-' }}</span>
         </div>
         <div class="info-cell">
           <div class="info-icon-row">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
             <span class="info-label">기간</span>
           </div>
-          <span class="info-val">{{ comp.period }}</span>
+          <span class="info-val">{{ comp.period || '-' }}</span>
         </div>
         <div class="info-cell">
+          <div class="info-icon-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
+            <span class="info-label">지역</span>
+          </div>
+          <span class="info-val">{{ comp.location || '-' }}</span>
+        </div>
+        <div class="info-cell">
+          <div class="info-icon-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
+            <span class="info-label">모집 인원</span>
+          </div>
+          <span class="info-val">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
+        </div>
+        <div class="info-cell info-cell-wide">
           <div class="info-icon-row">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>
             <span class="info-label">예상 비용</span>
           </div>
-          <span class="info-val">{{ comp.estimatedCost }}</span>
+          <span class="info-val">{{ comp.estimatedCost || '-' }}</span>
         </div>
       </div>
 
       <!-- Tags -->
-      <div class="tags-row">
+      <div v-if="comp.tags?.length" class="tags-row">
         <span v-for="tag in comp.tags" :key="tag" class="tag-chip">{{ tag }}</span>
       </div>
 
@@ -112,7 +126,10 @@
 
       <!-- Linked plan: map + day-by-day route (연결된 계획이 있을 때만) -->
       <div v-if="linkedPlan" class="section plan-section">
-        <h3 class="section-title">동행 일정</h3>
+        <div class="cond-head">
+          <h3 class="section-title">정해진 일정</h3>
+          <span class="plan-fixed-pill">계획 연동</span>
+        </div>
         <p v-if="linkedPlan.title" class="plan-meta">
           {{ linkedPlan.title }}
           <span v-if="planDateRange" class="plan-date">· {{ planDateRange }}</span>
@@ -154,7 +171,7 @@
       <div v-if="applyError" class="apply-error">{{ applyError }}</div>
       <!-- Visitor: not applied -->
       <template v-if="!comp.isOwner && !isApplied">
-        <div class="seats-left">남은 자리 {{ comp.maxCount - comp.currentCount }}명</div>
+        <div class="seats-left">남은 자리 {{ seatsLeft }}명</div>
         <button class="cta-main" :disabled="companionStore.loading" @click="apply">참여 신청하기</button>
       </template>
 
@@ -215,6 +232,11 @@ const isApplied = computed(() =>
 // → 취소 버튼 대신 채팅방 입장 안내를 노출한다.
 const isApproved = computed(() => comp.value.myApplicationStatus === 'APPROVED')
 const applyError = ref('')
+
+// 남은 모집 자리 — 모집 조건 카드와 하단 CTA에서 공유(중복 계산 방지)
+const seatsLeft = computed(() =>
+  Math.max(0, (comp.value.maxCount ?? 0) - (comp.value.currentCount ?? 0)),
+)
 
 // ── 연결된 계획(지도/동선) ──────────────────────────────────────────────────
 // 상세 응답의 linkedPlan = { planId, title, startDate, endDate, places:[{ dayNo, title, lat, lng }] }
@@ -535,16 +557,38 @@ function share() {
 .pending-title { font-size: 13.5px; font-weight: 700; color: var(--color-peach-pressed); margin-bottom: 2px; }
 .pending-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
 
+.cond-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 20px 0;
+}
+.cond-head .section-title { margin-bottom: 0; flex: 1; }
+.cond-seats {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.cond-seats-full {
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1px;
-  margin: 16px 20px;
+  margin: 12px 20px 16px;
   background: var(--color-line-light);
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--color-line-light);
 }
+.info-cell-wide { grid-column: 1 / -1; }
 .info-cell {
   padding: 14px 16px;
   background: var(--color-white);
@@ -643,6 +687,16 @@ function share() {
 
 /* ── Linked plan: map + route ─────────────────────────────────────────────── */
 .plan-section { padding-top: 4px; }
+.plan-section .cond-head { padding: 0; margin-bottom: 8px; }
+.plan-fixed-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
 .plan-meta {
   font-size: 13px;
   color: var(--color-ink-secondary);
