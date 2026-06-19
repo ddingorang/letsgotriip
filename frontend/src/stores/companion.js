@@ -61,9 +61,10 @@ export const useCompanionStore = defineStore('companion', () => {
         : (item.isOwner ?? false),
       pendingCount: item.pendingCount ?? item.pending_count ?? 0,
       approvedCount: item.approvedCount ?? item.approved_count ?? 0,
-      // 신청 여부/취소용 신청 ID/채팅방 ID (상세 응답 기준)
+      // 신청 여부/취소용 신청 ID/신청 상태/채팅방 ID (상세 응답 기준)
       isApplied: item.isApplied ?? false,
       myApplicationId: item.myApplicationId ?? null,
+      myApplicationStatus: item.myApplicationStatus ?? null,
       chatRoomId: item.chatRoomId ?? null,
     }
   }
@@ -206,32 +207,36 @@ export const useCompanionStore = defineStore('companion', () => {
   }
 
   async function approveApplicant(postId, applicationId) {
+    error.value = null
     try {
       const { data } = await http.patch(
         `/api/companion/posts/${postId}/applications/${applicationId}/approve`
       )
+      // 성공 시에만 로컬 상태 갱신
       const normalized = normalizeApplicant(data)
       const idx = applicants.value.findIndex(a => a.id === applicationId)
       if (idx !== -1) applicants.value[idx] = normalized
     } catch (e) {
-      const a = applicants.value.find(a => a.id === applicationId)
-      if (a) a.status = 'approved'
+      // 실패 시 상태를 변경하지 않고 에러를 전파 (정원 초과/이미 처리됨 등)
       error.value = e.response?.data?.message ?? e.message ?? '승인에 실패했어요.'
+      throw e
     }
   }
 
   async function rejectApplicant(postId, applicationId) {
+    error.value = null
     try {
       const { data } = await http.patch(
         `/api/companion/posts/${postId}/applications/${applicationId}/reject`
       )
+      // 성공 시에만 로컬 상태 갱신
       const normalized = normalizeApplicant(data)
       const idx = applicants.value.findIndex(a => a.id === applicationId)
       if (idx !== -1) applicants.value[idx] = normalized
     } catch (e) {
-      const a = applicants.value.find(a => a.id === applicationId)
-      if (a) a.status = 'rejected'
+      // 실패 시 상태를 변경하지 않고 에러를 전파
       error.value = e.response?.data?.message ?? e.message ?? '거절에 실패했어요.'
+      throw e
     }
   }
 

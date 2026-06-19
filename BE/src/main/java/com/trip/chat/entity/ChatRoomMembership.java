@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 
 @Getter
 @Entity
+@Table(uniqueConstraints = @UniqueConstraint(
+        name = "uk_membership_room_user",
+        columnNames = {"chatroom_id", "user_id"}))
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -21,6 +24,7 @@ public class ChatRoomMembership extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
 
+    @Column(name = "user_id")
     private Long userId;
 
     @ManyToOne(fetch = FetchType.LAZY)

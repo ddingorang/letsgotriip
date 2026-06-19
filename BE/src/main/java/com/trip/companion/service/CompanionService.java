@@ -18,6 +18,7 @@ import com.trip.global.error.ResponseCode;
 import com.trip.user.entity.User;
 import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -85,20 +86,22 @@ public class CompanionService {
     }
 
     public CursorPageResponse<CompanionPostSummaryResponse> getPosts(Long cursor, int size) {
-        PageRequest pageable = PageRequest.of(0, size + 1);
+        // size=0/음수/과대값 방어 — 컨트롤러 검증을 우회한 호출에도 안전하게 clamp
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        PageRequest pageable = PageRequest.of(0, safeSize + 1);
 
         List<CompanionPost> posts = cursor == null
                 ? companionPostRepository.findAllByDeletedFalseOrderByIdDesc(pageable)
                 : companionPostRepository.findAllByDeletedFalseAndIdLessThanOrderByIdDesc(cursor, pageable);
 
-        boolean hasNext = posts.size() > size;
-        List<CompanionPost> content = hasNext ? posts.subList(0, size) : posts;
+        boolean hasNext = posts.size() > safeSize;
+        List<CompanionPost> content = hasNext ? posts.subList(0, safeSize) : posts;
 
         List<CompanionPostSummaryResponse> responses = content.stream()
                 .map(post -> CompanionPostSummaryResponse.of(post, countCurrentMembers(post)))
                 .toList();
 
-        Long nextCursor = hasNext ? content.get(content.size() - 1).getId() : null;
+        Long nextCursor = (hasNext && !content.isEmpty()) ? content.get(content.size() - 1).getId() : null;
         return new CursorPageResponse<>(responses, nextCursor, hasNext);
     }
 
@@ -156,7 +159,12 @@ public class CompanionService {
                 .message(message != null && !message.isBlank() ? message.trim() : null)
                 .build();
 
-        companionApplicationRepository.save(application);
+        try {
+            // 동시 중복 신청은 DB 제약 충돌로 잡아 409로 변환 (존재 검사를 통과한 레이스 방어)
+            companionApplicationRepository.saveAndFlush(application);
+        } catch (DataIntegrityViolationException e) {
+            throw new GeneralException(ResponseCode.COMPANION_DUPLICATE_APPLY, e);
+        }
 
         // 모집글 작성자에게 알림 (커밋 후 적재)
         eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
@@ -180,15 +188,18 @@ public class CompanionService {
 
     @Transactional
     public CompanionApplicationResponse approveApplication(Long postId, Long applicationId, Long userId) {
-        CompanionPost post = findPost(postId);
+        // 동시 승인 직렬화: post 행에 비관적 쓰기 락을 걸어 정원 체크~멤버십 등록을 원자적으로 처리
+        CompanionPost post = companionPostRepository.findByIdForUpdate(postId)
+                .filter(p -> !p.isDeleted())
+                .orElseThrow(() -> new GeneralException(ResponseCode.COMPANION_POST_NOT_FOUND));
         verifyAuthor(post, userId);
 
         CompanionApplication application = findApplication(applicationId, post);
 
-        // 정원 초과 방지
+        // 정원 초과 방지 — 락 보유 상태에서 현재 인원을 카운트하여 직렬화
         if (post.getChatRoom() != null) {
             int currentMembers = chatRoomMembershipRepository
-                    .findByChatRoomId(post.getChatRoom().getId()).size();
+                    .countByChatRoomId(post.getChatRoom().getId());
             if (currentMembers >= post.getMaxMembers()) {
                 throw new GeneralException(ResponseCode.COMPANION_FULL);
             }
@@ -209,7 +220,12 @@ public class CompanionService {
                         .isHost(false)
                         .isBanned(false)
                         .build();
-                chatRoomMembershipRepository.save(membership);
+                try {
+                    // (chat_room_id, user_id) unique 충돌은 동시 승인 레이스 → 409
+                    chatRoomMembershipRepository.saveAndFlush(membership);
+                } catch (DataIntegrityViolationException e) {
+                    throw new GeneralException(ResponseCode.COMPANION_FULL, e);
+                }
                 post.getChatRoom().setParticipationCount(post.getChatRoom().getParticipationCount() + 1);
             }
         }
@@ -234,6 +250,12 @@ public class CompanionService {
 
         if (!application.getApplicant().getId().equals(userId)) {
             throw new GeneralException(ResponseCode._FORBIDDEN);
+        }
+
+        // 승인된 신청은 이미 채팅방 멤버십이 생성되었으므로 단순 삭제 시 멤버십이 잔존한다.
+        // → PENDING(또는 REJECTED) 상태만 취소 허용, APPROVED는 거부.
+        if (application.getStatus() == ApplicationStatus.APPROVED) {
+            throw new GeneralException(ResponseCode.COMPANION_APPROVED_CANCEL);
         }
 
         companionApplicationRepository.delete(application);
@@ -280,7 +302,7 @@ public class CompanionService {
 
     private int countCurrentMembers(CompanionPost post) {
         return post.getChatRoom() != null
-                ? chatRoomMembershipRepository.findByChatRoomId(post.getChatRoom().getId()).size()
+                ? chatRoomMembershipRepository.countByChatRoomId(post.getChatRoom().getId())
                 : 0;
     }
 
@@ -298,6 +320,7 @@ public class CompanionService {
         // 현재 사용자가 이미 신청(PENDING/APPROVED)한 상태인지 — REJECTED는 미신청으로 간주
         boolean isApplied = false;
         Long myApplicationId = null;
+        ApplicationStatus myApplicationStatus = null;
         if (currentUserId != null) {
             CompanionApplication active = companionApplicationRepository
                     .findFirstByCompanionPostAndApplicant_IdAndStatusNot(
@@ -306,9 +329,11 @@ public class CompanionService {
             if (active != null) {
                 isApplied = true;
                 myApplicationId = active.getId();
+                myApplicationStatus = active.getStatus();
             }
         }
 
-        return CompanionPostResponse.of(post, currentMembers, pendingCount, approvedCount, isApplied, myApplicationId);
+        return CompanionPostResponse.of(post, currentMembers, pendingCount, approvedCount,
+                isApplied, myApplicationId, myApplicationStatus);
     }
 }

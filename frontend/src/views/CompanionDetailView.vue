@@ -12,12 +12,7 @@
           </svg>
         </button>
         <div class="hero-top-right">
-          <button v-if="comp.isOwner" class="ghost-btn" @click="$router.push(`/companion/${comp.id}/edit`)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
+          <!-- 수정 화면(/companion/:id/edit) 라우트가 없어 깨진 이동을 방지하기 위해 수정 버튼 제거 -->
           <button class="ghost-btn" @click="share">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
@@ -127,7 +122,15 @@
         <button class="cta-main" :disabled="companionStore.loading" @click="apply">참여 신청하기</button>
       </template>
 
-      <!-- Visitor: applied (pending) -->
+      <!-- Visitor: approved — 취소 불가, 채팅방 입장 -->
+      <template v-else-if="!comp.isOwner && isApplied && isApproved">
+        <button class="cta-main" :disabled="comp.chatRoomId == null" @click="openChat">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+          채팅방 입장
+        </button>
+      </template>
+
+      <!-- Visitor: applied (pending) — 취소 가능 -->
       <template v-else-if="!comp.isOwner && isApplied">
         <button class="cta-cancel" @click="cancelApply">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -163,7 +166,7 @@ const comp = computed(() => companionStore.getById(route.params.id) ?? {
   status: '모집중', currentCount: 0, maxCount: 4, author: { nickname: '-', tripCount: 0 },
   period: '-', estimatedCost: '-', tags: [], intro: '',
   isOwner: false, pendingCount: 0, approvedCount: 0,
-  isApplied: false, myApplicationId: null, chatRoomId: null,
+  isApplied: false, myApplicationId: null, myApplicationStatus: null, chatRoomId: null,
 })
 
 // 신청 여부는 서버 응답(comp.isApplied)을 기준으로 하되,
@@ -172,6 +175,9 @@ const appliedOverride = ref(null)
 const isApplied = computed(() =>
   appliedOverride.value !== null ? appliedOverride.value : !!comp.value.isApplied,
 )
+// 승인된 신청은 채팅방 멤버십이 생성되어 취소가 불가하다(BE에서 409 반환).
+// → 취소 버튼 대신 채팅방 입장 안내를 노출한다.
+const isApproved = computed(() => comp.value.myApplicationStatus === 'APPROVED')
 const applyError = ref('')
 
 onMounted(async () => {

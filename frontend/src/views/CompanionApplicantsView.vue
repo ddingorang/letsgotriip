@@ -82,13 +82,21 @@ onMounted(async () => {
 })
 
 async function handleApprove(applicationId) {
-  await companionStore.approveApplicant(postId.value, applicationId)
+  try {
+    await companionStore.approveApplicant(postId.value, applicationId)
+  } catch {
+    // 실패(정원 초과/이미 처리됨 등)는 store.error 로 노출. 서버 기준으로 목록 재동기화.
+  }
   // refresh list so counts and statuses are up-to-date
   await companionStore.getApplications(postId.value)
 }
 
 async function handleReject(applicationId) {
-  await companionStore.rejectApplicant(postId.value, applicationId)
+  try {
+    await companionStore.rejectApplicant(postId.value, applicationId)
+  } catch {
+    // 실패는 store.error 로 노출. 서버 기준으로 목록 재동기화.
+  }
   await companionStore.getApplications(postId.value)
 }
 </script>

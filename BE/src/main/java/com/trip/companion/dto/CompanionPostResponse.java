@@ -2,6 +2,7 @@
 package com.trip.companion.dto;
 
 import com.trip.companion.entity.CompanionPost;
+import com.trip.companion.entity.enums.ApplicationStatus;
 import com.trip.companion.entity.enums.CompanionStatus;
 
 import java.time.LocalDate;
@@ -26,13 +27,15 @@ public record CompanionPostResponse(
         int currentMembers,
         int pendingCount,
         int approvedCount,
-        boolean isApplied,       // 현재 로그인 사용자가 신청(PENDING/APPROVED)했는지 여부
-        Long myApplicationId,    // 현재 사용자의 활성 신청 ID (신청 취소용). 미신청 시 null
+        boolean isApplied,                  // 현재 로그인 사용자가 신청(PENDING/APPROVED)했는지 여부
+        Long myApplicationId,               // 현재 사용자의 활성 신청 ID (신청 취소용). 미신청 시 null
+        ApplicationStatus myApplicationStatus, // 현재 사용자의 활성 신청 상태(PENDING/APPROVED). 미신청 시 null
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
     public static CompanionPostResponse of(CompanionPost post, int currentMembers, int pendingCount,
-                                           int approvedCount, boolean isApplied, Long myApplicationId) {
+                                           int approvedCount, boolean isApplied, Long myApplicationId,
+                                           ApplicationStatus myApplicationStatus) {
         return new CompanionPostResponse(
                 post.getId(),
                 post.getTitle(),
@@ -53,6 +56,7 @@ public record CompanionPostResponse(
                 approvedCount,
                 isApplied,
                 myApplicationId,
+                myApplicationStatus,
                 post.getCreatedAt(),
                 post.getUpdatedAt()
         );

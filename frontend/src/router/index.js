@@ -29,7 +29,7 @@ const router = createRouter({
 
     // ── Companion ─────────────────────────────────────────────────────────────
     { path: '/companion/write', name: 'companion-write', component: () => import('@/views/CompanionWriteView.vue'), meta: { tabBar: false, requiresAuth: true } },
-    { path: '/companion/:id/applicants', name: 'companion-applicants', component: () => import('@/views/CompanionApplicantsView.vue'), meta: { tabBar: false } },
+    { path: '/companion/:id/applicants', name: 'companion-applicants', component: () => import('@/views/CompanionApplicantsView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/companion/:id', name: 'companion-detail', component: () => import('@/views/CompanionDetailView.vue'), meta: { tabBar: false } },
 
     // ── Chat ──────────────────────────────────────────────────────────────────
