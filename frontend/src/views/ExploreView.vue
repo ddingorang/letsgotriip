@@ -44,6 +44,7 @@
         :selected-id="selectedPlace?.contentId"
         :center="mapCenter"
         @select="selectPlace"
+        @detail="goDetail"
       />
     </div>
 
@@ -100,8 +101,10 @@
         <div
           v-for="(place, idx) in displayedPlaces"
           :key="place.contentId"
+          :ref="(el) => setRowRef(place.contentId, el)"
           class="place-row"
-          @click="$router.push(`/place/${place.contentId}`)"
+          :class="{ selected: selectedPlace && String(place.contentId) === String(selectedPlace.contentId) }"
+          @click="onRowClick(place)"
         >
           <div class="place-img">
             <div class="img-placeholder small">
@@ -177,11 +180,13 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { useFestivalStore } from '@/stores/festival.js'
 import { useLocationStore } from '@/stores/location.js'
 import TripMap from '@/components/common/TripMap.vue'
 
+const router = useRouter()
 const store = useAttractionStore()
 const festivalStore = useFestivalStore()
 const locationStore = useLocationStore()
@@ -329,8 +334,37 @@ function selectCategory(key) {
   store.list(params, currentUi(), { forceLoading: true })
 }
 
+// contentId -> 목록 row DOM 매핑(선택 시 스크롤 인투 뷰용)
+const rowRefs = new Map()
+function setRowRef(contentId, el) {
+  if (el) rowRefs.set(String(contentId), el)
+  else rowRefs.delete(String(contentId))
+}
+
+// 지도 마커 클릭 → 선택 상태 반영 + 하단 시트에서 해당 항목으로 스크롤/강조.
+// (지도 패닝/마커 강조는 TripMap 이 selectedId watch 로 처리)
 function selectPlace(place) {
   selectedPlace.value = place
+  // 시트를 펼쳐 항목이 보이도록 한 뒤, 해당 row 를 스크롤로 가시화
+  sheetExpanded.value = true
+  nextTick(() => {
+    const el = rowRefs.get(String(place.contentId))
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
+}
+
+// 상세 페이지로 이동(인포윈도우 '상세보기' 탭 / 목록 row 탭 공통).
+function goDetail(place) {
+  if (place && place.contentId != null) {
+    router.push(`/place/${place.contentId}`)
+  }
+}
+
+// 목록 row 탭 — 기존 동작(상세 네비) 보존.
+function onRowClick(place) {
+  goDetail(place)
 }
 
 let searchTimer = null
@@ -643,6 +677,12 @@ onMounted(() => {
 
 .place-row:active {
   background: var(--color-surface);
+}
+
+/* 지도 마커로 선택된 항목 강조 */
+.place-row.selected {
+  background: var(--color-peach-light);
+  box-shadow: inset 3px 0 0 var(--color-peach);
 }
 
 .place-img {

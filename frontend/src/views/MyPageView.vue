@@ -1147,12 +1147,12 @@ onMounted(() => {
 
 /* 바텀 시트 (찜 목록 / 내 리뷰) */
 .sheet-backdrop {
-  position: absolute;
+  position: fixed;          /* .page(overflow:hidden)에 갇히지 않게 뷰포트 기준 */
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: flex-end;
-  z-index: 50;
+  z-index: 1000;            /* BottomNav(z-index:100) 위로 — 시트 하단이 가려지지 않게 */
 }
 .sheet {
   width: 100%;

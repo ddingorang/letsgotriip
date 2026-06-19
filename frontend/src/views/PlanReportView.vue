@@ -85,6 +85,17 @@
 
       <!-- Scroll area -->
       <div class="scroll-content">
+        <!-- 내 계획 지도 (좌표 보유 장소가 있을 때만) -->
+        <div v-if="hasMapPlaces" class="map-card">
+          <div class="map-card-head">
+            <span class="map-card-title">내 계획 지도</span>
+            <span class="map-card-count">장소 {{ mapPlaces.length }}곳</span>
+          </div>
+          <div class="map-wrap">
+            <TripMap :places="mapPlaces" :center="mapCenter" />
+          </div>
+        </div>
+
         <!-- 예산 카드 -->
         <div v-if="budget" class="budget-card">
           <div class="budget-head">
@@ -197,6 +208,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
 import { planApi } from '@/api/index.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -272,6 +284,32 @@ const plan = computed(() => planStore.current?.id == planId ? planStore.current 
 const days = computed(() => plan.value?.days ?? [])
 const totalDays = computed(() => days.value.length)
 const totalPlaces = computed(() => days.value.reduce((acc, d) => acc + (d.places?.length ?? 0), 0))
+
+// ── 지도 표시용 장소 ─────────────────────────────────────────────────────────
+// 모든 일자의 장소를 순서대로 펼치고, 좌표(attraction.latitude/longitude)가 있는
+// 장소만 TripMap 이 기대하는 형태({ id, name, lat, lng })로 변환한다.
+// (coordOf 는 아래에 선언된 함수 — 함수 선언이므로 호이스팅되어 여기서 사용 가능)
+const mapPlaces = computed(() => {
+  const out = []
+  for (const day of days.value) {
+    for (const p of day.places ?? []) {
+      const c = coordOf(p)
+      if (!c) continue
+      out.push({
+        id: p.id ?? p.attraction?.id ?? p.attraction?.contentId ?? `${day.dayNo}-${out.length}`,
+        name: p.attraction?.title ?? p.title ?? '장소',
+        lat: c.lat,
+        lng: c.lng,
+      })
+    }
+  }
+  return out
+})
+const hasMapPlaces = computed(() => mapPlaces.value.length > 0)
+// 첫 장소 기준 center(좌표 보유 장소가 여러 개면 TripMap 이 bounds 로 자동 보정)
+const mapCenter = computed(() =>
+  hasMapPlaces.value ? [mapPlaces.value[0].lat, mapPlaces.value[0].lng] : [37.5665, 126.978],
+)
 
 // ── 동선 리포트: BE 실데이터를 주 데이터원으로, 좌표 기반 Haversine을 폴백으로 ──
 // 우선순위 1) 서버 동선 리포트(planStore.routeReport, BE RouteCalculator 계산값)
@@ -763,6 +801,46 @@ async function applyRoute() {
   font-weight: 700;
   color: var(--color-peach-pressed);
   padding: 4px 8px;
+}
+
+/* ── Map card ─────────────────────────────────────────────────────────────── */
+.map-card {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.map-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.map-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.map-card-count {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+.map-wrap {
+  width: 100%;
+  height: 220px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-line-light);
+  background: var(--color-surface);
 }
 
 /* ── Budget card ──────────────────────────────────────────────────────────── */
