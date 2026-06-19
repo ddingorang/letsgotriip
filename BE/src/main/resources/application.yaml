@@ -10,6 +10,9 @@ spring:
           google:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
+            # 구글 콘솔에 등록된 '이전' redirect_uri 로 고정(기본 :9090 — 원래 dev 셋업 값).
+            # 콘솔 등록값이 다르면 OAUTH_REDIRECT_URI 환경변수로 교체.
+            redirect-uri: "${OAUTH_REDIRECT_URI:http://localhost:9090/login/oauth2/code/google}"
             scope:
               - email
               - profile
