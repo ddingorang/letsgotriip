@@ -48,7 +48,7 @@
           <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          <span>새로운 알림이 없어요</span>
+          <span>{{ store.alertError ? '알림을 불러오지 못했어요' : '새로운 알림이 없어요' }}</span>
         </div>
       </template>
 
@@ -82,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNotificationStore } from '@/stores/notification.js'
 
@@ -116,8 +116,13 @@ function iconFor(type) {
   return map[type] ?? map.community
 }
 
-onMounted(() => {
-  store.refresh()
+onMounted(async () => {
+  await store.refresh()
+  store.subscribe() // 진입 후 실시간 알림 구독
+})
+
+onUnmounted(() => {
+  store.unsubscribe() // 이탈 시 구독 해제
 })
 </script>
 

@@ -25,34 +25,6 @@ function relativeTime(iso) {
   return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
 }
 
-// ── 알림 시드 ─────────────────────────────────────────────────────────────────
-const SEED_NOTIFICATIONS = [
-  {
-    id: 'n-1',
-    type: 'companion',
-    title: '동행 신청이 도착했어요',
-    body: '‘제주 한 달 살기’ 모집글에 새 신청자가 있어요.',
-    time: '방금 전',
-    read: false,
-  },
-  {
-    id: 'n-2',
-    type: 'community',
-    title: '내 글에 댓글이 달렸어요',
-    body: '‘부산 2박 3일 후기’에 댓글이 1개 달렸어요.',
-    time: '1시간 전',
-    read: false,
-  },
-  {
-    id: 'n-3',
-    type: 'badge',
-    title: '뱃지를 획득했어요 🎉',
-    body: '‘미식가’ 뱃지를 획득했어요. 마이페이지에서 확인하세요.',
-    time: '어제',
-    read: true,
-  },
-]
-
 // ── 공지 시드 ─────────────────────────────────────────────────────────────────
 const SEED_NOTICES = [
   {
@@ -82,6 +54,10 @@ export const useNotificationStore = defineStore('notification', () => {
   const notifications = ref([])
   const notices = ref([])
   const loaded = ref(false)
+  const alertError = ref(false)
+
+  // SSE 구독 핸들 — 구독 취소(이탈) 시 abort
+  let streamController = null
 
   const unreadCount = computed(
     () => notifications.value.filter((n) => !n.read).length,
@@ -113,12 +89,15 @@ export const useNotificationStore = defineStore('notification', () => {
   async function load() {
     if (loaded.value) return
     loaded.value = true
-    // 알림 — 실제 BE(/api/notifications, 인증). 실패(미로그인/오류) 시 시드 폴백
+    // 알림 — 실제 BE(/api/notifications, 인증). 실패 시 무음 시드 폴백이 아니라
+    // 빈/에러 상태로 노출(가짜 데이터로 실패를 숨기지 않음).
     try {
       const { data } = await notificationApi.list()
       notifications.value = Array.isArray(data) ? data.map(mapAlert) : []
+      alertError.value = false
     } catch {
-      notifications.value = SEED_NOTIFICATIONS.map((n) => ({ ...n }))
+      notifications.value = []
+      alertError.value = true
     }
     // 공지 — 실제 BE(/api/notices). 실패 시 시드 폴백
     try {
@@ -152,15 +131,56 @@ export const useNotificationStore = defineStore('notification', () => {
     return notices.value.find((n) => String(n.id) === String(id)) ?? null
   }
 
+  /** SSE data 프레임(JSON 문자열) 1건 → 목록 상단 추가(동일 id 중복 방지) */
+  function handleStreamFrame(raw) {
+    let payload
+    try {
+      payload = JSON.parse(raw)
+    } catch {
+      return // 비 JSON(핑/주석 등) 무시
+    }
+    if (!payload || payload.id == null) return
+    if (notifications.value.some((n) => String(n.id) === String(payload.id))) return
+    notifications.value.unshift(mapAlert(payload))
+  }
+
+  /**
+   * 실시간 알림 구독 — 진입 시 1회. 신규 알림 도착마다 목록 상단에 추가되고
+   * (read:false 이므로) unreadCount 가 자동 증가한다. 중복 구독은 방지.
+   */
+  function subscribe() {
+    if (streamController) return
+    streamController = new AbortController()
+    const controller = streamController
+    notificationApi
+      .connectStream(handleStreamFrame, { signal: controller.signal })
+      .catch(() => {
+        // 미로그인/네트워크/스트림 종료 — 무음 처리(목록은 load() 결과 유지)
+      })
+      .finally(() => {
+        if (streamController === controller) streamController = null
+      })
+  }
+
+  /** 구독 해제 — 페이지 이탈 시 호출 */
+  function unsubscribe() {
+    if (!streamController) return
+    streamController.abort()
+    streamController = null
+  }
+
   return {
     notifications,
     notices,
     loaded,
+    alertError,
     unreadCount,
     hasUnread,
     load,
     refresh,
     markAllRead,
+    subscribe,
+    unsubscribe,
     noticeById,
   }
 })

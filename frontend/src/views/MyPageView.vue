@@ -205,6 +205,28 @@
       <div class="menu-section">
         <p class="menu-section-title">내 활동</p>
 
+        <!-- 찜 목록 -->
+        <button class="menu-row" @click="openFavorites">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+            </svg>
+          </span>
+          <span class="menu-label">찜 목록</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 내 리뷰 -->
+        <button class="menu-row" @click="openReviews">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" />
+            </svg>
+          </span>
+          <span class="menu-label">내 리뷰</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
         <!-- 내 여행 스토리 -->
         <button class="menu-row" @click="$router.push('/stories')">
           <span class="menu-icon">
@@ -289,6 +311,21 @@
         </button>
       </div>
 
+      <!-- 운영 관리 (관리자 전용) -->
+      <div v-if="isAdmin" class="menu-section">
+        <p class="menu-section-title">운영</p>
+
+        <button class="menu-row" @click="$router.push('/admin')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" />
+            </svg>
+          </span>
+          <span class="menu-label">운영 관리</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      </div>
+
       <!-- Logout -->
       <div class="logout-section">
         <button class="logout-btn" @click="handleLogout">
@@ -302,6 +339,58 @@
       <div class="bottom-spacer" />
     </div>
 
+    <!-- 찜 목록 시트 -->
+    <div v-if="favSheetOpen" class="sheet-backdrop" @click.self="favSheetOpen = false">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h3 class="sheet-title">찜 목록</h3>
+          <button class="sheet-close" @click="favSheetOpen = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <p v-if="favLoading" class="sheet-hint">불러오는 중…</p>
+          <p v-else-if="favError" class="sheet-hint">{{ favError }}</p>
+          <template v-else-if="favorites.length > 0">
+            <div v-for="fav in favorites" :key="fav.id" class="fav-item">
+              <button class="fav-main" @click="goFavorite(fav)">
+                <span :class="['fav-type', favTypeClass(fav.targetType)]">{{ favTypeLabel(fav.targetType) }}</span>
+                <span class="fav-id">#{{ fav.targetId }}</span>
+              </button>
+              <button class="fav-remove" @click="removeFavorite(fav)" aria-label="찜 해제">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+          </template>
+          <div v-else class="sheet-empty">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" /></svg>
+            <p class="sheet-hint">아직 찜한 곳이 없어요.<br />관광지·핫플·게시글에서 하트를 눌러보세요.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 내 리뷰 시트 -->
+    <div v-if="reviewSheetOpen" class="sheet-backdrop" @click.self="reviewSheetOpen = false">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h3 class="sheet-title">내 리뷰</h3>
+          <button class="sheet-close" @click="reviewSheetOpen = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <div class="sheet-empty">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" /></svg>
+            <p class="sheet-hint">관광지 상세 화면에서 별점과 리뷰를 남길 수 있어요.<br />작성한 리뷰는 각 관광지 상세에서 확인·수정할 수 있어요.</p>
+            <button class="sheet-cta" @click="reviewSheetOpen = false; $router.push('/explore')">
+              관광지 둘러보기
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -312,6 +401,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useNotificationStore } from '@/stores/notification.js'
 import { useGamificationStore } from '@/stores/gamification.js'
 import { http } from '@/api/http.js'
+import { favoriteApi } from '@/api/index.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -319,6 +409,9 @@ const notifStore = useNotificationStore()
 const gamiStore = useGamificationStore()
 
 const gami = computed(() => gamiStore.summary)
+
+// 관리자 여부 — /users/me 응답의 userRole 기준
+const isAdmin = computed(() => authStore.user?.userRole === 'ADMIN')
 
 async function handleLogout() {
   await authStore.logout()
@@ -419,6 +512,60 @@ const mainTabs = computed(() => [
   `앨범 ${albums.value.length}`,
   `뱃지 ${gami.value?.stats?.badges ?? unlockedBadgeCount.value}`,
 ])
+
+// ── 찜 목록 시트 (GET /api/favorites) ───────────────────────────────────────
+const favSheetOpen = ref(false)
+const favorites = ref([])
+const favLoading = ref(false)
+const favError = ref('')
+
+const FAV_TYPE_LABEL = { ATTRACTION: '관광지', HOTPLACE: '핫플', POST: '게시글' }
+function favTypeLabel(t) {
+  return FAV_TYPE_LABEL[t] ?? t
+}
+function favTypeClass(t) {
+  return `fav-type-${(t || '').toLowerCase()}`
+}
+
+async function openFavorites() {
+  favSheetOpen.value = true
+  favLoading.value = true
+  favError.value = ''
+  try {
+    const { data } = await favoriteApi.list()
+    favorites.value = Array.isArray(data) ? data : (data?.content ?? [])
+  } catch (e) {
+    favError.value = e.response?.data?.message ?? e.message ?? '찜 목록을 불러오지 못했어요.'
+    favorites.value = []
+  } finally {
+    favLoading.value = false
+  }
+}
+
+function goFavorite(fav) {
+  const id = fav.targetId
+  favSheetOpen.value = false
+  if (fav.targetType === 'ATTRACTION') router.push(`/place/${id}`)
+  else if (fav.targetType === 'HOTPLACE') router.push(`/hotplace/${id}`)
+  else if (fav.targetType === 'POST') router.push(`/community/${id}`)
+}
+
+async function removeFavorite(fav) {
+  try {
+    await favoriteApi.remove(fav.targetType, fav.targetId)
+    favorites.value = favorites.value.filter((f) => f.id !== fav.id)
+  } catch (e) {
+    favError.value = e.response?.data?.message ?? e.message ?? '찜 해제에 실패했어요.'
+  }
+}
+
+// ── 내 리뷰 시트 ────────────────────────────────────────────────────────────
+// 리뷰는 관광지별로 조회/작성되므로(전체 내 리뷰 목록 엔드포인트 미제공),
+// 안내 시트로 관광지 상세로 유도한다.
+const reviewSheetOpen = ref(false)
+function openReviews() {
+  reviewSheetOpen.value = true
+}
 
 onMounted(() => {
   notifStore.load()
@@ -997,6 +1144,119 @@ onMounted(() => {
   letter-spacing: -0.2px;
 }
 .logout-btn:active { opacity: 0.6; }
+
+/* 바텀 시트 (찜 목록 / 내 리뷰) */
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  z-index: 50;
+}
+.sheet {
+  width: 100%;
+  max-height: 72%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-white);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  overflow: hidden;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.sheet-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.4px;
+}
+.sheet-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+}
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 20px;
+}
+.sheet-hint {
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  line-height: 1.6;
+  text-align: center;
+  padding: 4px 20px;
+}
+.sheet-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 24px 24px;
+  text-align: center;
+}
+.sheet-cta {
+  margin-top: 4px;
+  padding: 12px 24px;
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: var(--radius-xl);
+  letter-spacing: -0.3px;
+}
+.fav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.fav-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  min-width: 0;
+}
+.fav-type {
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.fav-type-attraction { background: var(--color-peach-light); color: var(--color-peach-pressed); }
+.fav-id {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fav-remove {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.fav-remove:active { opacity: 0.6; }
 
 .bottom-spacer { height: 24px; }
 </style>

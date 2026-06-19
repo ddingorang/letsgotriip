@@ -15,6 +15,20 @@ export const authApi = {
   resetPassword: (data) => http.post('/auth/password/reset', data),
 }
 
+// ── Users (BE: /users, 인증 필요) ─────────────────────────────────────────────
+// 프로필/선호도 일반 갱신은 각 뷰가 http 로 직접 호출(/users/me 등). 여기에는
+// 멀티파트 등 부가 액션만 둔다.
+export const userApi = {
+  // 프로필 이미지 업로드: multipart/form-data, field명 'file' → { imageUrl }
+  uploadProfileImage: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post('/users/me/profile-image', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
 // ── Attractions ───────────────────────────────────────────────────────────────
 // GET /api/attractions?areaCode=&sigunguCode=&contentTypeId=&keyword=&page=1&size=10
 // GET /api/attractions/areas
@@ -23,6 +37,36 @@ export const attractionApi = {
   list: (params) => http.get('/api/attractions', { params }),
   areas: () => http.get('/api/attractions/areas'),
   detail: (contentId) => http.get(`/api/attractions/${contentId}`),
+}
+
+// ── Reviews (관광지 리뷰, BE: /api/attractions/{contentId}/reviews) ────────────
+// GET    /api/attractions/{contentId}/reviews
+// POST   /api/attractions/{contentId}/reviews { rating, content }
+// PATCH  /api/attractions/{contentId}/reviews/{reviewId}
+// DELETE /api/attractions/{contentId}/reviews/{reviewId}
+export const reviewApi = {
+  list: (contentId) => http.get(`/api/attractions/${contentId}/reviews`),
+  create: (contentId, data) => http.post(`/api/attractions/${contentId}/reviews`, data),
+  update: (contentId, reviewId, data) =>
+    http.patch(`/api/attractions/${contentId}/reviews/${reviewId}`, data),
+  remove: (contentId, reviewId) =>
+    http.delete(`/api/attractions/${contentId}/reviews/${reviewId}`),
+}
+
+// ── Favorites (즐겨찾기/찜, BE: /api/favorites, 인증 필요) ─────────────────────
+// POST   /api/favorites { targetType, targetId }   → 토글
+// GET    /api/favorites?type=                        → 목록(type 선택 필터)
+// DELETE /api/favorites/{type}/{id}
+export const favoriteApi = {
+  toggle: (targetType, targetId) => http.post('/api/favorites', { targetType, targetId }),
+  list: (type) => http.get('/api/favorites', { params: type ? { type } : undefined }),
+  remove: (type, id) => http.delete(`/api/favorites/${type}/${id}`),
+}
+
+// ── Search (통합 검색, BE: /api/search) ───────────────────────────────────────
+// GET /api/search?q=&type=   (type 기본 'all')
+export const searchApi = {
+  search: (q, type = 'all') => http.get('/api/search', { params: { q, type } }),
 }
 
 // ── Festivals ─────────────────────────────────────────────────────────────────
@@ -46,6 +90,7 @@ export const noticeApi = {
 // ── Gamification (챌린지/뱃지, 인증 필요) ─────────────────────────────────────
 export const gamificationApi = {
   summary: () => http.get('/api/gamification/summary'),
+  quests: () => http.get('/api/gamification/quests'),
 }
 
 // ── Notifications (내 알림, 인증 필요) ────────────────────────────────────────
@@ -55,6 +100,79 @@ export const notificationApi = {
   unreadCount: () => http.get('/api/notifications/unread-count'),
   markAllRead: () => http.patch('/api/notifications/read-all'),
   markRead: (id) => http.patch(`/api/notifications/${id}/read`),
+  streamUrl: () => '/api/notifications/stream',
+
+  /**
+   * 실시간 알림 SSE 구독. EventSource 는 Authorization 헤더를 못 쓰므로
+   * fetch + ReadableStream 으로 SSE 를 수동 파싱한다(assistantApi.chatStream 패턴).
+   * @param {(data: string) => void} onMessage  SSE data 프레임 수신마다 호출
+   * @param {{ signal?: AbortSignal }} [opts]    구독 취소용
+   * @returns {Promise<void>} 스트림 종료 시 resolve
+   */
+  async connectStream(onMessage, { signal } = {}) {
+    let token = null
+    try {
+      token = useAuthStore().accessToken
+    } catch {
+      // Pinia 미활성(테스트 등) — 토큰 없이 진행
+    }
+
+    const headers = { Accept: 'text/event-stream' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const res = await fetch(`${API_BASE}/api/notifications/stream`, {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+      signal,
+    })
+
+    if (!res.ok || !res.body) {
+      const err = new Error(`알림 스트림 구독 실패 (HTTP ${res.status})`)
+      err.status = res.status
+      throw err
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    const parseFrame = (frame) => {
+      const dataLines = []
+      for (const rawLine of frame.split('\n')) {
+        const line = rawLine.replace(/\r$/, '')
+        if (!line || line.startsWith(':')) continue
+        const idx = line.indexOf(':')
+        const field = idx === -1 ? line : line.slice(0, idx)
+        let value = idx === -1 ? '' : line.slice(idx + 1)
+        if (value.startsWith(' ')) value = value.slice(1)
+        if (field === 'data') dataLines.push(value)
+      }
+      if (dataLines.length) onMessage?.(dataLines.join('\n'))
+    }
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let sep
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const frame = buffer.slice(0, sep)
+          buffer = buffer.slice(sep + 2)
+          if (frame.trim()) parseFrame(frame)
+        }
+      }
+      buffer += decoder.decode()
+      if (buffer.trim()) parseFrame(buffer)
+    } finally {
+      try {
+        reader.releaseLock()
+      } catch {
+        // 무시
+      }
+    }
+  },
 }
 
 // ── Plans ─────────────────────────────────────────────────────────────────────
@@ -109,6 +227,10 @@ export const hotplaceApi = {
   getDetail: (id) => http.get(`/api/community/hotplaces/${id}`),
   // BE has no /area endpoint; fall back to the list endpoint with params
   getByArea: (params) => http.get('/api/community/hotplaces', { params }),
+  // 관리자 승인 대기 목록/승인/반려
+  pending: () => http.get('/api/community/hotplaces/pending'),
+  approve: (id) => http.post(`/api/community/hotplaces/${id}/approve`),
+  reject: (id) => http.post(`/api/community/hotplaces/${id}/reject`),
 }
 
 // ── Community (BE: /community) ────────────────────────────────────────────────
@@ -139,6 +261,15 @@ export const companionApi = {
   getDetail: (id) => http.get(`/api/companion/posts/${id}`),
   create: (data) => http.post('/api/companion/posts', data),
   join: (id) => http.post(`/api/companion/posts/${id}/applications`),
+  // 신청자 목록/승인/반려 (방장만)
+  getApplications: (postId) => http.get(`/api/companion/posts/${postId}/applications`),
+  approve: (postId, applicationId) =>
+    http.patch(`/api/companion/posts/${postId}/applications/${applicationId}/approve`),
+  reject: (postId, applicationId) =>
+    http.patch(`/api/companion/posts/${postId}/applications/${applicationId}/reject`),
+  // 모집 마감 / 글 삭제 (방장만)
+  close: (postId) => http.patch(`/api/companion/posts/${postId}/close`),
+  remove: (postId) => http.delete(`/api/companion/posts/${postId}`),
 }
 
 // ── Chat (BE: /api/chat/rooms) ────────────────────────────────────────────────
@@ -156,6 +287,14 @@ export const chatApi = {
   inviteParticipant: (roomId, data) => http.post(`/api/chat/rooms/${roomId}/participants`, data),
   // 방장 위임 — 현 방장만. body { newHostUserId } → 204
   transferHost: (roomId, data) => http.patch(`/api/chat/rooms/${roomId}/host`, data),
+  // 채팅방 이미지 업로드: multipart/form-data, field명 'file' → { imageUrl }
+  uploadRoomImage: (roomId, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return http.post(`/api/chat/rooms/${roomId}/image`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 // ── Assistant (RAG 챗봇, BE: /api/assistant) ──────────────────────────────────

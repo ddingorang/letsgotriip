@@ -12,6 +12,8 @@ const router = createRouter({
     // ── Main tab views ────────────────────────────────────────────────────────
     { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
     { path: '/explore', name: 'explore', component: () => import('@/views/ExploreView.vue') },
+    // 통합 검색 — full-screen, no bottom nav
+    { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue'), meta: { tabBar: false } },
 
     // /plan tab — requiresAuth so unauthenticated users go to login first
     { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue'), meta: { requiresAuth: true } },
@@ -83,6 +85,9 @@ const router = createRouter({
     // ── Badges / Checklist ────────────────────────────────────────────────────
     { path: '/badges', name: 'badges', component: () => import('@/views/BadgesView.vue'), meta: { requiresAuth: true } },
     { path: '/checklist', name: 'checklist', component: () => import('@/views/ChecklistView.vue'), meta: { requiresAuth: true } },
+
+    // ── Admin (관리자 대시보드) ─────────────────────────────────────────────────
+    { path: '/admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { requiresAuth: true, tabBar: false } },
   ],
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition
