@@ -25,5 +25,10 @@ export const useGamificationStore = defineStore('gamification', () => {
     }
   }
 
-  return { summary, loading, loaded, load }
+  // 화면 진입 시 캐시 무시하고 최신화. load(true) 와 동치(가독성용 별칭).
+  function refresh() {
+    return load(true)
+  }
+
+  return { summary, loading, loaded, load, refresh }
 })

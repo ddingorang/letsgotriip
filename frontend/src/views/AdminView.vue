@@ -64,8 +64,10 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { hotplaceApi } from '@/api/index.js'
+import { useAuthStore } from '@/stores/auth.js'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const pending = ref([])
 const loading = ref(false)
@@ -115,7 +117,14 @@ async function onReject(item) {
   }
 }
 
-onMounted(loadPending)
+onMounted(() => {
+  // ADMIN 역할 게이팅 — 비관리자는 데이터 호출 없이 마이페이지로
+  if (authStore.user?.userRole !== 'ADMIN') {
+    router.replace('/mypage')
+    return
+  }
+  loadPending()
+})
 </script>
 
 <style scoped>

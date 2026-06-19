@@ -39,6 +39,12 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = data
   }
 
+  /** Merge partial fields into the current user object (e.g. after profile image upload). */
+  function setUser(patch) {
+    if (!patch) return
+    user.value = { ...(user.value ?? {}), ...patch }
+  }
+
   /**
    * POST /auth/login → store token → GET /users/me to populate user.
    * Accepts either (email, password) or ({ email, password }) for backward compat.
@@ -90,6 +96,7 @@ export const useAuthStore = defineStore('auth', () => {
     clear,
     refresh,
     fetchMe,
+    setUser,
     login,
     logout,
     bootstrap,

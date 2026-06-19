@@ -57,8 +57,8 @@ const router = createRouter({
     { path: '/mypage', name: 'mypage', component: () => import('@/views/MyPageView.vue'), meta: { requiresAuth: true } },
     { path: '/notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/mypage/edit', name: 'profile-edit', component: () => import('@/views/ProfileEditView.vue'), meta: { tabBar: false, requiresAuth: true } },
-    { path: '/mypage/challenge', name: 'challenge-detail', component: () => import('@/views/ChallengeDetailView.vue'), meta: { tabBar: false } },
-    { path: '/mypage/album/:id', name: 'album-detail', component: () => import('@/views/AlbumDetailView.vue'), meta: { tabBar: false } },
+    { path: '/mypage/challenge', name: 'challenge-detail', component: () => import('@/views/ChallengeDetailView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    { path: '/mypage/album/:id', name: 'album-detail', component: () => import('@/views/AlbumDetailView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/place/:id', name: 'place-detail', component: () => import('@/views/PlaceDetailView.vue'), meta: { tabBar: false } },
 
     // ── Auth ──────────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ const router = createRouter({
     { path: '/checklist', name: 'checklist', component: () => import('@/views/ChecklistView.vue'), meta: { requiresAuth: true } },
 
     // ── Admin (관리자 대시보드) ─────────────────────────────────────────────────
-    { path: '/admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { requiresAuth: true, tabBar: false } },
+    { path: '/admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { requiresAuth: true, requiresAdmin: true, tabBar: false } },
   ],
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition
@@ -105,6 +105,11 @@ router.beforeEach(async (to) => {
 
   if (!auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  // ADMIN 역할 게이팅 — 인증됐더라도 관리자만 진입
+  if (to.meta.requiresAdmin && auth.user?.userRole !== 'ADMIN') {
+    return { path: '/mypage' }
   }
   return true
 })

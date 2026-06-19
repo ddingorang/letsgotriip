@@ -27,7 +27,7 @@
       <!-- Title -->
       <div class="challenge-body">
         <h1 class="challenge-title">{{ ch?.title ?? '이달의 챌린지' }}</h1>
-        <p class="challenge-desc">이번 달 계획에 새로운 장소를 {{ ch?.goal ?? 10 }}곳 담으면 보상 뱃지를 드려요</p>
+        <p class="challenge-desc">여행 계획에 장소를 {{ ch?.goal ?? 10 }}곳 담으면 보상 뱃지를 드려요</p>
 
         <!-- Progress display -->
         <div class="progress-display">
@@ -52,8 +52,8 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
               </div>
               <div>
-                <div class="condition-label">새로운 장소 방문</div>
-                <div class="condition-sub">다녀온 곳에 체크인 시 1곳 인정</div>
+                <div class="condition-label">장소 담기</div>
+                <div class="condition-sub">계획에 장소를 담으면 1곳 인정 (누적)</div>
               </div>
             </div>
             <div class="condition-item">
@@ -62,7 +62,7 @@
               </div>
               <div>
                 <div class="condition-label">기간</div>
-                <div class="condition-sub">6월 1일 ~ 6월 30일</div>
+                <div class="condition-sub">상시 진행 · 담은 장소 누적</div>
               </div>
             </div>
             <div class="condition-item">
@@ -104,7 +104,7 @@ import { useGamificationStore } from '@/stores/gamification.js'
 const gamiStore = useGamificationStore()
 const ch = computed(() => gamiStore.summary?.challenge)
 
-onMounted(() => gamiStore.load())
+onMounted(() => gamiStore.refresh())
 </script>
 
 <style scoped>
