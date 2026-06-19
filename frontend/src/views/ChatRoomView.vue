@@ -24,8 +24,14 @@
             참여자
             <span v-if="participantCount != null" class="dropdown-badge">{{ participantCount }}</span>
           </button>
+          <button v-if="viewerIsHost" class="dropdown-item" @click="openSettings">
+            방 설정
+          </button>
+          <button class="dropdown-item" @click="toggleMute" :disabled="muteLoading">
+            <span>알림 {{ muted ? '켜기' : '음소거' }}</span>
+            <span class="dropdown-badge">{{ muted ? '꺼짐' : '켜짐' }}</span>
+          </button>
           <button
-            v-if="!isHost"
             class="dropdown-item danger"
             :disabled="leaving"
             @click="leaveRoom"
@@ -127,13 +133,75 @@
           <span>참여자 {{ participants.length }}명</span>
           <button class="sheet-close" @click="participantsOpen = false">닫기</button>
         </div>
+
+        <!-- 초대(방장 전용): 닉네임 또는 이메일 -->
+        <div v-if="viewerIsHost" class="invite-box">
+          <input
+            v-model="inviteValue"
+            class="invite-input"
+            placeholder="닉네임 또는 이메일로 초대"
+            @keydown.enter.prevent="(e) => !e.isComposing && submitInvite()"
+          />
+          <button class="invite-btn" :disabled="inviting || !inviteValue.trim()" @click="submitInvite">
+            {{ inviting ? '초대 중…' : '초대' }}
+          </button>
+        </div>
+
         <ul class="participant-list">
           <li v-for="p in participants" :key="p.userId" class="participant-row">
             <span class="participant-avatar" />
             <span class="participant-name">{{ p.nickname }}</span>
             <span v-if="p.isHost" class="participant-host">방장</span>
+            <template v-if="viewerIsHost && !p.isHost">
+              <button
+                class="participant-action transfer"
+                :disabled="actionBusy"
+                @click="transferHost(p)"
+              >위임</button>
+              <button
+                class="participant-action kick"
+                :disabled="actionBusy"
+                @click="kickParticipant(p)"
+              >강퇴</button>
+            </template>
           </li>
         </ul>
+      </div>
+    </div>
+
+    <!-- 방 설정 시트(방장 전용) -->
+    <div v-if="settingsOpen" class="overlay" @click.self="settingsOpen = false">
+      <div class="sheet">
+        <div class="sheet-header">
+          <span>방 설정</span>
+          <button class="sheet-close" @click="settingsOpen = false">닫기</button>
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">방 이름</label>
+          <input
+            v-model="settingsTitle"
+            class="settings-input"
+            maxlength="18"
+            placeholder="방 이름 (최대 18자)"
+          />
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">소개</label>
+          <textarea
+            v-model="settingsDescription"
+            class="settings-textarea"
+            maxlength="200"
+            rows="3"
+            placeholder="방 소개 (선택, 최대 200자)"
+          />
+        </div>
+        <button
+          class="settings-save"
+          :disabled="savingSettings || !settingsTitle.trim()"
+          @click="saveSettings"
+        >
+          {{ savingSettings ? '저장 중…' : '저장' }}
+        </button>
       </div>
     </div>
 
@@ -217,11 +285,15 @@ function closeMenuOnOutside(e) {
 const participants = ref([])
 const participantCount = ref(null)
 const participantsOpen = ref(false)
+// 요청자가 방장인지 — participants 응답의 viewerIsHost 를 신뢰(myRooms.isHost 보다 최신).
+// 참여자 조회 전에는 myRooms.isHost 로 선표시해 메뉴 깜빡임을 줄인다.
+const viewerIsHost = ref(isHost.value)
 async function fetchParticipants() {
   try {
     const { data } = await chatApi.getParticipants(roomId.value)
     participants.value = Array.isArray(data?.participants) ? data.participants : []
     participantCount.value = data?.count ?? participants.value.length
+    viewerIsHost.value = data?.viewerIsHost === true
   } catch (e) {
     // 권한/네트워크 실패는 조용히 무시 (배지 미표시)
   }
@@ -230,6 +302,107 @@ async function openParticipants() {
   menuOpen.value = false
   await fetchParticipants()
   participantsOpen.value = true
+}
+
+// ── 알림 음소거 ──────────────────────────────────────────────────────────────
+const muted = ref(false)
+const muteLoading = ref(false)
+async function toggleMute() {
+  if (muteLoading.value) return
+  muteLoading.value = true
+  const next = !muted.value
+  try {
+    await chatApi.muteMembership(roomId.value, { muted: next })
+    muted.value = next
+    menuOpen.value = false
+    showToast(next ? '알림을 음소거했어요.' : '알림을 켰어요.')
+  } catch (e) {
+    showToast(e.response?.data?.message ?? '설정을 변경하지 못했어요.')
+  } finally {
+    muteLoading.value = false
+  }
+}
+
+// ── 방 설정(방장) ────────────────────────────────────────────────────────────
+const settingsOpen = ref(false)
+const settingsTitle = ref('')
+const settingsDescription = ref('')
+const savingSettings = ref(false)
+function openSettings() {
+  menuOpen.value = false
+  settingsTitle.value = room.value?.title ?? ''
+  settingsDescription.value = room.value?.description ?? ''
+  settingsOpen.value = true
+}
+async function saveSettings() {
+  const title = settingsTitle.value.trim()
+  if (!title || savingSettings.value) return
+  savingSettings.value = true
+  try {
+    await chatApi.updateRoom(roomId.value, {
+      title,
+      description: settingsDescription.value.trim() || null,
+    })
+    // 낙관적 갱신: 헤더 제목 즉시 반영(브로드캐스트로도 다시 갱신됨)
+    if (room.value) room.value.title = title
+    settingsOpen.value = false
+    showToast('방 설정을 저장했어요.')
+  } catch (e) {
+    showToast(e.response?.data?.message ?? '저장에 실패했어요.')
+  } finally {
+    savingSettings.value = false
+  }
+}
+
+// ── 강퇴 / 초대 / 방장 위임 ──────────────────────────────────────────────────
+const actionBusy = ref(false)
+async function kickParticipant(p) {
+  if (actionBusy.value) return
+  if (!window.confirm(`${p.nickname} 님을 내보낼까요?`)) return
+  actionBusy.value = true
+  try {
+    await chatApi.kickParticipant(roomId.value, p.userId)
+    await fetchParticipants()
+    showToast(`${p.nickname} 님을 내보냈어요.`)
+  } catch (e) {
+    showToast(e.response?.data?.message ?? '내보내지 못했어요.')
+  } finally {
+    actionBusy.value = false
+  }
+}
+async function transferHost(p) {
+  if (actionBusy.value) return
+  if (!window.confirm(`${p.nickname} 님에게 방장을 위임할까요?`)) return
+  actionBusy.value = true
+  try {
+    await chatApi.transferHost(roomId.value, { newHostUserId: p.userId })
+    await fetchParticipants()
+    showToast(`${p.nickname} 님이 방장이 되었어요.`)
+  } catch (e) {
+    showToast(e.response?.data?.message ?? '위임하지 못했어요.')
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+const inviteValue = ref('')
+const inviting = ref(false)
+async function submitInvite() {
+  const raw = inviteValue.value.trim()
+  if (!raw || inviting.value) return
+  // '@' 포함이면 이메일, 아니면 닉네임으로 식별
+  const body = raw.includes('@') ? { email: raw } : { nickname: raw }
+  inviting.value = true
+  try {
+    await chatApi.inviteParticipant(roomId.value, body)
+    inviteValue.value = ''
+    await fetchParticipants()
+    showToast('참여자를 초대했어요.')
+  } catch (e) {
+    showToast(e.response?.data?.message ?? '초대하지 못했어요.')
+  } finally {
+    inviting.value = false
+  }
 }
 
 // ── 채팅방 나가기 ────────────────────────────────────────────────────────────
@@ -301,11 +474,52 @@ function onImageError(e) {
 // 새 메시지가 들어오면 자동 스크롤
 watch(() => messages.value.length, () => scrollToBottom())
 
+// ── 실시간 SYSTEM 이벤트 처리 ───────────────────────────────────────────────
+// 채팅 버블이 아니라 방 상태/참여자 목록 갱신 또는 강퇴 시 방 이탈에 사용.
+let unsubscribeSystem = null
+function handleSystemEvent(eventRoomId, frame) {
+  // 다른 방의 프레임은 무시(스토어가 한 방만 구독하지만 방어적으로 확인)
+  if (String(eventRoomId) !== String(roomId.value)) return
+  const myId = authStore.user?.userId
+  switch (frame.event) {
+    case 'ROOM_UPDATED':
+      if (room.value && typeof frame.title === 'string') room.value.title = frame.title
+      if (room.value && 'description' in frame) room.value.description = frame.description
+      break
+    case 'PARTICIPANT_JOINED':
+      // 참여자 시트가 열려 있으면 목록 갱신, 닫혀 있어도 배지 카운트 갱신
+      fetchParticipants()
+      break
+    case 'HOST_CHANGED':
+      // 방장 변경 — 내가 새 방장/전 방장이면 권한 표시가 바뀌므로 재조회
+      fetchParticipants()
+      if (room.value && myId != null) {
+        room.value.isHost = Number(frame.newHostUserId) === Number(myId)
+      }
+      break
+    case 'PARTICIPANT_KICKED':
+      if (myId != null && Number(frame.userId) === Number(myId)) {
+        // 내가 강퇴됨 — 연결 해제 후 목록으로 이동
+        showToast('채팅방에서 내보내졌어요.')
+        chatStore.disconnect()
+        companionStore.fetchMyRooms()
+        router.back()
+      } else {
+        fetchParticipants()
+      }
+      break
+    default:
+      // 알 수 없는 SYSTEM 이벤트는 조용히 무시
+      break
+  }
+}
+
 onMounted(async () => {
   // 참여 중인 방 목록이 비어 있으면 헤더 정보를 위해 로드
   if (companionStore.myRooms.length === 0) {
     await companionStore.fetchMyRooms()
   }
+  unsubscribeSystem = chatStore.onSystemEvent(handleSystemEvent)
   await chatStore.loadHistory(roomId.value)
   await chatStore.connect(roomId.value)
   // 헤더 배지용 인원수 미리 조회(실패해도 무시)
@@ -317,6 +531,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeMenuOnOutside)
   if (toastTimer) clearTimeout(toastTimer)
+  if (unsubscribeSystem) unsubscribeSystem()
   chatStore.disconnect()
 })
 </script>
@@ -587,6 +802,74 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-full);
   padding: 2px 8px;
 }
+.participant-action {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+.participant-action:disabled { opacity: 0.5; }
+.participant-action.transfer {
+  color: var(--color-ink-secondary);
+  background: var(--color-surface);
+}
+.participant-action.kick {
+  color: #e2483d;
+  background: rgba(226,72,61,0.08);
+}
+
+/* ── 초대 입력 ────────────────────────────────────────────────── */
+.invite-box {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.invite-input {
+  flex: 1;
+  padding: 9px 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  color: var(--color-ink);
+}
+.invite-input::placeholder { color: var(--color-ink-muted); }
+.invite-btn {
+  flex-shrink: 0;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  background: var(--color-peach);
+  border-radius: var(--radius-full);
+}
+.invite-btn:disabled { opacity: 0.5; }
+
+/* ── 방 설정 시트 ─────────────────────────────────────────────── */
+.settings-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.settings-label { font-size: 12px; font-weight: 600; color: var(--color-ink-secondary); }
+.settings-input,
+.settings-textarea {
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--color-ink);
+  width: 100%;
+}
+.settings-textarea { resize: none; line-height: 1.5; }
+.settings-input::placeholder,
+.settings-textarea::placeholder { color: var(--color-ink-muted); }
+.settings-save {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+  background: var(--color-peach);
+  border-radius: var(--radius-md);
+}
+.settings-save:disabled { opacity: 0.5; }
 
 /* ── 이미지 확대 ──────────────────────────────────────────────── */
 .image-lightbox {

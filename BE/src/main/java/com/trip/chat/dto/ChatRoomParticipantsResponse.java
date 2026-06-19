@@ -12,6 +12,7 @@ import java.util.List;
 public record ChatRoomParticipantsResponse(
         Long chatRoomId,
         int count, // 활성 참여 인원수
+        boolean viewerIsHost, // 요청자가 방장인지(FE 관리 버튼 게이팅용)
         List<Participant> participants
 ) {
     @Builder

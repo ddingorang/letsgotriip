@@ -20,6 +20,19 @@ export const useChatStore = defineStore('chat', () => {
   let currentSub = null
   let currentRoomId = null
 
+  // SYSTEM 이벤트(ROOM_UPDATED/PARTICIPANT_KICKED/HOST_CHANGED/PARTICIPANT_JOINED) 구독자.
+  // 채팅 버블이 아니라 방 상태/참여자 목록 갱신용이므로 뷰가 핸들러를 등록해 받아간다.
+  const systemHandlers = new Set()
+  function onSystemEvent(handler) {
+    systemHandlers.add(handler)
+    return () => systemHandlers.delete(handler)
+  }
+  function emitSystemEvent(roomId, frame) {
+    systemHandlers.forEach((h) => {
+      try { h(String(roomId), frame) } catch { /* 핸들러 오류 격리 */ }
+    })
+  }
+
   function ensureRoom(roomId) {
     const key = String(roomId)
     if (!messages.value[key]) messages.value[key] = []
@@ -88,6 +101,11 @@ export const useChatStore = defineStore('chat', () => {
       currentSub = client.subscribe(`/topic/chat.room.${roomId}`, (frame) => {
         try {
           const dto = JSON.parse(frame.body)
+          // SYSTEM 이벤트는 채팅 버블로 렌더하지 않고 뷰 상태 갱신용으로만 전달한다.
+          if (dto?.type === 'SYSTEM') {
+            emitSystemEvent(roomId, dto)
+            return
+          }
           appendMessage(roomId, dto)
         } catch {
           // 비 JSON 프레임 무시
@@ -152,5 +170,6 @@ export const useChatStore = defineStore('chat', () => {
     connect,
     sendMessage,
     disconnect,
+    onSystemEvent,
   }
 })

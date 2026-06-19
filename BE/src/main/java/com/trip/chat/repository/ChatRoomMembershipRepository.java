@@ -13,6 +13,9 @@ public interface ChatRoomMembershipRepository extends JpaRepository<ChatRoomMemb
     List<ChatRoomMembership> findByChatRoomId(Long chatRoomId);
     List<ChatRoomMembership> findByUserId(Long userId);
 
+    /** 특정 방·사용자의 멤버십 단건(있으면) — 음소거/강퇴/재초대에서 사용 */
+    Optional<ChatRoomMembership> findByChatRoomIdAndUserId(Long chatRoomId, Long userId);
+
     /** 채팅방 인원수 — N+1 회피용 카운트 쿼리 */
     int countByChatRoomId(Long chatRoomId);
 }

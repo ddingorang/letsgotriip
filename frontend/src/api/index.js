@@ -145,6 +145,16 @@ export const companionApi = {
 export const chatApi = {
   getParticipants: (roomId) => http.get(`/api/chat/rooms/${roomId}/participants`),
   leaveRoom: (roomId) => http.delete(`/api/chat/rooms/${roomId}/membership`),
+  // 방 정보(제목/소개) 수정 — 방장만. body { title(<=18), description?(<=200) } → 204
+  updateRoom: (roomId, data) => http.patch(`/api/chat/rooms/${roomId}`, data),
+  // 본인 멤버십 음소거 토글. body { muted:boolean } → 204
+  muteMembership: (roomId, data) => http.patch(`/api/chat/rooms/${roomId}/membership/mute`, data),
+  // 참여자 강퇴 — 방장만 → 204
+  kickParticipant: (roomId, userId) => http.delete(`/api/chat/rooms/${roomId}/participants/${userId}`),
+  // 참여자 초대 — 방장만. body { nickname? | email? } → 204
+  inviteParticipant: (roomId, data) => http.post(`/api/chat/rooms/${roomId}/participants`, data),
+  // 방장 위임 — 현 방장만. body { newHostUserId } → 204
+  transferHost: (roomId, data) => http.patch(`/api/chat/rooms/${roomId}/host`, data),
 }
 
 // ── Assistant (RAG 챗봇, BE: /api/assistant) ──────────────────────────────────
