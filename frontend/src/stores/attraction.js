@@ -152,6 +152,32 @@ function writeListCache(params, raw) {
   }
 }
 
+// ── 마지막 탐색 상태 보존 (sessionStorage) ────────────────────────────────────
+// 사용자가 마지막으로 한 탐색(파라미터 + 결과 + 검색어/필터 UI값)을 저장해
+// Explore 재진입 시 초기화 없이 그대로 복원한다. 위치 프리페치와 별개로,
+// "사용자가 명시적으로 한 탐색"이 있을 때 우선 복원하기 위한 용도.
+const LAST_EXPLORE_KEY = 'triip.attraction.lastExplore'
+
+function readLastExplore() {
+  try {
+    const raw = sessionStorage.getItem(LAST_EXPLORE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || !Array.isArray(parsed.results)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeLastExplore(snapshot) {
+  try {
+    sessionStorage.setItem(LAST_EXPLORE_KEY, JSON.stringify(snapshot))
+  } catch {
+    // 용량 초과/사용 불가 — 보존 없이 정상 동작
+  }
+}
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 export const useAttractionStore = defineStore('attraction', () => {
   const attractions = ref([])        // mapped list for ExploreView
@@ -161,6 +187,40 @@ export const useAttractionStore = defineStore('attraction', () => {
   const error = ref(null)
   const searchParams = ref({})
   const areas = ref([])
+
+  // 마지막 탐색 스냅샷 (params + raw results + UI 필터값 + 갱신시각).
+  // sessionStorage 와 동기화되어 재진입 시 복원에 쓰인다.
+  const lastExplore = ref(readLastExplore())
+
+  /**
+   * 현재 탐색 상태를 마지막 탐색으로 저장한다.
+   * @param {object} params  list() 에 넘긴 조회 파라미터
+   * @param {Array}  raw     조회 결과 raw 배열
+   * @param {object} ui      검색어/필터 등 화면 상태 ({ searchQuery, selectedCategory, sortMode } 등)
+   */
+  function saveLastExplore(params, raw, ui = {}) {
+    const snapshot = {
+      params: params ?? {},
+      results: Array.isArray(raw) ? raw : [],
+      ui,
+      updatedAt: Date.now(),
+    }
+    lastExplore.value = snapshot
+    writeLastExplore(snapshot)
+  }
+
+  /**
+   * 마지막 탐색 스냅샷을 반환한다(없으면 null). 결과를 즉시 화면에 반영해
+   * 네트워크 없이 복원하기 위한 용도. 호출 측에서 UI 필터값도 함께 복원한다.
+   */
+  function restoreLastExplore() {
+    const snap = lastExplore.value ?? readLastExplore()
+    if (!snap || !Array.isArray(snap.results)) return null
+    // 결과를 즉시 상태에 반영 (스피너 없이 바로 표시)
+    applyRaw(snap.results, snap.params ?? {})
+    loading.value = false
+    return snap
+  }
 
   // 주어진 raw 배열을 상태에 반영
   function applyRaw(raw, params) {
@@ -185,7 +245,7 @@ export const useAttractionStore = defineStore('attraction', () => {
    * 백그라운드로 최신화한다. 캐시가 없으면 기존처럼 로딩 후 조회한다.
    * Falls back to MOCK_ATTRACTIONS on network failure.
    */
-  async function list(params = {}) {
+  async function list(params = {}, ui = undefined) {
     error.value = null
     searchParams.value = params
 
@@ -194,19 +254,27 @@ export const useAttractionStore = defineStore('attraction', () => {
       // 캐시 즉시 반영 — 로딩 스피너 없이 바로 표시
       applyRaw(cached, params)
       loading.value = false
+      // 사용자가 명시적으로 탐색한 경우(ui 전달) 즉시 마지막 탐색으로 보존
+      if (ui) saveLastExplore(params, cached, ui)
       // 백그라운드 갱신 (조용히, 실패해도 캐시 유지)
       fetchAndStore(params)
         .then((raw) => {
-          if (raw) applyRaw(raw, params)
+          if (raw) {
+            applyRaw(raw, params)
+            if (ui) saveLastExplore(params, raw, ui)
+          }
         })
         .catch(() => {})
       return
     }
 
-    loading.value = true
+    // 이미 표시 중인 결과가 있으면(예: 마지막 탐색 복원 후 백그라운드 갱신)
+    // 스켈레톤으로 덮지 않고 조용히 갱신 — "네트워크 없이 즉시 복원" 보장.
+    if (!attractions.value.length) loading.value = true
     try {
       const raw = await fetchAndStore(params)
       applyRaw(raw, params)
+      if (ui) saveLastExplore(params, raw, ui)
     } catch (e) {
       error.value = e.response?.data?.message ?? e.message ?? '검색 중 오류가 발생했습니다.'
       searchResults.value = MOCK_ATTRACTIONS
@@ -278,11 +346,14 @@ export const useAttractionStore = defineStore('attraction', () => {
     error,
     searchParams,
     areas,
+    lastExplore,
     // actions
     list,
     prefetch,
     search,
     fetchDetail,
     loadAreas,
+    saveLastExplore,
+    restoreLastExplore,
   }
 })

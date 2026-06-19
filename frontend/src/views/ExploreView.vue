@@ -286,6 +286,16 @@ function locateUser(forceSort = false) {
   })
 }
 
+// 마지막 탐색 보존용 — 현재 화면의 검색어/필터/정렬 상태 스냅샷
+function currentUi() {
+  return {
+    searchQuery: searchQuery.value,
+    selectedCategory: selectedCategory.value,
+    sortMode: sortMode.value,
+    userLoc: userLoc.value,
+  }
+}
+
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
   selectedCategory.value = key
@@ -295,7 +305,7 @@ function selectCategory(key) {
     ...locParams(),
     ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
   }
-  store.list(params)
+  store.list(params, currentUi())
 }
 
 function selectPlace(place) {
@@ -314,7 +324,7 @@ function onSearchInput() {
         size: PAGE_SIZE,
         ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
       }
-      store.list(params)
+      store.list(params, currentUi())
     } else {
       // Query cleared below threshold — reload the unfiltered list for current category
       loadAttractions()
@@ -334,7 +344,7 @@ function loadAttractions() {
     ...locParams(),
     ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
   }
-  store.list(params)
+  store.list(params, currentUi())
 }
 
 function formatDist(km) {
@@ -369,13 +379,37 @@ function formatFestDate(raw) {
   return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)}`
 }
 
+// 마지막 탐색(검색어/지역/카테고리 필터 + 결과)을 즉시 복원한 뒤 백그라운드 갱신.
+// 사용자가 명시적으로 한 탐색이 우선이며, 네트워크 없이 바로 보여준다.
+function restoreFromLastExplore(snap) {
+  // UI 필터 상태 복원
+  const ui = snap.ui ?? {}
+  if (typeof ui.searchQuery === 'string') searchQuery.value = ui.searchQuery
+  if (ui.selectedCategory) selectedCategory.value = ui.selectedCategory
+  if (ui.userLoc && Number.isFinite(ui.userLoc.lat) && Number.isFinite(ui.userLoc.lng)) {
+    userLoc.value = { lat: ui.userLoc.lat, lng: ui.userLoc.lng }
+  }
+  if (ui.sortMode) sortMode.value = ui.sortMode
+  // 결과 즉시 표시 (store 상태에 raw 반영, 스피너 없음)
+  store.restoreLastExplore()
+  // 백그라운드 SWR 갱신 — 같은 params·ui 로 다시 list (캐시/네트워크 최신화)
+  store.list(snap.params ?? {}, currentUi())
+}
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
-  // 위치 우선 — 진입 즉시 내 주변부터. 위치 확보까지 스켈레톤(빈결과 깜빡임 방지),
-  // 성공 시 근처 목록, 거부/실패/미지원 시 전체 목록으로 폴백(locateUser 내부에서 처리).
-  store.loading = true
   festivalStore.loadFestivals()              // festival section (non-blocking)
   store.loadAreas()                          // area list for potential future use
+
+  // (a) 마지막 탐색이 있으면 그대로 복원 — 뒤로가기→재진입 시 초기화하지 않음.
+  const snap = store.lastExplore
+  if (snap && Array.isArray(snap.results) && snap.results.length) {
+    restoreFromLastExplore(snap)
+    return
+  }
+
+  // (b) 없으면 기존 동작 — 위치 우선(내 주변 → 거부/실패 시 전체/제주 폴백).
+  store.loading = true
   locateUser()
 })
 </script>
