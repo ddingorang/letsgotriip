@@ -38,16 +38,29 @@ public class ChatService {
     private final UserRepository userRepository;
     private final ChatRoomMembershipRepository chatRoomMembershipRepository;
 
-    public void sendMessage(final MessageSendRequestDto messageSendRequest, final Long senderId) {
+    public void sendMessage(final MessageSendRequestDto messageSendRequest, final Long senderId, final Long chatRoomId) {
 
-        log.info("[1/3] 메시지 전송 프로세스 시작. senderId: {}, chatRoomId: {}", senderId, messageSendRequest.chatRoomId());
+        log.info("[1/3] 메시지 전송 프로세스 시작. senderId: {}, chatRoomId: {}", senderId, chatRoomId);
+
+        // STOMP 송신 인가 — 발신자가 해당 방의 활성 멤버(미탈퇴·미강퇴)인지 검증한다.
+        // 페이로드의 chatRoomId는 스푸핑 가능하므로 신뢰하지 않고, STOMP 경로(@DestinationVariable)
+        // 에서 전달된 chatRoomId만 권위 있는 값으로 사용한다(영속/브로드캐스트 전에 검증).
+        boolean isActiveMember = chatRoomMembershipRepository.findByChatRoomId(chatRoomId).stream()
+                .filter(m -> m.getUserId().equals(senderId))
+                .anyMatch(ChatRoomMembership::isActiveMember);
+        if (!isActiveMember) {
+            log.warn("STOMP 송신 인가 거부 — 비멤버 발신 시도. senderId: {}, chatRoomId: {}", senderId, chatRoomId);
+            throw new GeneralException(ResponseCode._FORBIDDEN);
+        }
 
         String senderNickname = userRepository.findById(senderId)
                 .map(u -> u.getNickname())
                 .orElse("알 수 없음");
 
-        // 클라이언트 요청 DTO에 서버 생성 값(TSID, senderId, timestamp 등) 주입
-        final MessageResponseDto messageDtoWithId = withGeneratedMessageId(messageSendRequest, senderId, senderNickname);
+        // 클라이언트 요청 DTO에 서버 생성 값(TSID, senderId, timestamp 등) 주입.
+        // 권위 있는 chatRoomId(경로 변수)를 사용해 페이로드 roomId 스푸핑을 무력화한다.
+        final MessageResponseDto messageDtoWithId =
+                withGeneratedMessageId(messageSendRequest, senderId, senderNickname, chatRoomId);
         log.info("[2/3] 메시지 ID 생성 완료. messageTSID: {}", messageDtoWithId.messageTSID());
 
         // MongoDB에 채팅 메시지 영구 저장
@@ -58,7 +71,7 @@ public class ChatService {
         // STOMP 브로커(/topic) 목적지로 명시 발행 → 구독 중인 클라이언트에게 브로드캐스트.
         // (이전의 rabbitTemplate.convertAndSend(payload) 단일 인자 호출은 exchange/routing key가
         //  지정되지 않아 실제 라우팅되지 않는 dead code였으므로 제거)
-        final String destination = "/topic/chat.room." + messageSendRequest.chatRoomId();
+        final String destination = "/topic/chat.room." + chatRoomId;
         messagingTemplate.convertAndSend(destination, messageDtoWithId);
         log.info("메시지 전송 완료. destination: {}, messageTSID: {}", destination, chatMessage.getMessageTSID());
     }

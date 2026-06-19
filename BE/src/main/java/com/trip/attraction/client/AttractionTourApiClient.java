@@ -4,24 +4,45 @@ import com.trip.attraction.dto.AttractionTourApiResponse;
 import com.trip.attraction.dto.AttractionTourApiResponse.AttractionItem;
 import com.trip.attraction.dto.AreaTourApiResponse;
 import com.trip.global.config.TourApiProperties;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
  * TourAPI KorService2 호출 클라이언트.
- * 기존 TourApiProperties / RestClient 빈을 재사용.
+ * 외부 지연 시 스레드 고갈을 막기 위해 connect/read 타임아웃이 설정된
+ * 자체 RestClient 인스턴스를 구성한다(공유 RestClient 빈은 타임아웃 미설정).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AttractionTourApiClient {
 
+    // 외부(TourAPI) 응답 지연 한계 — connect 4s / read 8s.
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(4);
+    private static final Duration READ_TIMEOUT    = Duration.ofSeconds(8);
+
     private final TourApiProperties props;
-    private final RestClient restClient;
+    private RestClient restClient;
+
+    @PostConstruct
+    void init() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(CONNECT_TIMEOUT);
+        factory.setReadTimeout(READ_TIMEOUT);
+
+        this.restClient = RestClient.builder()
+                .baseUrl(props.getBaseUrl())
+                .defaultHeader("Accept", "application/json")
+                .requestFactory(factory)
+                .build();
+    }
 
     // ──────────────────────────────────────────────
     // areaBasedList2 — 지역 기반 관광정보 목록 조회

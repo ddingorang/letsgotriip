@@ -7,11 +7,13 @@ import io.jsonwebtoken.security.Keys;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import com.trip.global.error.ResponseCode;
 import com.trip.global.error.exception.handler.JwtHandler;
 import com.trip.user.dto.CustomUserInfoDto;
+import com.trip.user.dto.RedisSessionDto;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.security.MessageDigest;
@@ -32,6 +34,9 @@ public class JwtUtil {
     private final Duration OVERLAP_WINDOW; // 오버랩 허용 시간
     private final Duration REFRESH_TTL; // Refresh Token 만료 시간
 
+    // access token 검증 시 familyId(세션) 생존 여부를 대조하기 위한 Redis 세션 템플릿
+    private final RedisTemplate<String, RedisSessionDto> redisSessionTemplate;
+
     // 무작위 토큰 생성을 위한 실수
     // Random은 예측이 가능하고 시드가 유추되면 다음 값도 예측 가능하기에 암호학적으로 안전한 SecureRandom 사용
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -40,7 +45,8 @@ public class JwtUtil {
             @Value("${jwt.secret}") final String SECRET_KEY,
             @Value("${jwt.accesstoken-expiration-time}") final long ACCESS_TOKEN_EXP_TIME,
             @Value("${jwt.overlap-window}") final Duration OVERLAP_WINDOW,
-            @Value("${jwt.refresh-ttl}") final Duration REFRESH_TTL
+            @Value("${jwt.refresh-ttl}") final Duration REFRESH_TTL,
+            final RedisTemplate<String, RedisSessionDto> redisSessionTemplate
     ) {
 
         byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY); // BASE64로 인코딩된 문자열을 바이트로 되돌림
@@ -52,6 +58,7 @@ public class JwtUtil {
         this.ACCESS_TOKEN_EXP_TIME = ACCESS_TOKEN_EXP_TIME;
         this.OVERLAP_WINDOW = OVERLAP_WINDOW;
         this.REFRESH_TTL = REFRESH_TTL;
+        this.redisSessionTemplate = redisSessionTemplate;
     }
 
     /**
@@ -89,6 +96,28 @@ public class JwtUtil {
     public Long getUserId(String token) {
 
         return parseClaims(token).get("userId", Long.class);
+    }
+
+    // Token에서 familyId(세션 식별자) 추출
+    public String getFamilyId(String token) {
+
+        return parseClaims(token).get("familyId", String.class);
+    }
+
+    /**
+     * access token의 familyId가 살아있는 Redis 세션(패밀리)에 속하는지 가벼운 EXISTS 대조.
+     * 재사용 탐지/로그아웃으로 패밀리가 폐기되면 세션 키가 삭제되므로 false → 인증 거부.
+     * familyId 클레임이 없거나(레거시) Redis 미존재 시에는 보수적으로 false(차단)한다.
+     * @param token 서명/만료 검증을 이미 통과한 access token
+     */
+    public boolean isSessionAlive(String token) {
+        final String familyId = getFamilyId(token);
+        if (familyId == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(
+                redisSessionTemplate.hasKey(RedisKeyNamingUtil.REFRESH_TOKEN_REDIS_KEY_NAME(familyId))
+        );
     }
 
     public CustomUserInfoDto getUserInfo(String token) {

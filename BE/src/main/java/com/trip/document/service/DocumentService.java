@@ -44,7 +44,13 @@ public class DocumentService {
     @Transactional
     public DocumentResponse upload(Long userId, MultipartFile file) {
         DocumentType type = resolveType(file);
-        String storedPath = store(file);
+        // RAG 색인 대상은 PDF/텍스트뿐이다. 그 외(이미지/스크립트/임의 바이너리)는
+        // 공개 정적 루트(/uploads/**)에 저장될 면을 만들지 않도록 업로드 자체를 거부한다.
+        if (type != DocumentType.PDF && type != DocumentType.TEXT) {
+            throw new GeneralException(ResponseCode._BAD_REQUEST,
+                    "지원하지 않는 파일 형식입니다. (PDF 또는 텍스트 파일만 업로드할 수 있습니다.)");
+        }
+        String storedPath = store(file, type);
 
         TripDocument document = documentRepository.save(TripDocument.builder()
                 .userId(userId)
@@ -70,7 +76,7 @@ public class DocumentService {
                 document.markFailed();
             }
         } else {
-            // 추출 텍스트 없음(이미지/기타 OCR 미구현) → 색인 없이 INGESTED 처리
+            // 추출 텍스트 없음(빈 PDF/빈 텍스트 등) → 색인 없이 INGESTED 처리
             document.markIngested(0);
         }
 
@@ -101,32 +107,68 @@ public class DocumentService {
 
     // ─── 내부 구현 ────────────────────────────────────────────
 
+    /**
+     * 실제 파일 내용(매직바이트/디코딩 가능성)으로 타입을 판별한다.
+     * 클라이언트가 보낸 Content-Type/원본 확장자는 신뢰하지 않는다.
+     * PDF(%PDF) 또는 UTF-8로 디코딩되는 텍스트만 인정하고, 그 외는 OTHER로 본다.
+     */
     private DocumentType resolveType(MultipartFile file) {
-        String contentType = file.getContentType();
-        String filename = file.getOriginalFilename();
-
-        if (isPdf(contentType, filename)) {
+        byte[] head = readHead(file, 1024);
+        if (isPdf(head)) {
             return DocumentType.PDF;
         }
-        if (contentType != null && contentType.startsWith("text/")) {
+        if (isText(head)) {
             return DocumentType.TEXT;
-        }
-        if (contentType != null && contentType.startsWith("image/")) {
-            return DocumentType.IMAGE;
         }
         return DocumentType.OTHER;
     }
 
-    private boolean isPdf(String contentType, String filename) {
-        if ("application/pdf".equalsIgnoreCase(contentType)) {
-            return true;
+    private byte[] readHead(MultipartFile file, int len) {
+        try (var in = file.getInputStream()) {
+            byte[] buf = new byte[len];
+            int read = 0;
+            int n;
+            while (read < len && (n = in.read(buf, read, len - read)) != -1) {
+                read += n;
+            }
+            return read == len ? buf : java.util.Arrays.copyOf(buf, read);
+        } catch (IOException e) {
+            log.warn("Failed to read document header for type detection", e);
+            return new byte[0];
         }
-        return filename != null && filename.toLowerCase().endsWith(".pdf");
     }
 
-    private String store(MultipartFile file) {
-        String ext = extractExtension(file.getOriginalFilename());
-        String filename = UUID.randomUUID() + (ext.isEmpty() ? "" : "." + ext);
+    private boolean isPdf(byte[] head) {
+        return head.length >= 5
+                && head[0] == 0x25 && head[1] == 0x50 && head[2] == 0x44
+                && head[3] == 0x46 && head[4] == 0x2D; // "%PDF-"
+    }
+
+    /**
+     * 선두 바이트가 NUL/제어문자 없이 UTF-8로 디코딩되면 텍스트로 간주한다.
+     * HTML/JS/SVG도 텍스트로 분류되지만, 저장 확장자는 .txt로 강제되고
+     * 서빙 시 text/plain으로 내려가므로 스크립트로 실행되지 않는다.
+     */
+    private boolean isText(byte[] head) {
+        if (head.length == 0) {
+            return false;
+        }
+        for (byte b : head) {
+            int v = b & 0xFF;
+            if (v == 0x00) {
+                return false; // NUL → 바이너리
+            }
+            if (v < 0x09 || (v > 0x0D && v < 0x20)) {
+                return false; // 비텍스트 제어문자
+            }
+        }
+        return true;
+    }
+
+    private String store(MultipartFile file, DocumentType type) {
+        // 저장 확장자는 원본 확장자가 아니라 판별된 실제 타입으로 강제한다.
+        String ext = (type == DocumentType.PDF) ? "pdf" : "txt";
+        String filename = UUID.randomUUID() + "." + ext;
         Path targetPath = Paths.get(baseDir, "documents").resolve(filename);
 
         try {
@@ -173,12 +215,5 @@ public class DocumentService {
         } catch (IOException e) {
             log.warn("Failed to delete document file: {}", storedPath, e);
         }
-    }
-
-    private String extractExtension(String originalFilename) {
-        if (originalFilename == null || !originalFilename.contains(".")) {
-            return "";
-        }
-        return originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
     }
 }

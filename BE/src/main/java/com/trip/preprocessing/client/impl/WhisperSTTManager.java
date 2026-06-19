@@ -3,7 +3,7 @@ package com.trip.preprocessing.client.impl;
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
 import com.trip.preprocessing.client.STTManager;
-import lombok.RequiredArgsConstructor;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
@@ -11,18 +11,23 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.Map;
 
 @Slf4j
 @Primary
 @Component
-@RequiredArgsConstructor
 public class WhisperSTTManager implements STTManager {
+
+    // Whisper 전사는 오디오 길이에 비례해 오래 걸림 — connect 4s / read 120s.
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(4);
+    private static final Duration READ_TIMEOUT    = Duration.ofSeconds(120);
 
     @Value("${openai.api.key}")
     private String apiKey;
@@ -30,7 +35,18 @@ public class WhisperSTTManager implements STTManager {
     @Value("${openai.api.url}")
     private String apiUrl;
 
-    private final RestClient restClient;
+    private RestClient restClient;
+
+    @PostConstruct
+    void init() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(CONNECT_TIMEOUT);
+        factory.setReadTimeout(READ_TIMEOUT);
+
+        this.restClient = RestClient.builder()
+                .requestFactory(factory)
+                .build();
+    }
 
     @Override
     public String convertSpeechToText(File audioFile) {

@@ -31,11 +31,13 @@ public class ChatStompController {
      */
     @MessageMapping("chat.message.{roomId}")
     public void publishMessage(
-            @DestinationVariable String roomId,
+            @DestinationVariable Long roomId,
             MessageSendRequestDto messageSendRequestDto,
             UserPrincipal principal) {
 
         Long senderId = principal.userId(); // WebSocket 연결 시점에 JWT에서 추출한 사용자 ID
-        chatService.sendMessage(messageSendRequestDto, senderId);
+        // STOMP 경로(@DestinationVariable)의 roomId만 권위 있는 목적지로 신뢰한다.
+        // 페이로드의 chatRoomId는 스푸핑 가능하므로 서비스 계층에서 무시한다(IDOR 방지).
+        chatService.sendMessage(messageSendRequestDto, senderId, roomId);
     }
 }
