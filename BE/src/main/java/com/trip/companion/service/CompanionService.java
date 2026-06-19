@@ -148,7 +148,12 @@ public class CompanionService {
 
     @Transactional
     public CompanionApplicationResponse apply(Long postId, Long userId, String message) {
-        CompanionPost post = findPost(postId);
+        // 동시 신청 직렬화: post 행에 비관적 쓰기 락을 걸어 중복검사~정원검사~저장을 원자적으로 처리한다.
+        // (companion_post_id, user_id) 부분 유니크 인덱스는 MySQL이 지원하지 않아(REJECTED 재신청 보존 필요),
+        // 같은 post에 대한 신청을 행 락으로 직렬화하여 동시 중복·정원 초과를 함께 차단한다.
+        CompanionPost post = companionPostRepository.findByIdForUpdate(postId)
+                .filter(p -> !p.isDeleted())
+                .orElseThrow(() -> new GeneralException(ResponseCode.COMPANION_POST_NOT_FOUND));
         User applicant = findUser(userId);
 
         if (post.getAuthor().getId().equals(userId)) {
@@ -157,10 +162,19 @@ public class CompanionService {
         if (post.getStatus() != CompanionStatus.OPEN) {
             throw new GeneralException(ResponseCode.COMPANION_POST_CLOSED);
         }
-        // REJECTED 상태는 재신청 허용 — PENDING·APPROVED 상태일 때만 중복으로 간주
+        // REJECTED 상태는 재신청 허용 — PENDING·APPROVED 상태일 때만 중복으로 간주.
+        // post 행 락 보유 상태이므로 동시 중복 신청은 여기서 직렬화되어 차단된다.
         if (companionApplicationRepository.existsByCompanionPostAndApplicantAndStatusNot(
                 post, applicant, com.trip.companion.entity.enums.ApplicationStatus.REJECTED)) {
             throw new GeneralException(ResponseCode.COMPANION_ALREADY_APPLIED);
+        }
+        // 정원이 이미 찼으면 신청 자체를 차단 — 승인 단계뿐 아니라 신청 단계에서도 정원 검사
+        if (post.getChatRoom() != null) {
+            int currentMembers = chatRoomMembershipRepository
+                    .countByChatRoomId(post.getChatRoom().getId());
+            if (currentMembers >= post.getMaxMembers()) {
+                throw new GeneralException(ResponseCode.COMPANION_FULL);
+            }
         }
 
         CompanionApplication application = CompanionApplication.builder()
@@ -168,13 +182,7 @@ public class CompanionService {
                 .applicant(applicant)
                 .message(message != null && !message.isBlank() ? message.trim() : null)
                 .build();
-
-        try {
-            // 동시 중복 신청은 DB 제약 충돌로 잡아 409로 변환 (존재 검사를 통과한 레이스 방어)
-            companionApplicationRepository.saveAndFlush(application);
-        } catch (DataIntegrityViolationException e) {
-            throw new GeneralException(ResponseCode.COMPANION_DUPLICATE_APPLY, e);
-        }
+        companionApplicationRepository.save(application);
 
         // 모집글 작성자에게 알림 (커밋 후 적재)
         eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
@@ -237,6 +245,13 @@ public class CompanionService {
                     throw new GeneralException(ResponseCode.COMPANION_FULL, e);
                 }
                 post.getChatRoom().setParticipationCount(post.getChatRoom().getParticipationCount() + 1);
+
+                // 정원 도달 시 모집 자동 마감 — 이후 신청·승인을 신청 단계에서부터 차단한다.
+                int memberCount = chatRoomMembershipRepository
+                        .countByChatRoomId(post.getChatRoom().getId());
+                if (post.getStatus() == CompanionStatus.OPEN && memberCount >= post.getMaxMembers()) {
+                    post.close();
+                }
             }
         }
 

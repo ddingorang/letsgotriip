@@ -35,7 +35,7 @@ public class CommunityService {
 
     // ─── 게시글 ───────────────────────────────────────────────
 
-    public CursorPageResponse<PostSummaryResponse> getPosts(PostCategory category, Long cursor, int size) {
+    public CursorPageResponse<PostSummaryResponse> getPosts(Long userId, PostCategory category, Long cursor, int size) {
         Pageable pageable = org.springframework.data.domain.PageRequest.of(0, size + 1);
 
         List<Post> posts = (category != null)
@@ -49,16 +49,31 @@ public class CommunityService {
         boolean hasNext = posts.size() > size;
         List<Post> content = hasNext ? posts.subList(0, size) : posts;
 
+        // 사용자가 좋아요한 게시글 id 를 한 번에 조회해 매핑(N+1 방지). 비로그인이면 빈 집합.
+        java.util.Set<Long> likedPostIds = resolveLikedPostIds(userId, content);
+
         List<PostSummaryResponse> responses = content.stream()
                 .map(post -> {
                     int commentCount = commentRepository.countByPostIdAndDeletedFalse(post.getId());
                     String thumbnailUrl = postImageRepository.findFirstByPostIdOrderByDisplayOrderAsc(post.getId())
                             .map(PostImage::getImageUrl).orElse(null);
-                    return PostSummaryResponse.of(post, commentCount, thumbnailUrl);
+                    return PostSummaryResponse.of(post, commentCount, thumbnailUrl, likedPostIds.contains(post.getId()));
                 }).toList();
 
         Long nextCursor = hasNext ? content.get(content.size() - 1).getId() : null;
         return new CursorPageResponse<>(responses, nextCursor, hasNext);
+    }
+
+    /**
+     * 주어진 게시글 목록 중 사용자가 좋아요한 게시글 id 집합을 한 번의 쿼리로 조회한다.
+     * 비로그인(userId == null)이거나 목록이 비면 빈 집합을 반환한다.
+     */
+    private java.util.Set<Long> resolveLikedPostIds(Long userId, List<Post> posts) {
+        if (userId == null || posts.isEmpty()) {
+            return Collections.emptySet();
+        }
+        List<Long> postIds = posts.stream().map(Post::getId).toList();
+        return new java.util.HashSet<>(postLikeRepository.findLikedPostIds(userId, postIds));
     }
 
     @Transactional
@@ -183,7 +198,8 @@ public class CommunityService {
                     int commentCount = commentRepository.countByPostIdAndDeletedFalse(post.getId());
                     String thumbnailUrl = postImageRepository.findFirstByPostIdOrderByDisplayOrderAsc(post.getId())
                             .map(PostImage::getImageUrl).orElse(null);
-                    return PostSummaryResponse.of(post, commentCount, thumbnailUrl);
+                    // 이 목록은 사용자가 좋아요한 게시글만 모은 결과이므로 likedByMe = true.
+                    return PostSummaryResponse.of(post, commentCount, thumbnailUrl, true);
                 }).toList();
 
         // nextCursor 는 마지막 행의 PostLike.id (게시글 id 가 아님 — 좋아요 순서 유지를 위해).
@@ -203,8 +219,8 @@ public class CommunityService {
     }
 
     @Transactional
-    public boolean toggleCommentLike(Long commentId, Long userId) {
-        Comment comment = findActiveComment(commentId);
+    public boolean toggleCommentLike(Long postId, Long commentId, Long userId) {
+        Comment comment = findActiveComment(postId, commentId);
         User user = findUser(userId);
 
         boolean liked = commentLikeRepository.findByCommentIdAndUserId(commentId, userId)
@@ -258,8 +274,8 @@ public class CommunityService {
     }
 
     @Transactional
-    public CommentResponse updateComment(Long commentId, Long userId, CommentCreateRequest request) {
-        Comment comment = findActiveComment(commentId);
+    public CommentResponse updateComment(Long postId, Long commentId, Long userId, CommentCreateRequest request) {
+        Comment comment = findActiveComment(postId, commentId);
         verifyAuthor(comment.getAuthor().getId(), userId);
         comment.update(request.content());
         boolean likedByMe = commentLikeRepository.existsByCommentIdAndUserId(commentId, userId);
@@ -267,8 +283,8 @@ public class CommunityService {
     }
 
     @Transactional
-    public void deleteComment(Long commentId, Long userId) {
-        Comment comment = findActiveComment(commentId);
+    public void deleteComment(Long postId, Long commentId, Long userId) {
+        Comment comment = findActiveComment(postId, commentId);
         verifyAuthor(comment.getAuthor().getId(), userId);
         comment.delete();
     }
@@ -307,9 +323,18 @@ public class CommunityService {
                 .orElseThrow(() -> new GeneralException(ResponseCode.POST_NOT_FOUND));
     }
 
-    private Comment findActiveComment(Long commentId) {
-        return commentRepository.findByIdAndDeletedFalse(commentId)
+    /**
+     * 댓글을 조회하되 URL 의 postId 와 댓글의 소속 게시글이 일치하는지 검증한다.
+     * (중첩 경로 /posts/{postId}/comments/{commentId} 에서 postId 가 무시되어
+     * 타 게시글 댓글을 조작하는 것을 차단)
+     */
+    private Comment findActiveComment(Long postId, Long commentId) {
+        Comment comment = commentRepository.findByIdAndDeletedFalse(commentId)
                 .orElseThrow(() -> new GeneralException(ResponseCode.COMMENT_NOT_FOUND));
+        if (!comment.getPost().getId().equals(postId)) {
+            throw new GeneralException(ResponseCode.COMMENT_NOT_FOUND);
+        }
+        return comment;
     }
 
     private User findUser(Long userId) {

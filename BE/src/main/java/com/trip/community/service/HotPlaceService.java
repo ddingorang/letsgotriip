@@ -37,9 +37,24 @@ public class HotPlaceService {
                 .map(hp -> HotPlaceSummaryResponse.of(hp, getThumbnail(hp.getId())));
     }
 
-    public HotPlaceResponse getHotPlace(Long hotPlaceId) {
+    public HotPlaceResponse getHotPlace(Long hotPlaceId, Long userId) {
         HotPlace hotPlace = findHotPlace(hotPlaceId);
+
+        // 공개 상세는 APPROVED 만 노출. PENDING/REJECTED 는 작성자 또는 관리자만 조회 가능하며,
+        // 그 외(비로그인 포함)에게는 존재 자체를 숨기기 위해 NOT_FOUND 로 응답한다.
+        if (hotPlace.getStatus() != HotPlaceStatus.APPROVED && !canViewHidden(hotPlace, userId)) {
+            throw new GeneralException(ResponseCode.HOTPLACE_NOT_FOUND);
+        }
+
         return HotPlaceResponse.of(hotPlace, getImageUrls(hotPlaceId));
+    }
+
+    private boolean canViewHidden(HotPlace hotPlace, Long userId) {
+        if (userId == null) return false;
+        if (hotPlace.getSubmitter().getId().equals(userId)) return true;
+        return userRepository.findById(userId)
+                .map(user -> user.getUserRole() == UserRole.ADMIN)
+                .orElse(false);
     }
 
     // ─── 등록 신청 ────────────────────────────────────────────

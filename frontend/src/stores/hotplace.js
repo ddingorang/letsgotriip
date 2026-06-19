@@ -66,7 +66,7 @@ function normalize(item) {
 }
 
 export const useHotplaceStore = defineStore('hotplace', () => {
-  // ── Mock seed data (fallback when BE is unavailable) ──────────────────────
+  // ── 데모용 초기 seed (getList 성공 시 BE 데이터로 교체, 실패 시 비움) ──────
   const hotplaces = ref([
     { id: 1, name: '오조포구 카페', category: '카페', location: '제주 서귀포시 성산읍', address: '제주 서귀포시 성산읍 일주동로 1234', rating: 4.7, ratingCount: 128, saveCount: 179, description: '오선뷰 카페', lat: 33.4595, lng: 126.9220, registrant: '제주러버', registeredAt: '2주 전', intro: '오조리 포구 바로 앞 오선뷰 카페에요. 통창으로 우도와 성산일출봉이 한눈에 보입니다. 노을 시간대 방문 추천 🌅' },
     { id: 2, name: '함덕 해변 포차', category: '맛집', location: '제주 제주시 조천읍', address: '제주 제주시 조천읍 함덕로 45', rating: 4.5, ratingCount: 86, saveCount: 120, description: '해변 포차', lat: 33.5430, lng: 126.6690, registrant: '바다러버', registeredAt: '1주 전', intro: '함덕 해변 바로 앞에 위치한 포차예요. 신선한 해산물과 시원한 뷰가 일품입니다.' },
@@ -80,7 +80,11 @@ export const useHotplaceStore = defineStore('hotplace', () => {
 
   const registrationSuccess = ref(false)
 
-  // ── Mock fallback ─────────────────────────────────────────────────────────
+  // 정직화: 조회 실패를 seed로 가리지 않고 error 상태로 노출한다.
+  const listError = ref(null)
+  const detailError = ref(null)
+
+  // ── Local lookup helper ───────────────────────────────────────────────────
   function getById(id) {
     return hotplaces.value.find(h => h.id === Number(id))
   }
@@ -90,31 +94,38 @@ export const useHotplaceStore = defineStore('hotplace', () => {
   /**
    * Fetch paginated list from BE.
    * Spring Page response shape: { content: [...], totalElements, ... }
-   * Returns normalized items array; on error falls back to mock hotplaces.value.
+   * Returns normalized items array. On error, sets listError and clears the
+   * list so the view can show an error/empty state (no seed disguised as live).
    */
   async function getList(params) {
+    listError.value = null
     try {
       const res = await hotplaceApi.getList(params)
       const items = (res.data?.content ?? res.data ?? []).map(normalize)
       hotplaces.value = items
       return items
     } catch (e) {
-      console.warn('[hotplace] getList failed, using mock data', e)
-      return hotplaces.value
+      // 실패를 seed로 가리지 않고 에러 상태를 노출한다.
+      listError.value = e
+      hotplaces.value = []
+      return []
     }
   }
 
   /**
    * Fetch single hotplace detail from BE.
-   * Returns a normalized item; on error falls back to mock getById.
+   * Returns a normalized item. On error, sets detailError and returns null
+   * so the view can show an error state (no seed disguised as live data).
    */
   async function getDetail(id) {
+    detailError.value = null
     try {
       const res = await hotplaceApi.getDetail(id)
       return normalize(res.data)
     } catch (e) {
-      console.warn('[hotplace] getDetail failed, using mock data', e)
-      return getById(id) ?? null
+      // 실패를 seed로 가리지 않고 에러 상태를 노출한다.
+      detailError.value = e
+      return null
     }
   }
 
@@ -140,6 +151,8 @@ export const useHotplaceStore = defineStore('hotplace', () => {
     hotplaces,
     myHotplaces,
     registrationSuccess,
+    listError,
+    detailError,
     getById,
     getList,
     getDetail,

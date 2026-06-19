@@ -48,11 +48,22 @@ export const useDocumentsStore = defineStore('documents', () => {
       formData.append('file', file)
       const { data } = await documentApi.upload(formData)
       const doc = normalize(data)
-      // 최신 업로드가 위로
+      // 최신 업로드가 위로 — 색인 실패(FAILED) 문서도 목록에는 보존(BE가 레코드는 남김).
       items.value.unshift(doc)
+      // BE는 색인 실패 시에도 201 + status:FAILED 로 응답한다(예외를 삼킴).
+      // 이를 '추가됨' 성공으로 위장하지 않고 실패로 노출한다 — 색인되지 않은 문서는 질문에 쓸 수 없다.
+      if (doc.status === 'FAILED') {
+        const err = new Error('문서 색인에 실패했어요. 이 문서로는 질문할 수 없어요.')
+        err.indexingFailed = true
+        error.value = err.message
+        throw err
+      }
       return doc
     } catch (e) {
-      error.value = e.response?.data?.message ?? e.message ?? '업로드에 실패했어요.'
+      // 색인 실패(위에서 throw)는 이미 error.value 설정됨 — 메시지 덮어쓰지 않는다.
+      if (!e?.indexingFailed) {
+        error.value = e.response?.data?.message ?? e.message ?? '업로드에 실패했어요.'
+      }
       throw e
     } finally {
       uploading.value = false

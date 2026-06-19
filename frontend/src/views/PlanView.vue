@@ -34,8 +34,31 @@
     </div>
 
     <div class="scroll-content">
+      <!-- ── Loading state ────────────────────────────────────────────── -->
+      <div v-if="listLoading && plans.length === 0" class="state-block">
+        <div class="skeleton-card" />
+        <div class="skeleton-card" />
+        <div class="skeleton-card" />
+      </div>
+
+      <!-- ── Error state (목록 로드 실패) ─────────────────────────────── -->
+      <div v-else-if="listError" class="state-block error-state">
+        <div class="empty-icon">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        </div>
+        <p class="empty-title">계획을 불러오지 못했어요</p>
+        <p class="empty-sub">{{ listError }}</p>
+        <button class="create-ai-btn" :disabled="listLoading" @click="reloadPlans">
+          {{ listLoading ? '불러오는 중...' : '다시 시도' }}
+        </button>
+      </div>
+
       <!-- ── Empty state ──────────────────────────────────────────────── -->
-      <div v-if="plans.length === 0" class="empty-state">
+      <div v-else-if="plans.length === 0" class="empty-state">
         <div class="empty-icon">
           <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -314,6 +337,12 @@ const { plans } = storeToRefs(planStore)
 
 const selectedPlanId = ref(null)
 
+// ── 계획 목록 로드 상태 ───────────────────────────────────────────────────────
+// planStore.loading은 상세/편집 등에서도 켜지므로, 목록 로드 전용 상태를 따로 둔다.
+// 실패를 "계획 없어요" 빈상태로 위장하지 않고 에러/로딩/빈상태를 분리해 노출한다.
+const listLoading = ref(false)
+const listError = ref(null)
+
 // ── 예산 보기 ────────────────────────────────────────────────────────────────
 const budget = ref(null)        // { planId, dayBudgets, totalEstimated, plannedBudget, difference, note }
 const budgetLoading = ref(false)
@@ -334,13 +363,23 @@ const companions = ref([
   { id: 3, category: '액티비티', title: '한라산 백록담 등반 파티 모집', destination: '제주도', dates: '1월 10일', currentCount: 3, maxCount: 6, dday: 2 },
 ])
 
-onMounted(async () => {
+onMounted(reloadPlans)
+
+/** 계획 목록 로드 — 로딩/에러를 분리 추적해 빈상태 위장을 막는다 */
+async function reloadPlans() {
+  if (listLoading.value) return
+  listLoading.value = true
+  listError.value = null
   try {
     await planStore.loadPlans()
-  } catch {
-    // not logged in or BE unavailable — plans stays empty, user sees empty state
+    // store가 에러를 삼키고 plans를 []로 두는 경우(로그인 만료/서버 오류)를 에러로 노출
+    if (planStore.error) listError.value = planStore.error
+  } catch (e) {
+    listError.value = planStore.error ?? e?.message ?? '계획을 불러오지 못했어요.'
+  } finally {
+    listLoading.value = false
   }
-})
+}
 
 function formatDate(str) {
   if (!str) return ''
@@ -687,6 +726,32 @@ async function removePlace(planId, dayNo, place) {
   padding: 0 20px;
 }
 
+/* ── Loading / error state ──────────────────────────────────────────────── */
+.state-block {
+  padding: 16px 0 40px;
+}
+
+.skeleton-card {
+  height: 96px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  margin-bottom: 12px;
+  animation: plan-shimmer 1.2s infinite;
+}
+
+@keyframes plan-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 0 40px;
+  gap: 8px;
+}
+
 /* ── Empty state ─────────────────────────────────────────────────────────── */
 .empty-state {
   display: flex;
@@ -725,6 +790,12 @@ async function removePlace(planId, dayNo, place) {
   align-items: center;
   gap: 8px;
   box-shadow: 0 4px 14px rgba(247, 143, 87, 0.3);
+}
+
+.create-ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* ── Plan list ────────────────────────────────────────────────────────────── */

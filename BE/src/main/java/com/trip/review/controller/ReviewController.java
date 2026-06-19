@@ -46,7 +46,7 @@ public class ReviewController {
             @Valid @RequestBody ReviewUpdateRequest request,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return ResponseEntity.ok(reviewService.update(principal.userId(), reviewId, request));
+        return ResponseEntity.ok(reviewService.update(principal.userId(), contentId, reviewId, request));
     }
 
     @DeleteMapping("/{reviewId}")
@@ -55,7 +55,7 @@ public class ReviewController {
             @PathVariable Long reviewId,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        reviewService.delete(principal.userId(), reviewId);
+        reviewService.delete(principal.userId(), contentId, reviewId);
         return ResponseEntity.ok().build();
     }
 }

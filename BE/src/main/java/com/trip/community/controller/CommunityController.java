@@ -46,11 +46,13 @@ public class CommunityController {
 
     @GetMapping("/posts")
     public ResponseEntity<CursorPageResponse<PostSummaryResponse>> getPosts(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) PostCategory category,
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(communityService.getPosts(category, cursor, size));
+        Long userId = principal != null ? principal.userId() : null;
+        return ResponseEntity.ok(communityService.getPosts(userId, category, cursor, size));
     }
 
     @GetMapping("/posts/liked")
@@ -132,7 +134,7 @@ public class CommunityController {
             @PathVariable Long commentId,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return ResponseEntity.ok(communityService.toggleCommentLike(commentId, principal.userId()));
+        return ResponseEntity.ok(communityService.toggleCommentLike(postId, commentId, principal.userId()));
     }
 
     @PostMapping("/posts/{postId}/comments")
@@ -151,7 +153,7 @@ public class CommunityController {
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody CommentCreateRequest request
     ) {
-        return ResponseEntity.ok(communityService.updateComment(commentId, principal.userId(), request));
+        return ResponseEntity.ok(communityService.updateComment(postId, commentId, principal.userId(), request));
     }
 
     @DeleteMapping("/posts/{postId}/comments/{commentId}")
@@ -160,7 +162,7 @@ public class CommunityController {
             @PathVariable Long commentId,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        communityService.deleteComment(commentId, principal.userId());
+        communityService.deleteComment(postId, commentId, principal.userId());
         return ResponseEntity.noContent().build();
     }
 

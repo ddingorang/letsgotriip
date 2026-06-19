@@ -24,6 +24,41 @@
     </div>
 
     <div class="content-scroll">
+      <!-- 로딩 -->
+      <div v-if="detailState === 'loading'" class="detail-state">
+        <div class="detail-skeleton w70" />
+        <div class="detail-skeleton w90" />
+        <div class="detail-skeleton w50" />
+      </div>
+
+      <!-- 없는 글(404) -->
+      <div v-else-if="detailState === 'not-found'" class="detail-state detail-state-msg">
+        <div class="detail-state-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </div>
+        <p class="detail-state-title">모집글을 찾을 수 없어요</p>
+        <p class="detail-state-sub">삭제되었거나 잘못된 링크일 수 있어요.</p>
+        <button class="detail-state-btn" @click="$router.back()">돌아가기</button>
+      </div>
+
+      <!-- 로드 실패 -->
+      <div v-else-if="detailState === 'error'" class="detail-state detail-state-msg">
+        <div class="detail-state-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        </div>
+        <p class="detail-state-title">정보를 불러오지 못했어요</p>
+        <p class="detail-state-sub">{{ companionStore.detailError ?? '잠시 후 다시 시도해 주세요.' }}</p>
+        <button class="detail-state-btn" :disabled="companionStore.detailLoading" @click="reloadDetail">
+          {{ companionStore.detailLoading ? '불러오는 중...' : '다시 시도' }}
+        </button>
+      </div>
+
+      <!-- 정상 로드 -->
+      <template v-else>
       <!-- Status & title -->
       <div class="title-area">
         <div class="badges-row">
@@ -164,15 +199,21 @@
       </div>
 
       <div style="height: 100px" />
+      </template>
     </div>
 
-    <!-- Bottom CTA -->
-    <div class="cta-bar">
+    <!-- Bottom CTA — 정상 로드된 경우에만 노출(가짜 신청 CTA 방지) -->
+    <div v-if="detailState === 'ready'" class="cta-bar">
       <div v-if="applyError" class="apply-error">{{ applyError }}</div>
-      <!-- Visitor: not applied -->
-      <template v-if="!comp.isOwner && !isApplied">
+      <!-- Visitor: not applied — 남은 자리가 있을 때만 신청 CTA 노출 -->
+      <template v-if="!comp.isOwner && !isApplied && seatsLeft > 0">
         <div class="seats-left">남은 자리 {{ seatsLeft }}명</div>
         <button class="cta-main" :disabled="companionStore.loading" @click="apply">참여 신청하기</button>
+      </template>
+
+      <!-- Visitor: not applied & 정원 마감 — 신청 CTA 숨기고 마감 안내(sec2와 정합) -->
+      <template v-else-if="!comp.isOwner && !isApplied">
+        <button class="cta-main" disabled>모집이 마감되었어요</button>
       </template>
 
       <!-- Visitor: approved — 취소 불가, 채팅방 입장 -->
@@ -214,9 +255,27 @@ const route = useRoute()
 const router = useRouter()
 const companionStore = useCompanionStore()
 
-const comp = computed(() => companionStore.getById(route.params.id) ?? {
-  id: route.params.id, title: '동행 모집', location: '-', dateRange: '-',
-  status: '모집중', currentCount: 0, maxCount: 4, author: { nickname: '-', tripCount: 0 },
+// 실제 상세 데이터(없으면 null). 실패/404를 가짜 "동행 모집" 객체로 위장하지 않는다.
+const realComp = computed(() => companionStore.getById(route.params.id) ?? null)
+
+// 화면 상태: 로딩/404/오류/정상 분기.
+// - 데이터가 있으면 ready
+// - 없고 로딩 중이면 loading
+// - 없고 404면 not-found, 그 외 실패면 error
+const detailState = computed(() => {
+  if (realComp.value) return 'ready'
+  if (companionStore.detailLoading) return 'loading'
+  if (companionStore.detailNotFound) return 'not-found'
+  if (companionStore.detailError) return 'error'
+  return 'loading'
+})
+
+// 템플릿이 comp.value.* 를 참조하므로, 정상 로드 전/실패 시에도 null 접근이 없게
+// 중립 placeholder를 제공한다. 단 이 값은 화면 렌더(본문/CTA)에는 쓰지 않고,
+// detailState === 'ready' 일 때만 본문/CTA를 노출한다.
+const comp = computed(() => realComp.value ?? {
+  id: route.params.id, title: '', location: '-', dateRange: '-',
+  status: '', currentCount: 0, maxCount: 0, author: { nickname: '-', tripCount: 0 },
   period: '-', estimatedCost: '-', tags: [], intro: '',
   isOwner: false, pendingCount: 0, approvedCount: 0,
   isApplied: false, myApplicationId: null, myApplicationStatus: null, chatRoomId: null,
@@ -367,6 +426,12 @@ onMounted(async () => {
   await companionStore.getDetail(route.params.id)
   if (hasPlaces.value) ensureMap()
 })
+
+/** 상세 재시도 — 로드 실패 화면의 "다시 시도" 버튼용 */
+async function reloadDetail() {
+  await companionStore.getDetail(route.params.id)
+  if (hasPlaces.value) ensureMap()
+}
 
 onBeforeUnmount(() => {
   clearMarkers()
@@ -652,6 +717,11 @@ function share() {
   border-radius: var(--radius-xl);
   letter-spacing: -0.3px;
 }
+.cta-main:disabled {
+  background: var(--color-line);
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
 .cta-cancel {
   flex: 1;
   display: flex;
@@ -774,6 +844,59 @@ function share() {
   color: var(--color-ink);
   letter-spacing: -0.2px;
   padding: 1px 0 12px;
+}
+
+/* ── Detail load states (로딩/없음/오류) ──────────────────────────────────── */
+.detail-state {
+  padding: 24px 20px;
+}
+.detail-skeleton {
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  margin-bottom: 14px;
+  animation: comp-shimmer 1.2s infinite;
+}
+.detail-skeleton.w70 { width: 70%; }
+.detail-skeleton.w90 { width: 90%; }
+.detail-skeleton.w50 { width: 50%; }
+@keyframes comp-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.detail-state-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 64px 24px;
+  gap: 6px;
+}
+.detail-state-icon { margin-bottom: 6px; }
+.detail-state-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+.detail-state-sub {
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.detail-state-btn {
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 26px;
+  border-radius: var(--radius-full);
+  letter-spacing: -0.2px;
+}
+.detail-state-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Kakao CustomOverlay 라벨 — scoped 밖에서 렌더되므로 :deep 사용 */

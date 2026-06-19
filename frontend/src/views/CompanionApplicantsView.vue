@@ -21,6 +21,51 @@
     </div>
 
     <div class="scroll-content">
+      <!-- 로딩 -->
+      <div v-if="companionStore.applicantsLoading && companionStore.applicants.length === 0" class="app-state">
+        <div class="app-skeleton" />
+        <div class="app-skeleton" />
+        <div class="app-skeleton" />
+      </div>
+
+      <!-- 권한 없음(403) -->
+      <div v-else-if="companionStore.applicantsForbidden" class="app-state app-state-msg">
+        <div class="app-state-icon">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+        </div>
+        <p class="app-state-title">신청자 목록을 볼 수 없어요</p>
+        <p class="app-state-sub">이 모집글의 방장만 신청자를 관리할 수 있어요.</p>
+        <button class="app-state-btn" @click="$router.back()">돌아가기</button>
+      </div>
+
+      <!-- 로드 실패 -->
+      <div v-else-if="companionStore.applicantsError" class="app-state app-state-msg">
+        <div class="app-state-icon">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        </div>
+        <p class="app-state-title">신청자 목록을 불러오지 못했어요</p>
+        <p class="app-state-sub">{{ companionStore.applicantsError }}</p>
+        <button class="app-state-btn" :disabled="companionStore.applicantsLoading" @click="reload">
+          {{ companionStore.applicantsLoading ? '불러오는 중...' : '다시 시도' }}
+        </button>
+      </div>
+
+      <!-- 신청자 없음 -->
+      <div v-else-if="companionStore.applicants.length === 0" class="app-state app-state-msg">
+        <div class="app-state-icon">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
+          </svg>
+        </div>
+        <p class="app-state-title">아직 신청자가 없어요</p>
+        <p class="app-state-sub">새 신청이 들어오면 여기에 표시돼요.</p>
+      </div>
+
+      <template v-else>
       <div
         v-for="applicant in companionStore.applicants"
         :key="applicant.id"
@@ -50,6 +95,7 @@
           </button>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>
@@ -80,6 +126,11 @@ function metaText(applicant) {
 onMounted(async () => {
   await companionStore.getApplications(postId.value)
 })
+
+/** 신청자 목록 재시도 — 로드 실패 화면의 "다시 시도" 버튼용 */
+async function reload() {
+  await companionStore.getApplications(postId.value)
+}
 
 async function handleApprove(applicationId) {
   try {
@@ -139,6 +190,54 @@ async function handleReject(applicationId) {
 .summary-text strong { color: var(--color-ink); font-weight: 700; }
 
 .scroll-content { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+/* ── Load states (로딩/권한없음/오류/없음) ────────────────────────────────── */
+.app-state { padding: 16px 20px; }
+.app-skeleton {
+  height: 72px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  margin-bottom: 12px;
+  animation: app-shimmer 1.2s infinite;
+}
+@keyframes app-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.app-state-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 64px 24px;
+  gap: 6px;
+}
+.app-state-icon { margin-bottom: 6px; }
+.app-state-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+.app-state-sub {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.app-state-btn {
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 26px;
+  border-radius: var(--radius-full);
+  letter-spacing: -0.2px;
+}
+.app-state-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .applicant-card {
   padding: 16px 20px;

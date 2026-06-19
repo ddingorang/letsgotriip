@@ -16,9 +16,14 @@ public record PostSummaryResponse(
         int commentCount,
         PostCategory category,
         String thumbnailUrl,
+        boolean likedByMe,
         LocalDateTime createdAt
 ) {
     public static PostSummaryResponse of(Post post, int commentCount, String thumbnailUrl) {
+        return of(post, commentCount, thumbnailUrl, false);
+    }
+
+    public static PostSummaryResponse of(Post post, int commentCount, String thumbnailUrl, boolean likedByMe) {
         return new PostSummaryResponse(
                 post.getId(),
                 post.getTitle(),
@@ -29,6 +34,7 @@ public record PostSummaryResponse(
                 commentCount,
                 post.getCategory(),
                 thumbnailUrl,
+                likedByMe,
                 post.getCreatedAt()
         );
     }

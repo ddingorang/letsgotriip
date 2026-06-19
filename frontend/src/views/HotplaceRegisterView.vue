@@ -61,6 +61,7 @@
 
       <!-- Form -->
       <div class="form-section">
+        <div v-if="submitError" class="submit-error" role="alert">{{ submitError }}</div>
         <div class="loc-label">선택한 위치</div>
         <div class="loc-input-wrap">
           <span class="loc-text" :class="{ placeholder: !selectedAddress }">
@@ -134,6 +135,7 @@ const selectedLng = ref(126.570667)
 const categories = ['카페', '맛집', '명소', '포토존', '숙소']
 const form = ref({ name: '', category: '', description: '' })
 const submitting = ref(false)
+const submitError = ref('')
 
 const isValid = computed(() => form.value.name && form.value.category)
 
@@ -280,26 +282,14 @@ async function submit() {
     longitude: selectedLng.value,
   }
   submitting.value = true
+  submitError.value = ''
   try {
     await hotplaceStore.create(payload)
     hotplaceStore.registrationSuccess = true
     router.back()
   } catch (e) {
-    hotplaceStore.hotplaces.push({
-      id: Date.now(),
-      name: form.value.name,
-      category: form.value.category,
-      address: selectedAddress.value,
-      location: selectedAddress.value,
-      description: form.value.description,
-      lat: selectedLat.value,
-      lng: selectedLng.value,
-      rating: 0, ratingCount: 0, saveCount: 0,
-      registrant: '나', registeredAt: '방금',
-      intro: form.value.description,
-    })
-    hotplaceStore.registrationSuccess = true
-    router.back()
+    // 서버 저장 실패 시 가짜 저장/성공 위장 없이 에러를 노출하고 화면을 유지한다.
+    submitError.value = e?.response?.data?.message || e?.message || '등록에 실패했어요. 다시 시도해주세요.'
   } finally {
     submitting.value = false
   }
@@ -411,6 +401,17 @@ async function submit() {
 
 /* Form */
 .form-section { padding: 20px 16px; }
+
+.submit-error {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: #fdecea;
+  color: #c0392b;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.2px;
+}
 
 .loc-label {
   font-size: 11.5px; font-weight: 600;

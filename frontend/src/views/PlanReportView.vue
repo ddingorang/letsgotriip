@@ -218,6 +218,10 @@ const planId = route.params.id
 
 const applying = ref(false)
 
+// 동선 리포트(route-report) 로드 실패 여부 — 실패 시 FE 거리기반 재정렬로
+// 슬쩍 대체해 "적용 성공"으로 위장하지 않고, 적용 버튼을 막고 에러를 노출한다.
+const reportFailed = ref(false)
+
 // ── 예산 ─────────────────────────────────────────────────────────────────────
 const budget = ref(null)        // { planId, dayBudgets, totalEstimated, plannedBudget, difference, note }
 
@@ -229,9 +233,16 @@ const shareCopied = ref(false)
 onMounted(async () => {
   try {
     await planStore.loadPlan(planId)
-    await planStore.loadRouteReport(planId)   // 좌표 기반 거리·추천순서 (BE Haversine)
   } catch {
     // error shown via planStore.error
+  }
+  // 동선 리포트는 별도 try로 분리 — 실패를 삼켜 FE Haversine 재정렬을
+  // "거리기반 적용"으로 위장하지 않도록 실패 상태(reportFailed)를 기록한다.
+  try {
+    await planStore.loadRouteReport(planId)   // 좌표 기반 거리·추천순서 (BE Haversine)
+    reportFailed.value = false
+  } catch {
+    reportFailed.value = true
   }
   // 예산은 별도로(실패해도 리포트 화면에는 영향 없음)
   try {
@@ -473,13 +484,18 @@ function canOptimize(places) {
 /** FE 폴백으로라도 재정렬 가능한 날이 하나라도 있는지 */
 const hasOptimizable = computed(() => days.value.some((d) => canOptimize(d.places)))
 
-// 서버 추천이 있거나, 서버 리포트가 없더라도 FE로 재정렬할 수 있으면 적용 버튼 활성
+// 서버 추천이 있거나, 서버 리포트가 없더라도 FE로 재정렬할 수 있으면 적용 버튼 활성.
+// 단, 리포트 로드가 실패한 경우(reportFailed)에는 임의 저장을 막아 비활성.
 const canApply = computed(() => {
+  if (reportFailed.value) return false
   if (report.value) return hasSuggestion.value
   return hasOptimizable.value
 })
 
 const optNote = computed(() => {
+  if (reportFailed.value) {
+    return planStore.error ?? '동선 리포트를 불러오지 못해 적용할 수 없어요. 잠시 후 다시 시도해 주세요.'
+  }
   if (report.value) {
     return hasSuggestion.value
       ? '더 짧은 동선을 찾았어요. 아래에서 적용해 보세요.'
@@ -490,6 +506,7 @@ const optNote = computed(() => {
 
 const applyLabel = computed(() => {
   if (applying.value) return '적용 중...'
+  if (reportFailed.value) return '리포트를 불러올 수 없어 적용 불가'
   if (report.value) return hasSuggestion.value ? '대체 동선 적용' : '확인'
   return hasOptimizable.value ? '거리 기반 동선 적용' : '좌표가 없어 적용 불가'
 })
@@ -531,6 +548,8 @@ function reorderByDistance(places) {
  */
 async function applyRoute() {
   if (applying.value) return
+  // 리포트 로드 실패 시에는 임의 재정렬·저장 금지(성공 위장 방지)
+  if (reportFailed.value) return
 
   // 서버 리포트가 있는 경우
   if (report.value) {

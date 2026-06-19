@@ -97,12 +97,19 @@ export const useAssistantStore = defineStore('assistant', () => {
       // 서버가 발급/유지하는 conversationId 보존(이벤트를 놓친 경우 대비)
       if (result?.conversationId) conversationId.value = result.conversationId
 
-      // 토큰이 하나도 안 온 경우(빈 응답) — 버블이 없으면 누적 결과로 채운다.
+      const reply = result?.reply ?? ''
+      // 스트림이 정상 종료(HTTP 200)됐지만 토큰이 하나도 없는 경우 = 서버가 event:error를
+      // 보내고 done으로 마무리한 상황(BE AssistantController). 이를 빈 성공으로 위장하지 않고
+      // 실패로 노출한다. (정상 응답은 항상 최소 1개 이상의 토큰을 동반한다.)
+      if (!assistantMsg && !reply) {
+        error.value = '답변을 받지 못했어요. 잠시 후 다시 시도해 주세요.'
+        return
+      }
+      // 토큰이 하나도 안 온 경우(버블 미생성) — 누적 결과로 채운다.
       if (!assistantMsg) {
-        const reply = result?.reply ?? ''
-        if (reply) pushMessage('assistant', reply)
-      } else if (!assistantMsg.content && result?.reply) {
-        assistantMsg.content = result.reply
+        pushMessage('assistant', reply)
+      } else if (!assistantMsg.content && reply) {
+        assistantMsg.content = reply
       }
     } catch (e) {
       // 사용자가 직접 취소한 경우: 조용히 종료(부분 응답은 그대로 유지).
@@ -119,6 +126,11 @@ export const useAssistantStore = defineStore('assistant', () => {
           })
           if (data?.conversationId) conversationId.value = data.conversationId
           const reply = data?.reply ?? ''
+          // 폴백마저 빈 응답이면 빈 말풍선으로 위장하지 않고 실패를 노출한다.
+          if (!reply) {
+            error.value = '답변을 받지 못했어요. 잠시 후 다시 시도해 주세요.'
+            return
+          }
           pushMessage('assistant', reply)
           return
         } catch (fallbackErr) {

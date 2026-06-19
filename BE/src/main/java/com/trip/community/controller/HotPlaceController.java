@@ -33,8 +33,12 @@ public class HotPlaceController {
     }
 
     @GetMapping("/{hotPlaceId}")
-    public ResponseEntity<HotPlaceResponse> getHotPlace(@PathVariable Long hotPlaceId) {
-        return ResponseEntity.ok(hotPlaceService.getHotPlace(hotPlaceId));
+    public ResponseEntity<HotPlaceResponse> getHotPlace(
+            @PathVariable Long hotPlaceId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        Long userId = principal != null ? principal.userId() : null;
+        return ResponseEntity.ok(hotPlaceService.getHotPlace(hotPlaceId, userId));
     }
 
     // ─── 등록 신청 (회원) ─────────────────────────────────────

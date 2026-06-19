@@ -67,21 +67,33 @@ public class ReviewService {
         return ReviewResponse.from(review, resolveNickname(userId));
     }
 
-    /** 리뷰 수정 — 소유자 검증 */
+    /** 리뷰 수정 — 소유자 + 경로 contentId 일치 검증 */
     @Transactional
-    public ReviewResponse update(Long userId, Long reviewId, ReviewUpdateRequest request) {
+    public ReviewResponse update(Long userId, String contentId, Long reviewId, ReviewUpdateRequest request) {
         final AttractionReview review = reviewRepository.findByIdAndUserId(reviewId, userId)
                 .orElseThrow(() -> new GeneralException(ResponseCode._FORBIDDEN));
+        verifyContent(review, contentId);
         review.update(request.rating(), request.content());
         return ReviewResponse.from(review, resolveNickname(userId));
     }
 
-    /** 리뷰 삭제 — 소유자 검증 */
+    /** 리뷰 삭제 — 소유자 + 경로 contentId 일치 검증 */
     @Transactional
-    public void delete(Long userId, Long reviewId) {
+    public void delete(Long userId, String contentId, Long reviewId) {
         final AttractionReview review = reviewRepository.findByIdAndUserId(reviewId, userId)
                 .orElseThrow(() -> new GeneralException(ResponseCode._FORBIDDEN));
+        verifyContent(review, contentId);
         reviewRepository.delete(review);
+    }
+
+    /**
+     * 경로 contentId가 리뷰의 contentId와 일치하는지 검증.
+     * 소유자라도 다른 관광지 경로로 자기 리뷰를 조작하는 것을 막는다.
+     */
+    private void verifyContent(AttractionReview review, String contentId) {
+        if (!review.getContentId().equals(contentId)) {
+            throw new GeneralException(ResponseCode._BAD_REQUEST);
+        }
     }
 
     private String resolveNickname(Long userId) {

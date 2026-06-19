@@ -12,6 +12,14 @@ export const useCompanionStore = defineStore('companion', () => {
   const messages = ref({})
   const loading = ref(false)
   const error = ref(null)
+  // 상세 로드 상태 — 실패/404를 가짜 "동행 모집" 객체로 위장하지 않도록 분리한다.
+  const detailLoading = ref(false)
+  const detailError = ref(null)
+  const detailNotFound = ref(false)
+  // 신청자 목록 로드 상태 — 403/실패를 빈 목록으로 위장하지 않도록 분리한다.
+  const applicantsLoading = ref(false)
+  const applicantsError = ref(null)
+  const applicantsForbidden = ref(false)
 
   // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -112,7 +120,10 @@ export const useCompanionStore = defineStore('companion', () => {
 
   async function getDetail(id) {
     loading.value = true
+    detailLoading.value = true
     error.value = null
+    detailError.value = null
+    detailNotFound.value = false
     try {
       const { data } = await companionApi.getDetail(id)
       const normalized = normalizeItem(data)
@@ -121,10 +132,17 @@ export const useCompanionStore = defineStore('companion', () => {
       else companions.value.unshift(normalized)
       return normalized
     } catch (e) {
-      error.value = e.response?.data?.message ?? e.message ?? '상세 정보를 불러오지 못했어요.'
+      const status = e.response?.status
+      const msg = e.response?.data?.message ?? e.message ?? '상세 정보를 불러오지 못했어요.'
+      error.value = msg
+      // 404는 "없는 글", 그 외는 일반 오류로 구분해 뷰에서 화면을 전환한다.
+      detailNotFound.value = status === 404
+      detailError.value = status === 404 ? null : msg
+      // 실패 시 가짜 fallback 객체를 만들지 않는다. 캐시에 있으면 그 값만 반환.
       return companions.value.find(c => c.id === Number(id)) ?? null
     } finally {
       loading.value = false
+      detailLoading.value = false
     }
   }
 
@@ -198,15 +216,26 @@ export const useCompanionStore = defineStore('companion', () => {
 
   async function getApplications(postId) {
     loading.value = true
+    applicantsLoading.value = true
     error.value = null
+    applicantsError.value = null
+    applicantsForbidden.value = false
     try {
       const { data } = await http.get(`/api/companion/posts/${postId}/applications`)
       const list = Array.isArray(data) ? data : (data?.content ?? [])
       applicants.value = list.map(normalizeApplicant)
     } catch (e) {
-      error.value = e.response?.data?.message ?? e.message ?? '신청자 목록을 불러오지 못했어요.'
+      const status = e.response?.status
+      const msg = e.response?.data?.message ?? e.message ?? '신청자 목록을 불러오지 못했어요.'
+      error.value = msg
+      // 403(방장 아님 등 권한 없음)은 별도 안내, 그 외는 일반 오류로 노출.
+      // 실패를 빈 목록으로 위장하지 않도록 기존 목록을 비우고 상태를 기록한다.
+      applicants.value = []
+      applicantsForbidden.value = status === 403
+      applicantsError.value = status === 403 ? null : msg
     } finally {
       loading.value = false
+      applicantsLoading.value = false
     }
   }
 
@@ -255,6 +284,8 @@ export const useCompanionStore = defineStore('companion', () => {
   return {
     myRooms, companions, applicants, messages,
     loading, error,
+    detailLoading, detailError, detailNotFound,
+    applicantsLoading, applicantsError, applicantsForbidden,
     getList, getDetail, create, join, cancel,
     fetchMyRooms, fetchCompanions,
     getApplications, approveApplicant, rejectApplicant, getById,
