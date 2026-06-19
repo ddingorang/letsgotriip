@@ -379,9 +379,10 @@ export const assistantApi = {
         if (!line || line.startsWith(':')) continue
         const idx = line.indexOf(':')
         const field = idx === -1 ? line : line.slice(0, idx)
-        // 표준 SSE: 콜론 뒤 선행 공백 1개 제거
-        let value = idx === -1 ? '' : line.slice(idx + 1)
-        if (value.startsWith(' ')) value = value.slice(1)
+        // data: 뒤 선행 공백을 제거하지 않는다 — BE(Spring)가 data:<token> 형태로 토큰을
+        // 그대로 보내므로, 토큰의 의미있는 선행 공백(단어 사이 띄어쓰기)이 제거되면
+        // 응답에서 띄어쓰기가 모두 사라진다.
+        const value = idx === -1 ? '' : line.slice(idx + 1)
         if (field === 'event') eventName = value
         else if (field === 'data') dataLines.push(value)
       }
