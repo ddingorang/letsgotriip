@@ -144,11 +144,16 @@ public class DocumentService {
         TripDocument document = documentRepository.findByIdAndUserId(documentId, userId)
                 .orElseThrow(() -> new GeneralException(ResponseCode._FORBIDDEN));
 
-        // RAG 벡터 인덱스에서도 제거 → 삭제 후 챗봇이 더 이상 그 자료를 참고하지 않음
+        // RAG 벡터 인덱스에서 먼저 제거한다. 벡터 삭제가 성공해야만 DB/파일 삭제를 진행한다.
+        // 벡터 삭제 실패를 삼키고 DB/파일만 지우면, 삭제된 문서의 청크가 RAG에 잔존해
+        // 검색·답변으로 노출될 수 있다(PII 유출). 실패 시 예외를 전파해 @Transactional이
+        // DB 삭제를 롤백하고, 파일도 아직 지우지 않은 상태를 유지하도록 한다.
         try {
             ingestionService.deleteByDoc("doc:" + documentId);
         } catch (Exception e) {
-            log.warn("Failed to delete vectors for document {}", documentId, e);
+            log.error("Failed to delete vectors for document {} — aborting delete to avoid RAG residue",
+                    documentId, e);
+            throw new GeneralException(ResponseCode._INTERNAL_SERVER_ERROR, e);
         }
         deleteStoredFile(document.getStoredPath());
         documentRepository.delete(document);

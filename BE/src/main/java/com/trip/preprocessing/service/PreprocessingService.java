@@ -49,7 +49,10 @@ public class PreprocessingService {
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\\.)+[A-Za-z]{2,63}");
 
-    @Transactional
+    // rollbackFor: processData가 던지는 checked IOException(파일 읽기 실패 등)에도
+    // 트랜잭션이 롤백되도록 한다. 기본값은 unchecked만 롤백하므로, rawText가 채워지지
+    // 않은(마스킹 전) 레코드가 커밋되어 잔존하는 것을 막는다.
+    @Transactional(rollbackFor = Exception.class)
     public Long uploadAndProcess(Long userId, AnalysisDataType dataType, MultipartFile file) throws IOException {
         Path directory = Paths.get(uploadDir);
         if (!Files.exists(directory)) {
@@ -60,18 +63,34 @@ public class PreprocessingService {
         Path filePath = directory.resolve(fileName);
         file.transferTo(filePath.toFile());
 
-        UserAnalysisData analysisData = UserAnalysisData.builder()
-                .userId(userId)
-                .dataType(dataType)
-                .originalFileName(file.getOriginalFilename())
-                .storagePath(filePath.toString())
-                .build();
+        // PII 정합: STT/카톡 원본 파일에는 통화/대화 원문(전화번호·주민번호 등)이 들어 있다.
+        // 처리(전사/마스킹) 후에는 DB에 마스킹된 rawText만 유지하고 원본 임시 파일은
+        // 성공·실패 여부와 무관하게 항상 삭제해 디스크에 PII 원문이 잔존하지 않게 한다.
+        try {
+            UserAnalysisData analysisData = UserAnalysisData.builder()
+                    .userId(userId)
+                    .dataType(dataType)
+                    .originalFileName(file.getOriginalFilename())
+                    .storagePath(filePath.toString())
+                    .build();
 
-        userAnalysisDataRepository.save(analysisData);
+            userAnalysisDataRepository.save(analysisData);
 
-        processData(analysisData, filePath.toFile());
+            processData(analysisData, filePath.toFile());
 
-        return analysisData.getId();
+            return analysisData.getId();
+        } finally {
+            deleteTempFile(filePath);
+        }
+    }
+
+    /** 처리 완료(성공·실패) 후 원본 임시 업로드 파일을 삭제한다(PII 원문 디스크 잔존 방지). */
+    private void deleteTempFile(Path filePath) {
+        try {
+            Files.deleteIfExists(filePath);
+        } catch (IOException e) {
+            log.warn("임시 업로드 파일 삭제 실패 — path={}, error={}", filePath, e.getMessage());
+        }
     }
 
     private void processData(UserAnalysisData analysisData, File file) throws IOException {
@@ -79,6 +98,8 @@ public class PreprocessingService {
             String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
             analysisData.updateRawText(maskPii(content));
         } else if (analysisData.getDataType() == AnalysisDataType.VOICE_CALL) {
+            // NOTE(범위 밖): Whisper STT 호출이 @Transactional 안에서 동기 실행돼 DB 커넥션을
+            // 외부 API 시간만큼 점유한다. 외부 호출을 트랜잭션 밖으로 빼는 리팩터는 별도 과제.
             String sttResult = sttManager.convertSpeechToText(file);
             // 전사 결과가 null/blank이면 빈 전사 → 성공 저장하지 않고 실패로 처리
             // (convertSpeechToText가 예외 대신 빈 값을 반환하는 구현을 대비한 방어)

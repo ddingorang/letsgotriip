@@ -245,18 +245,22 @@ public class AuthService {
     @Transactional
     public void resetPassword(String token, String newPassword) {
 
-        final PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new UserHandler(ResponseCode._BAD_REQUEST));
-
-        // 이미 사용했거나 만료된 토큰은 무효
-        if (resetToken.isUsed() || resetToken.isExpired(LocalDateTime.now())) {
+        // single-use 토큰을 원자적으로 소비(used=false && 미만료 -> used=true).
+        // 조건부 UPDATE 가 정확히 1건일 때만 통과시켜 동시 요청 레이스를 차단한다.
+        // (기존 read-then-check 방식은 두 요청이 모두 used=false 를 읽어 둘 다 성공할 수 있었다)
+        final int affected = passwordResetTokenRepository.consumeToken(token, LocalDateTime.now());
+        if (affected != 1) {
+            // 존재하지 않거나 이미 사용/만료된 토큰
             throw new UserHandler(ResponseCode._BAD_REQUEST);
         }
+
+        // 소비에 성공한 토큰에서 대상 사용자 식별
+        final PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
+                .orElseThrow(() -> new UserHandler(ResponseCode._BAD_REQUEST));
 
         final User user = userRepository.findById(resetToken.getUserId())
                 .orElseThrow(() -> new UserHandler(ResponseCode.USER_NOT_FOUND));
 
         user.updatePassword(passwordEncoder.encode(newPassword));
-        resetToken.markUsed();
     }
 }

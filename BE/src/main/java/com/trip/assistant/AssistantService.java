@@ -32,11 +32,14 @@ import reactor.core.publisher.Flux;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -75,6 +78,14 @@ public class AssistantService {
 
     private static final int TOP_K = 4;
 
+    /** 동기 LLM 워치독 워커 풀 상한. 동시 LLM 호출이 이 수를 넘으면 큐에서 대기한다. */
+    private static final int CALL_POOL_SIZE = 8;
+    /** 워치독 워커 풀 대기 큐 상한. 풀·큐가 모두 가득 차면 호출은 즉시 거절된다(과부하 차단). */
+    private static final int CALL_QUEUE_CAPACITY = 64;
+
+    /** conversationId 최대 허용 길이(메모리 키 폭주·비정상 입력 방지). */
+    private static final int MAX_CONVERSATION_ID_LENGTH = 128;
+
     /** 어시스턴트 LLM 호출 전체 상한(초). GMS/OpenAI 무응답 시 무한 대기를 방지한다. */
     private static final long CALL_TIMEOUT_SECONDS = 60;
 
@@ -95,14 +106,32 @@ public class AssistantService {
     private final ChecklistService checklistService;
 
     /**
-     * LLM 호출 워치독용 단일 워커. blocking 한 ChatClient 호출을 별도 스레드에서 실행하고
+     * LLM 호출 워치독용 워커 풀. blocking 한 ChatClient 호출을 별도 스레드에서 실행하고
      * 호출 스레드는 {@link #CALL_TIMEOUT_SECONDS} 까지만 대기하여 무한 블로킹을 차단한다.
+     *
+     * <p>무제한 풀(newCachedThreadPool)은 대량 요청 시 스레드를 무한 생성해 OOM/포화를 유발하므로,
+     * 코어=최대={@link #CALL_POOL_SIZE} 의 경계 풀 + 상한 큐({@link #CALL_QUEUE_CAPACITY})로 교체한다.
+     * 풀·큐가 모두 가득 차면 {@link RejectedExecutionException}이 발생하고 502로 래핑된다.</p>
      */
-    private final ExecutorService callExecutor = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "assistant-llm-call");
-        t.setDaemon(true);
-        return t;
-    });
+    private final ExecutorService callExecutor = new ThreadPoolExecutor(
+            CALL_POOL_SIZE,
+            CALL_POOL_SIZE,
+            60L, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(CALL_QUEUE_CAPACITY),
+            new java.util.concurrent.ThreadFactory() {
+                private final AtomicLong seq = new AtomicLong();
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "assistant-llm-call-" + seq.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
+
+    {
+        // 유휴 코어 스레드도 회수해 평상시 자원 점유를 줄인다(부하 시 다시 생성).
+        ((ThreadPoolExecutor) callExecutor).allowCoreThreadTimeOut(true);
+    }
 
     @PreDestroy
     void shutdown() {
@@ -117,12 +146,22 @@ public class AssistantService {
      * @param message        사용자 입력
      */
     public String chat(Long userId, String conversationId, String message) {
+        // conversationId 형식/길이를 스레드 제출 전에 먼저 검증(잘못된 요청을 빨리 거절).
+        validateConversationId(conversationId);
+
         // ChatClient.call()은 동기·블로킹이며 HTTP read timeout이 없으면 무한 대기할 수 있다.
         // 별도 스레드에서 실행하고 호출 상한(CALL_TIMEOUT_SECONDS)을 넘기면 중단·예외 처리한다.
-        Future<String> future = callExecutor.submit(() ->
-                buildPrompt(userId, conversationId, message)
-                        .call()
-                        .content());
+        final Future<String> future;
+        try {
+            future = callExecutor.submit(() ->
+                    buildPrompt(userId, conversationId, message)
+                            .call()
+                            .content());
+        } catch (RejectedExecutionException e) {
+            // 풀·큐 포화 — 과부하. 502로 래핑해 클라가 재시도하도록 안내한다.
+            log.warn("어시스턴트 LLM 호출 풀 포화 — 요청 거절, conversationId={}", conversationId);
+            throw new GeneralException(ResponseCode.EXTERNAL_API_ERROR);
+        }
 
         try {
             return future.get(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -136,9 +175,11 @@ public class AssistantService {
             throw new GeneralException(ResponseCode.EXTERNAL_API_ERROR);
         } catch (java.util.concurrent.ExecutionException e) {
             Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException re) {
-                throw re;
+            // 우리 도메인 예외(검증/소유권 등)는 의도된 상태코드를 보존해 그대로 전파.
+            if (cause instanceof GeneralException ge) {
+                throw ge;
             }
+            // 그 외(LLM/외부 API 호출 실패 등)는 500으로 새는 대신 EXTERNAL_API_ERROR(502)로 래핑.
             log.warn("어시스턴트 LLM 호출 실패 — error={}", cause == null ? e.getMessage() : cause.getMessage());
             throw new GeneralException(ResponseCode.EXTERNAL_API_ERROR);
         }
@@ -148,7 +189,9 @@ public class AssistantService {
      * {@link #chat}와 동일한 구성으로 응답 토큰을 SSE 스트리밍한다.
      *
      * <p>동기 경로의 워치독(별도 스레드 + {@code Future.get(timeout)})은 리액티브 스트림에는
-     * 적용할 수 없으므로, 반환 Flux에 {@link #STREAM_TIMEOUT} read timeout과 오류 폴백을 건다.
+     * 적용할 수 없으므로, 반환 Flux에 {@link #STREAM_TIMEOUT} read timeout을 건다.
+     * 스트림 도중 오류는 토큰으로 위장하지 않고 {@link GeneralException}으로 매핑해 전파하며,
+     * 컨트롤러가 이를 {@code event:error} SSE로 구분 전송한다.
      * 빈 토큰(델타가 비어있는 청크)은 필터링해 불필요한 SSE 이벤트를 줄인다.</p>
      *
      * @param userId         인증 사용자 — RAG 검색 격리 및 도구 컨텍스트
@@ -157,12 +200,19 @@ public class AssistantService {
      * @return 응답 텍스트 토큰 스트림
      */
     public Flux<String> chatStream(Long userId, String conversationId, String message) {
+        // 시작 전 검증 실패(잘못된 conversationId)는 예외로 전파해 컨트롤러가 일반 오류 응답을
+        // 내도록 한다(스트림 시작 전이라 FE가 비스트리밍으로 폴백 가능). buildPrompt를 호출하기
+        // 전에 검증해, 검증 예외가 리액티브 onError 토큰으로 위장되지 않게 한다.
+        validateConversationId(conversationId);
+
         return buildPrompt(userId, conversationId, message)
                 .stream()
                 .content()
                 .filter(token -> token != null && !token.isEmpty())
                 .timeout(STREAM_TIMEOUT)
-                .onErrorResume(e -> {
+                .onErrorMap(e -> {
+                    // 스트림 도중 오류는 토큰으로 위장하지 않는다. 로깅 후 그대로 전파해
+                    // 컨트롤러가 event:error SSE로 구분 전송하도록 한다.
                     if (e instanceof java.util.concurrent.TimeoutException) {
                         log.warn("어시스턴트 스트리밍 타임아웃 — {}s 초과, conversationId={}",
                                 CALL_TIMEOUT_SECONDS, conversationId);
@@ -170,8 +220,10 @@ public class AssistantService {
                         log.warn("어시스턴트 스트리밍 실패 — conversationId={}, error={}",
                                 conversationId, e.getMessage());
                     }
-                    // 스트림 도중 오류는 연결을 끊는 대신 사용자에게 보일 안내 토큰으로 종료한다.
-                    return Flux.just("\n[응답 생성 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.]");
+                    if (e instanceof GeneralException) {
+                        return e; // 도메인 예외는 상태코드 보존
+                    }
+                    return new GeneralException(ResponseCode.EXTERNAL_API_ERROR);
                 });
     }
 
@@ -190,8 +242,11 @@ public class AssistantService {
                 .searchRequest(searchRequest)
                 .build();
 
+        // 메모리 키를 "userId:conversationId"로 네임스페이스화한다.
+        // 클라가 보낸 conversationId를 그대로 키로 쓰면 다른 사용자가 같은 ID로
+        // 대화 기억을 공유·탈취할 수 있으므로 반드시 userId로 격리한다.
         MessageChatMemoryAdvisor memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory)
-                .conversationId(conversationId)
+                .conversationId(memoryKey(userId, conversationId))
                 .build();
 
         return chatClientBuilder.build()
@@ -200,6 +255,28 @@ public class AssistantService {
                 .user(message)
                 .advisors(qaAdvisor, memoryAdvisor)
                 .tools(new AssistantTools(userId));
+    }
+
+    /**
+     * 대화 기억 저장소 키를 사용자별로 격리한다. 반환 형식은 {@code "<userId>:<conversationId>"}.
+     * conversationId는 {@link #validateConversationId} 로 형식·길이를 검증한 값만 사용한다.
+     */
+    private String memoryKey(Long userId, String conversationId) {
+        return userId + ":" + validateConversationId(conversationId);
+    }
+
+    /**
+     * conversationId 형식/길이 검증. 컨트롤러에서 발급한 UUID가 정상 경로지만, 클라가 임의 값을
+     * 보낼 수 있으므로 서버에서 한 번 더 방어한다. 허용: 영문/숫자/하이픈/언더스코어,
+     * 1~{@link #MAX_CONVERSATION_ID_LENGTH}자. 위반 시 400.
+     */
+    private String validateConversationId(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()
+                || conversationId.length() > MAX_CONVERSATION_ID_LENGTH
+                || !conversationId.matches("[A-Za-z0-9_-]+")) {
+            throw new GeneralException(ResponseCode._BAD_REQUEST);
+        }
+        return conversationId;
     }
 
     /**
@@ -322,6 +399,20 @@ public class AssistantService {
                         .toList();
                 if (titles.isEmpty()) {
                     return "체크리스트로 만들 항목이 없습니다. 추가할 항목을 알려 주세요.";
+                }
+
+                // planId가 지정된 경우, 현재 사용자가 그 계획의 소유자인지 먼저 검증한다.
+                // ChecklistService.create는 planId 소유권을 확인하지 않으므로, 검증 없이 저장하면
+                // 남의 계획 ID로 체크리스트를 묶을 수 있다. getDetail은 비소유/부재 시 예외를 던진다.
+                if (planId != null) {
+                    try {
+                        planService.getDetail(userId, planId);
+                    } catch (GeneralException ge) {
+                        log.warn("도구 createChecklistFromText — planId 소유 검증 실패: userId={}, planId={}, code={}",
+                                userId, planId, ge.getErrorCode());
+                        return "지정한 여행 계획(planId=" + planId + ")을 찾을 수 없거나 접근 권한이 없어요. "
+                                + "본인 계획 ID인지 확인해 주세요.";
+                    }
                 }
 
                 List<String> created = new java.util.ArrayList<>();

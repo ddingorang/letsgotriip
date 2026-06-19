@@ -61,18 +61,19 @@ public class IngestionService {
     }
 
     /**
-     * 특정 문서의 모든 청크를 삭제한다(재인덱싱 전 정리용).
+     * 특정 문서의 모든 청크를 삭제한다(재인덱싱 전 정리용·문서 삭제 정합용).
      * 메타데이터 docId가 tag 필드로 인덱싱되어 있어 필터 삭제가 가능하다.
+     *
+     * <p>PII 정합 주의: 벡터 삭제 실패를 조용히 삼키면(과거 구현) 삭제된 문서가 RAG에
+     * 잔존해 검색·답변으로 노출될 수 있다(PII 유출). 따라서 실패를 삼키지 않고 예외를
+     * 그대로 전파해 호출자(예: DocumentService.delete)가 DB/파일 삭제를 진행하지 않고
+     * 롤백/에러 응답하도록 한다.</p>
      */
     public void deleteByDoc(String docId) {
-        try {
-            FilterExpressionBuilder b = new FilterExpressionBuilder();
-            Filter.Expression expr = b.eq("docId", tagSafe(docId)).build();
-            vectorStore.delete(expr);
-            log.info("RAG 문서 삭제 — docId={}", docId);
-        } catch (Exception e) {
-            log.warn("RAG 문서 삭제 실패 — docId={}, error={}", docId, e.getMessage());
-        }
+        FilterExpressionBuilder b = new FilterExpressionBuilder();
+        Filter.Expression expr = b.eq("docId", tagSafe(docId)).build();
+        vectorStore.delete(expr);
+        log.info("RAG 문서 삭제 — docId={}", docId);
     }
 
     /**

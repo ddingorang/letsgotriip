@@ -67,13 +67,6 @@ public class AssistantController {
                         .data(conversationId)
                         .build());
 
-        Flux<ServerSentEvent<String>> tokenEvents = assistantService
-                .chatStream(principal.userId(), conversationId, request.message())
-                .map(token -> ServerSentEvent.<String>builder()
-                        .event("token")
-                        .data(token)
-                        .build());
-
         // 종료 이벤트: FE가 스트림 완료를 명확히 인지하도록 done 이벤트를 덧붙인다.
         Flux<ServerSentEvent<String>> doneEvent = Flux.just(
                 ServerSentEvent.<String>builder()
@@ -81,6 +74,21 @@ public class AssistantController {
                         .data("")
                         .build());
 
+        Flux<ServerSentEvent<String>> tokenEvents = assistantService
+                .chatStream(principal.userId(), conversationId, request.message())
+                .map(token -> ServerSentEvent.<String>builder()
+                        .event("token")
+                        .data(token)
+                        .build())
+                // 스트림 도중 오류는 token으로 위장하지 않고 event:error로 구분 전송한 뒤 정상 종료한다.
+                // (연결을 끊지 않으므로 FE가 오류를 token과 분리해 처리할 수 있고, 뒤따르는 done으로 마무리된다.)
+                .onErrorResume(e -> Flux.just(
+                        ServerSentEvent.<String>builder()
+                                .event("error")
+                                .data("응답 생성 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.")
+                                .build()));
+
+        // 성공·오류 모두 tokenEvents가 정상 완료되므로 done은 정확히 한 번 전송된다.
         return Flux.concat(idEvent, tokenEvents, doneEvent);
     }
 }
