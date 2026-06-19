@@ -31,7 +31,11 @@
           <div
             v-for="n in store.notifications"
             :key="n.id"
-            :class="['notif-row', { unread: !n.read }]"
+            :class="['notif-row', { unread: !n.read, clickable: !!n.link }]"
+            role="button"
+            tabindex="0"
+            @click="openNotification(n)"
+            @keydown.enter="openNotification(n)"
           >
             <span class="notif-icon" :class="`icon-${n.type}`" v-html="iconFor(n.type)" />
             <div class="notif-body">
@@ -99,6 +103,14 @@ function goBack() {
 
 function toggle(id) {
   openId.value = openId.value === id ? null : id
+}
+
+/** 알림 클릭 → 읽음 처리 후 해당 위치(link)로 이동 */
+function openNotification(n) {
+  store.markRead(n.id)
+  if (n.link && n.link !== '#') {
+    router.push(n.link)
+  }
 }
 
 function catClass(category) {
@@ -249,6 +261,15 @@ onUnmounted(() => {
 
 .notif-row.unread {
   background: var(--color-peach-light);
+}
+
+.notif-row.clickable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.notif-row.clickable:active {
+  background: var(--color-surface);
 }
 
 .notif-icon {

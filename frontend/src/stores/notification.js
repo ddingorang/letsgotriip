@@ -127,6 +127,18 @@ export const useNotificationStore = defineStore('notification', () => {
     }
   }
 
+  /** 단건 읽음 처리 — 알림 클릭(위치 이동) 시 호출. 로컬 즉시 반영 + 서버 동기화 */
+  async function markRead(id) {
+    const n = notifications.value.find((x) => String(x.id) === String(id))
+    if (!n || n.read) return
+    n.read = true
+    try {
+      await notificationApi.markRead(id)
+    } catch {
+      // 미로그인/오류 — 로컬 상태만 유지
+    }
+  }
+
   function noticeById(id) {
     return notices.value.find((n) => String(n.id) === String(id)) ?? null
   }
@@ -179,6 +191,7 @@ export const useNotificationStore = defineStore('notification', () => {
     load,
     refresh,
     markAllRead,
+    markRead,
     subscribe,
     unsubscribe,
     noticeById,
