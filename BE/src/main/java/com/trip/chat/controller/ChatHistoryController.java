@@ -1,7 +1,9 @@
 // Created: 2026-06-19
 package com.trip.chat.controller;
 
+import com.trip.chat.dto.ChatRoomParticipantsResponse;
 import com.trip.chat.dto.MessageResponseDto;
+import com.trip.chat.entity.ChatRoomMembership;
 import com.trip.chat.repository.ChatRoomMembershipRepository;
 import com.trip.chat.service.ChatService;
 import com.trip.global.error.GeneralException;
@@ -11,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -40,14 +43,40 @@ public class ChatHistoryController {
             @PathVariable Long chatRoomId,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        // 방 멤버만 히스토리 조회 가능
-        boolean isMember = chatRoomMembershipRepository
+        // 방의 활성 멤버(나가지 않았고 강퇴되지 않음)만 히스토리 조회 가능
+        boolean isActiveMember = chatRoomMembershipRepository
                 .findByChatRoomId(chatRoomId).stream()
-                .anyMatch(m -> m.getUserId().equals(principal.userId()));
-        if (!isMember) {
+                .filter(m -> m.getUserId().equals(principal.userId()))
+                .anyMatch(ChatRoomMembership::isActiveMember);
+        if (!isActiveMember) {
             throw new GeneralException(ResponseCode._FORBIDDEN);
         }
 
         return ResponseEntity.ok(chatService.getHistory(chatRoomId));
+    }
+
+    /**
+     * 채팅방 참여자(활성 멤버) 목록/인원수.
+     * 헤더 ⋮ 메뉴의 "참여자" 항목에서 사용.
+     */
+    @GetMapping("/{chatRoomId}/participants")
+    public ResponseEntity<ChatRoomParticipantsResponse> getParticipants(
+            @PathVariable Long chatRoomId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(chatService.getParticipants(chatRoomId, principal.userId()));
+    }
+
+    /**
+     * 채팅방 나가기 — 본인 멤버십을 소프트 탈퇴(leftAt 설정) 처리.
+     * 방장은 나갈 수 없음(400).
+     */
+    @DeleteMapping("/{chatRoomId}/membership")
+    public ResponseEntity<Void> leaveRoom(
+            @PathVariable Long chatRoomId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        chatService.leaveRoom(chatRoomId, principal.userId());
+        return ResponseEntity.noContent().build();
     }
 }

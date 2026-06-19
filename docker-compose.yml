@@ -40,6 +40,15 @@ services:
     volumes:
       - redis-data:/data
 
+  # RAG 벡터 저장소 (RediSearch 포함) — 캐시용 redis와 별도
+  redis-vector:
+    image: redis/redis-stack:latest
+    container_name: trip-redis-vector
+    ports:
+      - "6380:6379"   # 호스트 디버그용 (내부는 redis-vector:6379)
+    volumes:
+      - redis-vector-data:/data
+
   rabbitmq:
     image: rabbitmq:3.12-management
     container_name: trip-rabbitmq
@@ -74,6 +83,8 @@ services:
         condition: service_started
       redis:
         condition: service_started
+      redis-vector:
+        condition: service_started
     ports:
       - "9090:9090"
     environment:
@@ -91,6 +102,9 @@ services:
       # Redis / MongoDB
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/trip_chat
+      # RAG 벡터 저장소(redis-stack)
+      VECTOR_REDIS_HOST: redis-vector
+      VECTOR_REDIS_PORT: 6379
       # 시크릿 (루트 .env에서 치환)
       JWT_SECRET: ${JWT_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -101,10 +115,13 @@ services:
       COOKIE_SECURE: "false"
       CHAT_ENABLED: "true"
       SEED_ENABLED: "true"
+      UPLOAD_BASE_DIR: /app/uploads
       # 프론트엔드 연동 (CORS / OAuth 리다이렉트)
       FE_ALLOWED_ORIGINS: http://localhost:5173
       FE_LOGIN_URL: http://localhost:5173/login
       FE_OAUTH_CALLBACK_URL: http://localhost:5173/oauth/callback
+    volumes:
+      - uploads-data:/app/uploads   # 업로드 문서/이미지 영속(재생성 시 소실 방지)
 
   # ── 프론트엔드 (Vue 빌드 → nginx) ───────────────────────────────────────────
   frontend:
@@ -125,4 +142,6 @@ volumes:
   mysql-data:
   mongo-data:
   redis-data:
+  redis-vector-data:
   rabbitmq-data:
+  uploads-data:

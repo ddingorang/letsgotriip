@@ -49,4 +49,14 @@ public class ChatRoomMembership extends BaseEntity {
 
     @Column(name = "join_message_id")
     private Long joinMessageId;
+
+    /** 채팅방 나가기 — 탈퇴 시각을 기록한다(소프트 탈퇴). */
+    public void leave(LocalDateTime when) {
+        this.leftAt = when;
+    }
+
+    /** 현재 방에 활성 상태로 참여 중인지(나가지 않았고 강퇴되지 않음). */
+    public boolean isActiveMember() {
+        return this.leftAt == null && Boolean.FALSE.equals(this.isBanned);
+    }
 }

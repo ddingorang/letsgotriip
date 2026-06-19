@@ -201,6 +201,29 @@
         </div>
       </div>
 
+      <!-- AI 어시스턴트 / 문서 관리 -->
+      <div class="menu-section">
+        <button class="menu-row" @click="$router.push('/assistant')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+          </span>
+          <span class="menu-label">AI 어시스턴트</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+        <button class="menu-row" @click="$router.push('/documents')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+            </svg>
+          </span>
+          <span class="menu-label">문서 관리</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      </div>
+
       <!-- Logout -->
       <div class="logout-section">
         <button class="logout-btn" @click="handleLogout">
@@ -852,6 +875,38 @@ onMounted(() => {
 .badge-progress {
   font-size: 11.5px;
   color: var(--color-ink-muted);
+}
+
+/* AI 어시스턴트 / 문서 관리 메뉴 */
+.menu-section {
+  padding: 4px 0;
+  border-top: 1px solid var(--color-line-light);
+}
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 20px;
+  text-align: left;
+}
+.menu-row:active { background: var(--color-surface); }
+.menu-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--color-peach-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.menu-label {
+  flex: 1;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
 }
 
 .logout-section {

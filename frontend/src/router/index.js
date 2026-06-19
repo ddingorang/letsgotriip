@@ -36,6 +36,10 @@ const router = createRouter({
     { path: '/chat', name: 'chat-list', component: () => import('@/views/ChatRoomListView.vue'), meta: { tabBar: false } },
     { path: '/chat/:id', name: 'chat-room', component: () => import('@/views/ChatRoomView.vue'), meta: { tabBar: false } },
 
+    // ── Assistant (RAG 챗봇) + Documents ───────────────────────────────────────
+    { path: '/assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    { path: '/documents', name: 'documents', component: () => import('@/views/DocumentsView.vue'), meta: { tabBar: false, requiresAuth: true } },
+
     // ── MyPage ────────────────────────────────────────────────────────────────
     { path: '/mypage', name: 'mypage', component: () => import('@/views/MyPageView.vue'), meta: { requiresAuth: true } },
     { path: '/notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { tabBar: false, requiresAuth: true } },

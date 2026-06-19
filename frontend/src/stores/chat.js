@@ -113,9 +113,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   // ── 송신 ────────────────────────────────────────────────────────────────────
-  function sendMessage(roomId, content) {
-    const text = (content ?? '').trim()
-    if (!text || !client || !client.connected) return false
+  // messageType: 'TEXT'(기본) | 'IMAGE' 등. IMAGE면 content는 업로드된 이미지 URL.
+  function sendMessage(roomId, content, messageType = 'TEXT') {
+    // TEXT는 공백 트림 후 빈 값 차단, 그 외(IMAGE 등)는 URL 보존을 위해 원본 사용
+    const body = messageType === 'TEXT' ? (content ?? '').trim() : (content ?? '')
+    if (!body || !client || !client.connected) return false
     const correlationId = crypto.randomUUID
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -123,8 +125,8 @@ export const useChatStore = defineStore('chat', () => {
     client.send(`/pub/chat.message.${roomId}`, {
       chatRoomId: Number(roomId),
       correlationId,
-      messageType: 'TEXT',
-      content: text,
+      messageType,
+      content: body,
     })
     return true
   }

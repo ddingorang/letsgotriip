@@ -5,15 +5,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.trip.chat.dto.ChatRoomParticipantsResponse;
 import com.trip.chat.dto.MessageResponseDto;
 import com.trip.chat.dto.MessageSendRequestDto;
 import com.trip.chat.dto.converter.MessageDtoConverter;
 import com.trip.chat.entity.ChatMessage;
+import com.trip.chat.entity.ChatRoomMembership;
+import com.trip.chat.repository.ChatRoomMembershipRepository;
 import com.trip.chat.repository.mongo.ChatMessageRepository;
+import com.trip.global.error.GeneralException;
+import com.trip.global.error.ResponseCode;
 import com.trip.user.entity.User;
 import com.trip.user.repository.UserRepository;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +36,7 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final SimpMessagingTemplate messagingTemplate; // STOMP 브로커(/topic) 목적지로 메시지 브로드캐스트
     private final UserRepository userRepository;
+    private final ChatRoomMembershipRepository chatRoomMembershipRepository;
 
     public void sendMessage(final MessageSendRequestDto messageSendRequest, final Long senderId) {
 
@@ -81,5 +89,60 @@ public class ChatService {
                         .unreadCount(0)
                         .build())
                 .toList();
+    }
+
+    /**
+     * 채팅방 나가기 — 본인 멤버십의 leftAt 을 현재 시각으로 설정(소프트 탈퇴).
+     * - 멤버가 아니면 403
+     * - 방장(host)은 나갈 수 없음 → 400(_BAD_REQUEST)
+     * - 이미 나간 상태면 멱등 처리(그대로 통과)
+     */
+    @Transactional
+    public void leaveRoom(final Long chatRoomId, final Long userId) {
+        ChatRoomMembership membership = chatRoomMembershipRepository.findByChatRoomId(chatRoomId).stream()
+                .filter(m -> m.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new GeneralException(ResponseCode._FORBIDDEN));
+
+        if (Boolean.TRUE.equals(membership.getIsHost())) {
+            // 방장은 채팅방을 나갈 수 없다(동행 게시글 삭제/취소로만 정리).
+            throw new GeneralException(ResponseCode._BAD_REQUEST, "방장은 채팅방을 나갈 수 없습니다.");
+        }
+
+        if (membership.getLeftAt() == null) {
+            membership.leave(LocalDateTime.now());
+        }
+        log.info("채팅방 나가기 완료. chatRoomId: {}, userId: {}", chatRoomId, userId);
+    }
+
+    /**
+     * 채팅방 참여자(활성 멤버) 목록/인원수 조회.
+     * 본인이 활성 멤버여야 조회 가능.
+     */
+    @Transactional(readOnly = true)
+    public ChatRoomParticipantsResponse getParticipants(final Long chatRoomId, final Long userId) {
+        List<ChatRoomMembership> memberships = chatRoomMembershipRepository.findByChatRoomId(chatRoomId);
+
+        boolean isActiveMember = memberships.stream()
+                .anyMatch(m -> m.getUserId().equals(userId) && m.isActiveMember());
+        if (!isActiveMember) {
+            throw new GeneralException(ResponseCode._FORBIDDEN);
+        }
+
+        List<ChatRoomParticipantsResponse.Participant> participants = memberships.stream()
+                .filter(ChatRoomMembership::isActiveMember)
+                .map(m -> ChatRoomParticipantsResponse.Participant.builder()
+                        .userId(m.getUserId())
+                        .nickname(userRepository.findById(m.getUserId())
+                                .map(User::getNickname).orElse("알 수 없음"))
+                        .isHost(Boolean.TRUE.equals(m.getIsHost()))
+                        .build())
+                .toList();
+
+        return ChatRoomParticipantsResponse.builder()
+                .chatRoomId(chatRoomId)
+                .count(participants.size())
+                .participants(participants)
+                .build();
     }
 }

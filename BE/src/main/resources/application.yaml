@@ -3,6 +3,12 @@ spring:
   application:
     name: trip
 
+  # 문서/이미지 업로드 — 기본 1MB는 PDF에 부족 → 20MB
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
+
   security:
     oauth2:
       client:
@@ -67,6 +73,10 @@ spring:
         completions-path: chat/completions
         options:
           model: gpt-4o-mini
+      embedding:
+        embeddings-path: embeddings        # base-url 기준 상대경로(GMS /v1/embeddings)
+        options:
+          model: text-embedding-3-small    # 1536차원 (GMS 지원 확인됨)
 
 # RabbitMQ Queue / Exchange / Routing Key
 rabbitmq:
@@ -93,6 +103,13 @@ chat:
 
 # 프론트엔드 (OAuth 콜백 리다이렉트)
 app:
+  # RAG 벡터 저장소(Redis Stack/RediSearch) — RagConfig가 명시 빈으로 사용
+  rag:
+    redis:
+      host: ${VECTOR_REDIS_HOST:localhost}
+      port: ${VECTOR_REDIS_PORT:6380}
+    index-name: triip-docs
+    prefix: "triip:doc:"
   frontend:
     oauth-callback-url: ${FE_OAUTH_CALLBACK_URL:http://localhost:5173/oauth/callback}
     login-url: ${FE_LOGIN_URL:http://localhost:5173/login}

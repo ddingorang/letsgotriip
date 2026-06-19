@@ -94,6 +94,12 @@ export const hotplaceApi = {
 
 // ── Community (BE: /community) ────────────────────────────────────────────────
 export const communityApi = {
+  // 이미지 업로드: multipart/form-data, field명 'file' → { imageUrl }
+  // (FE는 /api/community/images 로 호출하고 dev 프록시/nginx가 /api 를 제거)
+  uploadImage: (formData) =>
+    http.post('/api/community/images', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   getPosts: (params) => http.get('/api/community/posts', { params }),
   getPost: (id) => http.get(`/api/community/posts/${id}`),
   createPost: (data) => http.post('/api/community/posts', data),
@@ -114,6 +120,34 @@ export const companionApi = {
   getDetail: (id) => http.get(`/api/companion/posts/${id}`),
   create: (data) => http.post('/api/companion/posts', data),
   join: (id) => http.post(`/api/companion/posts/${id}/applications`),
+}
+
+// ── Chat (BE: /api/chat/rooms) ────────────────────────────────────────────────
+// 히스토리는 chat store(loadHistory)가 직접 호출. 여기에는 부가 액션만 둔다.
+export const chatApi = {
+  getParticipants: (roomId) => http.get(`/api/chat/rooms/${roomId}/participants`),
+  leaveRoom: (roomId) => http.delete(`/api/chat/rooms/${roomId}/membership`),
+}
+
+// ── Assistant (RAG 챗봇, BE: /api/assistant) ──────────────────────────────────
+// POST /api/assistant/chat { conversationId, message } → { conversationId, reply }
+export const assistantApi = {
+  chat: ({ conversationId, message }) =>
+    http.post('/api/assistant/chat', { conversationId, message }, { timeout: 60_000 }),
+}
+
+// ── Documents (문서 업로드/RAG 인덱싱, BE: /api/documents) ─────────────────────
+// POST   /api/documents (multipart 'file') → { id, filename, type, status, ... }
+// GET    /api/documents → [ ... ]
+// DELETE /api/documents/{id}
+export const documentApi = {
+  list: () => http.get('/api/documents'),
+  upload: (formData) =>
+    http.post('/api/documents', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60_000,
+    }),
+  remove: (id) => http.delete(`/api/documents/${id}`),
 }
 
 export default http
