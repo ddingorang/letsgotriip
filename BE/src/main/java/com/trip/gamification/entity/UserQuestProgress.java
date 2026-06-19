@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -44,6 +45,10 @@ public class UserQuestProgress {
     private boolean completed;
 
     private LocalDateTime completedAt;
+
+    /** 낙관적 락 — 동시 진행 갱신 시 마지막 커밋이 이전을 덮어쓰는 것을 방지. */
+    @Version
+    private Long version;
 
     @Builder
     public UserQuestProgress(Long userId, String questCode) {

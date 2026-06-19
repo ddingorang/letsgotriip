@@ -12,9 +12,11 @@ import com.trip.gamification.dto.GamificationSummaryDto.Level;
 import com.trip.gamification.dto.GamificationSummaryDto.Stats;
 import com.trip.gamification.dto.QuestDto;
 import com.trip.gamification.entity.EarnedBadge;
+import com.trip.gamification.entity.ProcessedReward;
 import com.trip.gamification.entity.UserGameStat;
 import com.trip.gamification.entity.UserQuestProgress;
 import com.trip.gamification.repository.EarnedBadgeRepository;
+import com.trip.gamification.repository.ProcessedRewardRepository;
 import com.trip.gamification.repository.UserGameStatRepository;
 import com.trip.gamification.repository.UserQuestProgressRepository;
 import com.trip.plan.repository.PlanRepository;
@@ -25,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -48,6 +51,7 @@ public class GamificationService {
     private final UserGameStatRepository statRepository;
     private final EarnedBadgeRepository badgeRepository;
     private final UserQuestProgressRepository questRepository;
+    private final ProcessedRewardRepository processedRewardRepository;
 
     private static final int CHALLENGE_GOAL = 10;   // 이번 달 N곳 담기
     private static final int EXP_PER_LEVEL = 100;
@@ -60,24 +64,68 @@ public class GamificationService {
      */
     @Transactional
     public void award(Long userId, GameAction action, int amount) {
+        award(userId, action, amount, null);
+    }
+
+    /**
+     * 멱등 키(dedupSignature)와 함께 적립한다.
+     *
+     * dedupSignature 가 있으면 ProcessedReward 에 먼저 기록을 시도하고,
+     * 이미 처리된 트리거(예: 좋아요 토글 반복)면 적립 없이 종료한다.
+     * dedupSignature 가 null 이면 기존 동작과 동일하게 무조건 적립한다.
+     */
+    @Transactional
+    public void award(Long userId, GameAction action, int amount, String dedupSignature) {
         if (userId == null || action == null || amount <= 0) {
             return;
         }
 
-        UserGameStat stat = statRepository.findByUserId(userId)
-                .orElseGet(() -> createStat(userId));
-        stat.accrue(action.points() * amount, action.exp() * amount);
+        if (dedupSignature != null && !markProcessed(userId, dedupSignature)) {
+            log.debug("[게임화] 중복 트리거 무시 — userId={}, signature={}", userId, dedupSignature);
+            return;
+        }
+
+        accruePoints(userId, action.points() * amount, action.exp() * amount);
 
         advanceQuestsFor(userId, action, amount);
         grantBadgesFor(userId, action);
 
-        log.debug("[게임화] 적립 — userId={}, action={}, amount={}, level={}, exp={}",
-                userId, action, amount, stat.getLevel(), stat.getExp());
+        log.debug("[게임화] 적립 — userId={}, action={}, amount={}, signature={}",
+                userId, action, amount, dedupSignature);
+    }
+
+    /**
+     * 멱등 키를 기록한다. 신규 기록이면 true, 이미 처리된 트리거면 false.
+     * 경합으로 유니크 제약 위반이 나도 "이미 처리됨"으로 흡수한다.
+     */
+    private boolean markProcessed(Long userId, String signature) {
+        if (processedRewardRepository.existsBySignature(signature)) {
+            return false;
+        }
+        try {
+            processedRewardRepository.saveAndFlush(
+                    ProcessedReward.builder().userId(userId).signature(signature).build());
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 포인트/EXP 를 원자적 UPDATE 로 적립한다(lost update 방지).
+     * 대상 행이 아직 없으면 생성 후 1회 재시도한다.
+     */
+    private void accruePoints(Long userId, int points, int exp) {
+        int updated = statRepository.accrue(userId, Math.max(0, points), Math.max(0, exp), LocalDateTime.now());
+        if (updated == 0) {
+            createStat(userId);
+            statRepository.accrue(userId, Math.max(0, points), Math.max(0, exp), LocalDateTime.now());
+        }
     }
 
     private UserGameStat createStat(Long userId) {
         try {
-            return statRepository.save(UserGameStat.builder().userId(userId).build());
+            return statRepository.saveAndFlush(UserGameStat.builder().userId(userId).build());
         } catch (DataIntegrityViolationException e) {
             // 동시 생성 경합 — 이미 만들어진 행을 재조회
             return statRepository.findByUserId(userId)
@@ -92,21 +140,28 @@ public class GamificationService {
         }
     }
 
+    /**
+     * 퀘스트 진행을 times 만큼 전진시킨다.
+     * 진행 행을 먼저 보장(없으면 생성)한 뒤, 각 단계를 원자적 UPDATE 로 증가시켜
+     * 동시 적립 간 lost update 를 방지한다. 이미 완료된 퀘스트면 증가 없이 멱등 종료한다.
+     */
     private void advanceQuest(Long userId, QuestDef quest, int times) {
-        UserQuestProgress progress = questRepository.findByUserIdAndQuestCode(userId, quest.code())
-                .orElseGet(() -> createQuest(userId, quest.code()));
+        ensureQuest(userId, quest.code());
         for (int i = 0; i < times; i++) {
-            progress.advance(quest.goal());
+            questRepository.incrementProgress(userId, quest.code(), quest.goal(), LocalDateTime.now());
         }
     }
 
-    private UserQuestProgress createQuest(Long userId, String questCode) {
+    /** 진행 행이 없으면 생성한다(경합 시 유니크 제약으로 흡수). */
+    private void ensureQuest(Long userId, String questCode) {
+        if (questRepository.findByUserIdAndQuestCode(userId, questCode).isPresent()) {
+            return;
+        }
         try {
-            return questRepository.save(
+            questRepository.saveAndFlush(
                     UserQuestProgress.builder().userId(userId).questCode(questCode).build());
         } catch (DataIntegrityViolationException e) {
-            return questRepository.findByUserIdAndQuestCode(userId, questCode)
-                    .orElseThrow(() -> e);
+            log.debug("[게임화] 퀘스트 진행 행 동시 생성 무시 — userId={}, quest={}", userId, questCode);
         }
     }
 

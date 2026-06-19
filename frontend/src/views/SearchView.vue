@@ -237,6 +237,8 @@ const isEmpty = computed(
 
 // ── Actions ────────────────────────────────────────────────────────────────
 let debounceTimer = null
+// 응답 레이스 가드: 매 요청마다 증가시키고, 응답 적용 시 최신 요청만 반영한다.
+let requestSeq = 0
 
 function onInput() {
   clearTimeout(debounceTimer)
@@ -260,6 +262,8 @@ function clearQuery() {
 }
 
 function resetResults() {
+  // 진행 중인 요청의 늦은 응답이 초기화된 상태를 덮어쓰지 못하도록 일련번호를 무효화한다.
+  requestSeq++
   attractions.value = []
   posts.value = []
   companions.value = []
@@ -275,23 +279,27 @@ async function runSearch() {
     resetResults()
     return
   }
+  // 이 요청의 일련번호. 응답이 도착했을 때 여전히 최신 요청인 경우에만 결과를 반영한다.
+  const seq = ++requestSeq
   loading.value = true
   error.value = false
   lastQuery.value = q
   try {
     const { data } = await searchApi.search(q, activeType.value)
+    if (seq !== requestSeq) return // 더 최신 요청이 시작됨 — 오래된 응답은 폐기
     attractions.value = data?.attractions ?? []
     posts.value = data?.posts ?? []
     companions.value = data?.companions ?? []
     festivals.value = data?.festivals ?? []
   } catch {
+    if (seq !== requestSeq) return // 오래된 응답의 에러는 무시
     error.value = true
     attractions.value = []
     posts.value = []
     companions.value = []
     festivals.value = []
   } finally {
-    loading.value = false
+    if (seq === requestSeq) loading.value = false
   }
 }
 

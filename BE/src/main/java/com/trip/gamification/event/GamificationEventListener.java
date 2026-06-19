@@ -36,11 +36,30 @@ public class GamificationEventListener {
             if (action == null || event.recipientId() == null) {
                 return;
             }
-            gamificationService.award(event.recipientId(), action, 1);
+            gamificationService.award(event.recipientId(), action, 1, dedupSignature(event, action));
         } catch (Exception e) {
             log.warn("게임화 적립 실패 — recipient={}, type={}, error={}",
                     event.recipientId(), event.type(), e.getMessage());
         }
+    }
+
+    /**
+     * 멱등 키를 만든다.
+     *
+     * NotificationEvent 에는 고유 이벤트 ID 가 없으므로, 토글로 반복 발행될 수 있는
+     * 커뮤니티 반응(좋아요 등)만 type+link 로 1회 적립되게 한다.
+     * link 가 없으면 멱등할 수 없으므로 null(=기존 동작)로 둔다.
+     * 동행 활동은 도착/수락이 서로 다른 정당한 이벤트이므로 dedup 하지 않는다.
+     */
+    private String dedupSignature(NotificationEvent event, GameAction action) {
+        if (action != GameAction.COMMUNITY_REACTION_RECEIVED) {
+            return null;
+        }
+        String link = event.link();
+        if (link == null || link.isBlank()) {
+            return null;
+        }
+        return "COMMUNITY_REACTION:" + link;
     }
 
     /**

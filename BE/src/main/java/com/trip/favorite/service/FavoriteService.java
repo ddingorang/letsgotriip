@@ -5,6 +5,7 @@ import com.trip.favorite.entity.Favorite;
 import com.trip.favorite.entity.FavoriteTargetType;
 import com.trip.favorite.repository.FavoriteRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,11 +30,18 @@ public class FavoriteService {
                     return false;
                 })
                 .orElseGet(() -> {
-                    favoriteRepository.save(Favorite.builder()
-                            .userId(userId)
-                            .targetType(targetType)
-                            .targetId(targetId)
-                            .build());
+                    try {
+                        // 동시 추가 레이스: 두 요청이 동시에 부재를 확인하고 save하면
+                        // (user_id, target_type, target_id) unique 충돌이 500으로 새는 것을 방지.
+                        // 충돌은 곧 "이미 찜됨"을 의미하므로 멱등하게 favorited=true 반환.
+                        favoriteRepository.saveAndFlush(Favorite.builder()
+                                .userId(userId)
+                                .targetType(targetType)
+                                .targetId(targetId)
+                                .build());
+                    } catch (DataIntegrityViolationException e) {
+                        return true;
+                    }
                     return true;
                 });
     }

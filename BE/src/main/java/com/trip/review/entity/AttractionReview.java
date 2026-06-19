@@ -12,7 +12,13 @@ import lombok.NoArgsConstructor;
  * 생성/수정 시각은 BaseEntity(createdAt/updatedAt)에서 관리.
  */
 @Entity
-@Table(name = "attraction_reviews")
+@Table(
+        name = "attraction_reviews",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_review_user_content",
+                columnNames = {"user_id", "content_id"}
+        )
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AttractionReview extends BaseEntity {

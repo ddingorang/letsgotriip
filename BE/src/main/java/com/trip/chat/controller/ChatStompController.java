@@ -3,14 +3,14 @@ package com.trip.chat.controller;
 import com.trip.chat.dto.MessageSendRequestDto;
 import com.trip.chat.service.ChatService;
 import com.trip.global.security.UserPrincipal;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
 
 @Slf4j
 @RestController
@@ -32,7 +32,7 @@ public class ChatStompController {
     @MessageMapping("chat.message.{roomId}")
     public void publishMessage(
             @DestinationVariable Long roomId,
-            MessageSendRequestDto messageSendRequestDto,
+            @Payload @Valid MessageSendRequestDto messageSendRequestDto,
             UserPrincipal principal) {
 
         Long senderId = principal.userId(); // WebSocket 연결 시점에 JWT에서 추출한 사용자 ID

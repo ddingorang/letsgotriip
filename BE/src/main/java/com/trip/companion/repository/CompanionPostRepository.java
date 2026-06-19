@@ -20,6 +20,16 @@ public interface CompanionPostRepository extends JpaRepository<CompanionPost, Lo
 
     List<CompanionPost> findAllByDeletedFalseAndChatRoomIdIn(List<Long> chatRoomIds);
 
+    // 통합검색: 제목 또는 지역 부분일치(대소문자 무시) + 미삭제, DB 상한
+    @Query("""
+            select p from CompanionPost p
+            where p.deleted = false
+              and (lower(p.title) like lower(concat('%', :keyword, '%'))
+                or lower(p.region) like lower(concat('%', :keyword, '%')))
+            order by p.id desc
+            """)
+    List<CompanionPost> searchByTitleOrRegion(@Param("keyword") String keyword, Pageable pageable);
+
     /** 정원 승인 시 동시성 직렬화를 위한 비관적 쓰기 락 조회 */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from CompanionPost p where p.id = :id")

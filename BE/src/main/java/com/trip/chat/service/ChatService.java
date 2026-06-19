@@ -4,9 +4,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.trip.chat.dto.ChatRoomParticipantsResponse;
 import com.trip.chat.dto.MessageResponseDto;
@@ -29,6 +33,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.trip.chat.dto.converter.MessageDtoIdInjector.withGeneratedMessageId;
 
@@ -44,6 +50,9 @@ public class ChatService {
     private final ChatRoomMembershipRepository chatRoomMembershipRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final FileStorageService fileStorageService; // 검증된 이미지 저장(매직바이트·크기 검증 포함) 재사용
+
+    /** 히스토리 복원 시 가져올 최근 메시지 상한(전체 로드 방지). */
+    private static final int HISTORY_LIMIT = 200;
 
     public void sendMessage(final MessageSendRequestDto messageSendRequest, final Long senderId, final Long chatRoomId) {
 
@@ -88,10 +97,16 @@ public class ChatService {
      * 새로고침/재입장 시 이전 대화를 복원하기 위한 REST 경로.
      */
     public List<MessageResponseDto> getHistory(final Long chatRoomId) {
-        List<ChatMessage> messages = chatMessageRepository.findByChatRoomIdOrderByTimestampDesc(chatRoomId);
+        // Mongo 조회 단계에서 정렬 + 상한(limit)을 적용해 최근 N건만 가져온다(전체 컬렉션 로드 방지).
+        List<ChatMessage> messages = chatMessageRepository.findByChatRoomIdOrderByTimestampDesc(
+                chatRoomId, PageRequest.of(0, HISTORY_LIMIT, Sort.by(Sort.Direction.DESC, "timestamp")));
 
-        // 발신자 닉네임 일괄 조회(메시지마다 쿼리하지 않도록 캐싱)
-        Map<Long, String> nicknameCache = new HashMap<>();
+        // 발신자 닉네임 일괄 조회 — senderId 집합을 한 번에 findAllById 로 가져와 메시지당 쿼리(N+1)를 제거한다.
+        Set<Long> senderIds = messages.stream()
+                .map(ChatMessage::getSenderId)
+                .collect(Collectors.toSet());
+        Map<Long, String> nicknameById = userRepository.findAllById(senderIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getNickname, (a, b) -> a));
 
         // timestamp DESC로 조회되므로 화면 표시용으로 ASC(오래된→최신)로 뒤집는다.
         return messages.stream()
@@ -101,8 +116,7 @@ public class ChatService {
                         .correlationId(null)
                         .chatRoomId(m.getChatRoomId())
                         .senderId(m.getSenderId())
-                        .senderNickname(nicknameCache.computeIfAbsent(m.getSenderId(), id ->
-                                userRepository.findById(id).map(User::getNickname).orElse("알 수 없음")))
+                        .senderNickname(nicknameById.getOrDefault(m.getSenderId(), "알 수 없음"))
                         .messageType(m.getMessageType())
                         .content(m.getContent())
                         .timestamp(m.getTimestamp())
@@ -190,8 +204,22 @@ public class ChatService {
             message.putAll(payload);
         }
         final String destination = "/topic/chat.room." + chatRoomId;
-        messagingTemplate.convertAndSend(destination, message);
-        log.info("SYSTEM 이벤트 브로드캐스트. destination: {}, event: {}", destination, event);
+
+        // 트랜잭션 내부에서 호출된 경우(방 설정/강퇴/초대/위임), 커밋 성공 후에만 STOMP 전송한다.
+        // 롤백 시에는 전송하지 않아 DB 상태와 클라이언트에 통지된 이벤트가 불일치하는 것을 막는다.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    messagingTemplate.convertAndSend(destination, message);
+                    log.info("SYSTEM 이벤트 브로드캐스트(afterCommit). destination: {}, event: {}", destination, event);
+                }
+            });
+        } else {
+            // 활성 트랜잭션이 없으면(테스트/비트랜잭션 호출) 기존처럼 즉시 전송.
+            messagingTemplate.convertAndSend(destination, message);
+            log.info("SYSTEM 이벤트 브로드캐스트. destination: {}, event: {}", destination, event);
+        }
     }
 
     /** 방장 멤버십을 조회한다(활성 방장만). 아니면 _FORBIDDEN. */
@@ -375,11 +403,24 @@ public class ChatService {
      */
     @Transactional
     public void transferHost(final Long chatRoomId, final Long currentHostUserId, final Long newHostUserId) {
-        ChatRoomMembership currentHost = requireHost(chatRoomId, currentHostUserId);
-
         if (currentHostUserId.equals(newHostUserId)) {
             throw new GeneralException(ResponseCode._BAD_REQUEST, "이미 방장입니다.");
         }
+
+        // 동시 위임으로 방장이 2명이 되는 레이스를 막기 위해, 현 방장·신규 방장 멤버십 행을
+        // 같은 트랜잭션 안에서 비관적 쓰기 락으로 잡는다. 데드락 방지를 위해 userId 오름차순으로
+        // 락 획득 순서를 고정한다.
+        final Long firstId = Math.min(currentHostUserId, newHostUserId);
+        final Long secondId = Math.max(currentHostUserId, newHostUserId);
+        chatRoomMembershipRepository.findByChatRoomIdAndUserIdForUpdate(chatRoomId, firstId);
+        chatRoomMembershipRepository.findByChatRoomIdAndUserIdForUpdate(chatRoomId, secondId);
+
+        // 락 보유 상태에서 다시 조회·검증한다(락 획득 전 상태가 바뀌었을 수 있음).
+        ChatRoomMembership currentHost = chatRoomMembershipRepository
+                .findByChatRoomIdAndUserId(chatRoomId, currentHostUserId)
+                .filter(ChatRoomMembership::isActiveMember)
+                .filter(m -> Boolean.TRUE.equals(m.getIsHost()))
+                .orElseThrow(() -> new GeneralException(ResponseCode._FORBIDDEN));
 
         ChatRoomMembership newHost = chatRoomMembershipRepository
                 .findByChatRoomIdAndUserId(chatRoomId, newHostUserId)

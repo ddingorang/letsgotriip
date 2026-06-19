@@ -11,6 +11,7 @@ import com.trip.review.repository.AttractionReviewRepository;
 import com.trip.user.entity.User;
 import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,12 +51,19 @@ public class ReviewService {
         if (reviewRepository.existsByUserIdAndContentId(userId, contentId)) {
             throw new GeneralException(ResponseCode._BAD_REQUEST, "이미 작성한 리뷰가 있습니다. 기존 리뷰를 수정해주세요.");
         }
-        final AttractionReview review = reviewRepository.save(AttractionReview.builder()
-                .userId(userId)
-                .contentId(contentId)
-                .rating(request.rating())
-                .content(request.content())
-                .build());
+        final AttractionReview review;
+        try {
+            // 동시 작성 레이스: exists 검사를 통과한 두 요청이 동시에 save하면
+            // (user_id, content_id) unique 제약 충돌 → 400(이미 작성)으로 변환
+            review = reviewRepository.saveAndFlush(AttractionReview.builder()
+                    .userId(userId)
+                    .contentId(contentId)
+                    .rating(request.rating())
+                    .content(request.content())
+                    .build());
+        } catch (DataIntegrityViolationException e) {
+            throw new GeneralException(ResponseCode._BAD_REQUEST, "이미 작성한 리뷰가 있습니다. 기존 리뷰를 수정해주세요.");
+        }
         return ReviewResponse.from(review, resolveNickname(userId));
     }
 

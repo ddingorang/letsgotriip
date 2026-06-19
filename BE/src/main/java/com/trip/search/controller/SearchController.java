@@ -12,7 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * GET /api/search — 통합검색 (공개, 비회원 탐색 허용).
  * q: 검색어, type: all|attraction|post|companion|festival (기본 all).
- * 소스별 상위 N개를 그룹으로 묶어 반환한다. 외부(TourAPI) 실패는 빈 배열로 graceful.
+ * 소스별 상위 N개를 그룹으로 묶어 반환한다.
+ * - 미지원 type 은 400(_BAD_REQUEST).
+ * - type=attraction 단독 외부(TourAPI) 실패는 502로 전파, type=all 은 sourceErrors 로 부분 실패 노출.
  */
 @RestController
 @RequestMapping("/api/search")
