@@ -37,6 +37,7 @@ export const useCompanionStore = defineStore('companion', () => {
       isOwner: myUserId != null && item.authorId != null
         ? Number(item.authorId) === Number(myUserId)
         : (item.isOwner ?? false),
+      chatRoomId: item.chatRoomId ?? null,
       pendingCount: item.pendingCount ?? item.pending_count ?? 0,
       approvedCount: item.approvedCount ?? item.approved_count ?? 0,
     }
@@ -112,12 +113,32 @@ export const useCompanionStore = defineStore('companion', () => {
     loading.value = true
     error.value = null
     try {
-      await companionApi.join(id)
+      const { data } = await companionApi.join(id)
+      return data
     } catch (e) {
       error.value = e.response?.data?.message ?? e.message ?? '신청에 실패했어요.'
       throw e
     } finally {
       loading.value = false
+    }
+  }
+
+  async function getMyApplication(postId) {
+    try {
+      const { data, status } = await companionApi.getMyApplication(postId)
+      if (status === 204) return null
+      return data
+    } catch {
+      return null
+    }
+  }
+
+  async function cancelApplication(postId, applicationId) {
+    try {
+      await companionApi.cancelApplication(postId, applicationId)
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '취소에 실패했어요.'
+      throw e
     }
   }
 
@@ -197,5 +218,6 @@ export const useCompanionStore = defineStore('companion', () => {
     getList, getDetail, create, join,
     fetchMyRooms, fetchCompanions,
     getApplications, approveApplicant, rejectApplicant, getById,
+    getMyApplication, cancelApplication,
   }
 })

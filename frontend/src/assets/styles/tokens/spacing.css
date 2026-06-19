@@ -1,0 +1,21 @@
+/* Created: 2026-06-17 22:58:49 */
+:root {
+  /* Border radius — 4px grid base */
+  --radius-xs:  4px;
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* Layout */
+  --tab-bar-height: 64px;
+  --nav-height:     56px;
+
+  /* Z-index */
+  --z-raised: 10;
+
+  /* Motion */
+  --duration-fast: 150ms;
+}

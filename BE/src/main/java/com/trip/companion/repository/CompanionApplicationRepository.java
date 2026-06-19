@@ -19,4 +19,6 @@ public interface CompanionApplicationRepository extends JpaRepository<CompanionA
     List<CompanionApplication> findAllByCompanionPost(CompanionPost post);
 
     int countByCompanionPostAndStatus(CompanionPost post, ApplicationStatus status);
+
+    Optional<CompanionApplication> findByCompanionPostAndApplicant(CompanionPost post, User applicant);
 }

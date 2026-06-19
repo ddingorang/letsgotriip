@@ -9,7 +9,7 @@
       </button>
       <div class="header-center">
         <span class="header-title">{{ room?.title }}</span>
-        <span class="header-sub">여행 D-{{ room?.daysLeft }}</span>
+        <span class="header-sub">{{ connectionLabel }}</span>
       </div>
       <button class="more-btn">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -22,11 +22,11 @@
 
     <div class="msg-scroll" ref="msgScroll">
       <div class="date-separator">
-        <span>6월 10일 화요일</span>
+        <span>{{ todayLabel }}</span>
       </div>
 
       <template v-for="msg in messages" :key="msg.id">
-        <!-- Outgoing (내 메시지) -->
+        <!-- Outgoing -->
         <div v-if="isMyMessage(msg)" class="msg-row outgoing">
           <div class="msg-col-out">
             <span class="msg-time">{{ msg.time }}</span>
@@ -48,7 +48,7 @@
           </div>
         </div>
 
-        <!-- Incoming (상대방 메시지) -->
+        <!-- Incoming -->
         <div v-else class="msg-row incoming">
           <div class="msg-avatar" />
           <div class="msg-col">
@@ -83,45 +83,134 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { chatApi } from '@/api/index.js'
+import { Client } from '@stomp/stompjs'
 
 const route = useRoute()
 const companionStore = useCompanionStore()
 const authStore = useAuthStore()
 const msgScroll = ref(null)
 const inputText = ref('')
+const connected = ref(false)
+
+const roomId = computed(() => route.params.id)
+const room = computed(() => companionStore.myRooms.find((r) => r.id === Number(roomId.value)))
+const messages = computed(() => companionStore.messages[roomId.value] ?? [])
+
+const connectionLabel = computed(() => {
+  if (connected.value) return room.value?.daysLeft != null ? `여행 D-${room.value.daysLeft}` : '연결됨'
+  return '연결 중...'
+})
+
+const todayLabel = computed(() => {
+  return new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+})
 
 function isMyMessage(msg) {
   const myId = authStore.user?.userId
-  return myId != null ? Number(msg.senderId) === Number(myId) : msg.senderId === 'me'
+  return myId != null ? Number(msg.senderId) === Number(myId) : false
 }
 
-const room = computed(() => companionStore.myRooms.find((r) => r.id === Number(route.params.id)))
-const messages = computed(() => companionStore.messages[route.params.id] ?? [])
+function formatTime(ts) {
+  if (!ts) return ''
+  return new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (msgScroll.value) msgScroll.value.scrollTop = msgScroll.value.scrollHeight
+  })
+}
+
+function normalizeMessage(m) {
+  return {
+    id: m.messageTSID ?? m.id ?? Date.now(),
+    senderId: m.senderId,
+    senderNickname: m.senderNickname ?? m.sender,
+    text: m.content,
+    content: m.content,
+    time: formatTime(m.timestamp),
+  }
+}
+
+async function loadHistory() {
+  try {
+    const { data } = await chatApi.getMessages(roomId.value)
+    companionStore.messages[roomId.value] = data.map(normalizeMessage)
+  } catch {
+    if (!companionStore.messages[roomId.value]) {
+      companionStore.messages[roomId.value] = []
+    }
+  }
+}
+
+// ── STOMP ────────────────────────────────────────────────────────────────────
+
+let stompClient = null
+
+function connectStomp() {
+  const token = authStore.accessToken
+  if (!token) return
+
+  // dev: 직접 BE에 연결 (CORS 허용됨), prod: 같은 origin
+  const wsUrl = import.meta.env.DEV
+    ? 'ws://localhost:9090/ws'
+    : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
+
+  stompClient = new Client({
+    brokerURL: wsUrl,
+    connectHeaders: { Authorization: `Bearer ${token}` },
+    reconnectDelay: 3000,
+    onConnect: () => {
+      connected.value = true
+      stompClient.subscribe(`/topic/chat.room.${roomId.value}`, (frame) => {
+        const msg = JSON.parse(frame.body)
+        if (!companionStore.messages[roomId.value]) {
+          companionStore.messages[roomId.value] = []
+        }
+        companionStore.messages[roomId.value].push(normalizeMessage(msg))
+        scrollToBottom()
+      })
+    },
+    onDisconnect: () => { connected.value = false },
+    onStompError: () => { connected.value = false },
+  })
+
+  stompClient.activate()
+}
 
 function sendMessage() {
   const text = inputText.value.trim()
   if (!text) return
-  if (!companionStore.messages[route.params.id]) companionStore.messages[route.params.id] = []
-  companionStore.messages[route.params.id].push({
-    id: Date.now(),
-    senderId: authStore.user?.userId,
-    text,
-    time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-  })
-  inputText.value = ''
-  nextTick(() => {
-    if (msgScroll.value) msgScroll.value.scrollTop = msgScroll.value.scrollHeight
-  })
+
+  if (stompClient?.connected) {
+    stompClient.publish({
+      destination: `/pub/chat.message.${roomId.value}`,
+      body: JSON.stringify({
+        chatRoomId: Number(roomId.value),
+        correlationId: crypto.randomUUID(),
+        messageType: 'TEXT',
+        content: text,
+      }),
+    })
+    inputText.value = ''
+  }
 }
 
-onMounted(() => {
-  nextTick(() => {
-    if (msgScroll.value) msgScroll.value.scrollTop = msgScroll.value.scrollHeight
-  })
+onMounted(async () => {
+  await loadHistory()
+  scrollToBottom()
+  connectStomp()
+})
+
+onUnmounted(() => {
+  stompClient?.deactivate()
+  stompClient = null
+  connected.value = false
 })
 </script>
 

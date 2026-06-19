@@ -86,6 +86,11 @@ export const communityApi = {
     http.post(`/api/community/posts/${postId}/comments/${commentId}/likes`),
 }
 
+// ── Chat ──────────────────────────────────────────────────────────────────────
+export const chatApi = {
+  getMessages: (roomId) => http.get(`/api/chat/rooms/${roomId}/messages`),
+}
+
 // ── Companion (BE: /companion/posts) ──────────────────────────────────────────
 export const companionApi = {
   getList: (params) => http.get('/api/companion/posts', { params }),
@@ -93,6 +98,9 @@ export const companionApi = {
   getDetail: (id) => http.get(`/api/companion/posts/${id}`),
   create: (data) => http.post('/api/companion/posts', data),
   join: (id) => http.post(`/api/companion/posts/${id}/applications`),
+  getMyApplication: (id) => http.get(`/api/companion/posts/${id}/applications/me`),
+  cancelApplication: (postId, applicationId) =>
+    http.delete(`/api/companion/posts/${postId}/applications/${applicationId}`),
 }
 
 export default http

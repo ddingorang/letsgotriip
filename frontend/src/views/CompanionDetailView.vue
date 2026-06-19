@@ -61,14 +61,25 @@
         </div>
       </div>
 
-      <!-- Pending state for applied user -->
-      <div v-if="isApplied && !comp.isOwner" class="pending-banner">
+      <!-- Pending state -->
+      <div v-if="myApplicationStatus === 'PENDING' && !comp.isOwner" class="pending-banner">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
         </svg>
         <div>
           <div class="pending-title">승인 대기 중이에요</div>
           <div class="pending-sub">방장이 신청을 확인하면 채팅방에 입장할 수 있어요.</div>
+        </div>
+      </div>
+
+      <!-- Approved state -->
+      <div v-if="myApplicationStatus === 'APPROVED' && !comp.isOwner" class="approved-banner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2a7a4b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+        <div>
+          <div class="approved-title">동행이 확정됐어요!</div>
+          <div class="approved-sub">채팅방에서 일정을 조율해보세요.</div>
         </div>
       </div>
 
@@ -122,22 +133,30 @@
     <div class="cta-bar">
       <div v-if="applyError" class="apply-error">{{ applyError }}</div>
       <!-- Visitor: not applied -->
-      <template v-if="!comp.isOwner && !isApplied">
+      <template v-if="!comp.isOwner && !myApplicationStatus">
         <div class="seats-left">남은 자리 {{ comp.maxCount - comp.currentCount }}명</div>
         <button class="cta-main" :disabled="companionStore.loading" @click="apply">참여 신청하기</button>
       </template>
 
-      <!-- Visitor: applied (pending) -->
-      <template v-else-if="!comp.isOwner && isApplied">
+      <!-- Visitor: pending -->
+      <template v-else-if="!comp.isOwner && myApplicationStatus === 'PENDING'">
         <button class="cta-cancel" @click="cancelApply">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           신청 취소
         </button>
       </template>
 
+      <!-- Visitor: approved -->
+      <template v-else-if="!comp.isOwner && myApplicationStatus === 'APPROVED'">
+        <button class="cta-main" @click="$router.push(`/chat/${comp.chatRoomId}`)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+          채팅방 가기
+        </button>
+      </template>
+
       <!-- Owner -->
       <template v-else>
-        <button class="cta-chat" @click="$router.push(`/chat/1`)">
+        <button class="cta-chat" @click="$router.push(`/chat/${comp.chatRoomId}`)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
         </button>
         <button class="cta-main" @click="$router.push(`/companion/${comp.id}/applicants`)">
@@ -162,29 +181,45 @@ const comp = computed(() => companionStore.getById(route.params.id) ?? {
   id: route.params.id, title: '동행 모집', location: '-', dateRange: '-',
   status: '모집중', currentCount: 0, maxCount: 4, author: { nickname: '-', tripCount: 0 },
   period: '-', estimatedCost: '-', tags: [], intro: '',
-  isOwner: false, pendingCount: 0, approvedCount: 0,
+  isOwner: false, chatRoomId: null, pendingCount: 0, approvedCount: 0,
 })
 
-const isApplied = ref(false)
+const myApplicationStatus = ref(null) // null | 'PENDING' | 'APPROVED' | 'REJECTED'
+const myApplicationId = ref(null)
 const applyError = ref('')
 
 onMounted(async () => {
   await companionStore.getDetail(route.params.id)
+  if (!comp.value.isOwner) {
+    const app = await companionStore.getMyApplication(route.params.id)
+    if (app) {
+      myApplicationStatus.value = app.status
+      myApplicationId.value = app.id
+    }
+  }
 })
 
 async function apply() {
   applyError.value = ''
   try {
-    await companionStore.join(comp.value.id)
-    isApplied.value = true
+    const app = await companionStore.join(comp.value.id)
+    myApplicationStatus.value = app?.status ?? 'PENDING'
+    myApplicationId.value = app?.id ?? null
   } catch {
     applyError.value = companionStore.error || '신청에 실패했어요.'
   }
 }
-function cancelApply() {
-  // Cancellation endpoint not yet in BE; optimistic local only
-  isApplied.value = false
+
+async function cancelApply() {
+  try {
+    await companionStore.cancelApplication(comp.value.id, myApplicationId.value)
+    myApplicationStatus.value = null
+    myApplicationId.value = null
+  } catch {
+    applyError.value = companionStore.error || '취소에 실패했어요.'
+  }
 }
+
 function share() {
   if (navigator.share) navigator.share({ title: comp.value.title, url: location.href })
 }
@@ -325,6 +360,18 @@ function share() {
 }
 .pending-title { font-size: 13.5px; font-weight: 700; color: var(--color-peach-pressed); margin-bottom: 2px; }
 .pending-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
+
+.approved-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 20px;
+  padding: 14px;
+  background: #edfaf3;
+  border-radius: var(--radius-md);
+}
+.approved-title { font-size: 13.5px; font-weight: 700; color: #2a7a4b; margin-bottom: 2px; }
+.approved-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
 
 .info-grid {
   display: grid;
