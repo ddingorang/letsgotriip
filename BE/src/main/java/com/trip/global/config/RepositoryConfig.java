@@ -18,7 +18,9 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
         "com.trip.notice.repository",        // NoticeRepository
         "com.trip.notification.repository",  // NotificationRepository
         "com.trip.document.repository",      // TripDocumentRepository (RAG 문서)
-        "com.trip.checklist.repository"      // ChecklistItemRepository
+        "com.trip.checklist.repository",     // ChecklistItemRepository
+        "com.trip.story.repository",         // TravelStoryRepository (여행 전후 스토리 D10)
+        "com.trip.group.repository"          // TravelGroupRepository, GroupMemberRepository (단체할인 D9)
 })
 @EnableMongoRepositories(basePackages = {
         "com.trip.chat.repository.mongo"     // ChatMessageRepository

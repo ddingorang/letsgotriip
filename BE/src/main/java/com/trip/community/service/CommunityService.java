@@ -128,7 +128,7 @@ public class CommunityService {
         Post post = findActivePost(postId);
         User user = findUser(userId);
 
-        return postLikeRepository.findByPostIdAndUserId(postId, userId)
+        boolean liked = postLikeRepository.findByPostIdAndUserId(postId, userId)
                 .map(like -> {
                     postLikeRepository.delete(like);
                     post.decrementLikeCount();
@@ -139,6 +139,18 @@ public class CommunityService {
                     post.incrementLikeCount();
                     return true;
                 });
+
+        // 새로 좋아요가 켜졌고 본인 글이 아닐 때 글 작성자에게 알림 (커밋 후 적재)
+        if (liked && !post.getAuthor().getId().equals(userId)) {
+            eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
+                    post.getAuthor().getId(),
+                    "community",
+                    "내 글을 좋아해요",
+                    user.getNickname() + "님이 ‘" + post.getTitle() + "’을 좋아해요.",
+                    "/community/" + post.getId()));
+        }
+
+        return liked;
     }
 
     // ─── 댓글 ────────────────────────────────────────────────
@@ -157,7 +169,7 @@ public class CommunityService {
         Comment comment = findActiveComment(commentId);
         User user = findUser(userId);
 
-        return commentLikeRepository.findByCommentIdAndUserId(commentId, userId)
+        boolean liked = commentLikeRepository.findByCommentIdAndUserId(commentId, userId)
                 .map(like -> {
                     commentLikeRepository.delete(like);
                     comment.decrementLikeCount();
@@ -168,6 +180,18 @@ public class CommunityService {
                     comment.incrementLikeCount();
                     return true;
                 });
+
+        // 새로 좋아요가 켜졌고 본인 댓글이 아닐 때 댓글 작성자에게 알림 (커밋 후 적재)
+        if (liked && !comment.getAuthor().getId().equals(userId)) {
+            eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
+                    comment.getAuthor().getId(),
+                    "community",
+                    "내 댓글을 좋아해요",
+                    user.getNickname() + "님이 회원님의 댓글을 좋아해요.",
+                    "/community/" + comment.getPost().getId()));
+        }
+
+        return liked;
     }
 
     @Transactional

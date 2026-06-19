@@ -230,6 +230,14 @@ public class CompanionService {
             }
         }
 
+        // 신청자에게 수락 알림 (커밋 후 적재)
+        eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
+                application.getApplicant().getId(),
+                "companion",
+                "동행 신청이 수락되었어요",
+                "‘" + post.getTitle() + "’ 동행 신청이 수락되었어요.",
+                "/community?tab=companion"));
+
         return CompanionApplicationResponse.of(application);
     }
 
@@ -240,6 +248,15 @@ public class CompanionService {
 
         CompanionApplication application = findApplication(applicationId, post);
         application.reject();
+
+        // 신청자에게 반려 알림 (커밋 후 적재)
+        eventPublisher.publishEvent(new com.trip.notification.event.NotificationEvent(
+                application.getApplicant().getId(),
+                "companion",
+                "동행 신청 결과 안내",
+                "‘" + post.getTitle() + "’ 동행 신청이 반려되었어요.",
+                "/community?tab=companion"));
+
         return CompanionApplicationResponse.of(application);
     }
 

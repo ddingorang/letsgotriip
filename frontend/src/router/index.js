@@ -42,6 +42,15 @@ const router = createRouter({
     { path: '/assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/documents', name: 'documents', component: () => import('@/views/DocumentsView.vue'), meta: { tabBar: false, requiresAuth: true } },
 
+    // ── Stories (내 여행 스토리) ────────────────────────────────────────────────
+    { path: '/stories', name: 'stories', component: () => import('@/views/StoriesView.vue'), meta: { requiresAuth: true } },
+
+    // ── Groups (여행 그룹 / 단체할인) ───────────────────────────────────────────
+    { path: '/groups', name: 'groups', component: () => import('@/views/GroupsView.vue'), meta: { requiresAuth: true } },
+
+    // ── Analysis (카톡/음성 업로드 → 전처리) ────────────────────────────────────
+    { path: '/analysis', name: 'analysis', component: () => import('@/views/AnalysisUploadView.vue'), meta: { tabBar: false, requiresAuth: true } },
+
     // ── MyPage ────────────────────────────────────────────────────────────────
     { path: '/mypage', name: 'mypage', component: () => import('@/views/MyPageView.vue'), meta: { requiresAuth: true } },
     { path: '/notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { tabBar: false, requiresAuth: true } },

@@ -55,6 +55,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      // BE PreprocessingController is mapped at bare `analysis` (no /api) — strip /api.
+      '/api/analysis': {
+        target: BACKEND,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
       '/api': { target: BACKEND, changeOrigin: true },
       '/auth': { target: BACKEND, changeOrigin: true },
       '/users': { target: BACKEND, changeOrigin: true },
