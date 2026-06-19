@@ -72,6 +72,7 @@ public class SecurityConfig {
                         // 공지 변경(생성/수정/삭제)은 ADMIN 전용 — GET permitAll 보다 먼저 선언
                         .requestMatchers(HttpMethod.POST, "/api/notices", "/api/notices/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/notices/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/notices/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/notices/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/notices", "/api/notices/**").permitAll()
                         // 커뮤니티 비회원 공개 조회
