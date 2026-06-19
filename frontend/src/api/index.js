@@ -259,6 +259,8 @@ export const companionApi = {
   getList: (params) => http.get('/api/companion/posts', { params }),
   getMyRooms: () => http.get('/api/companion/posts/my'),
   getDetail: (id) => http.get(`/api/companion/posts/${id}`),
+  // data: { title, region, travelDate, duration, maxMembers, estimatedCost, description, tags, planId? }
+  // planId(optional)가 있으면 작성자 소유 계획과 연결된다(BE 검증).
   create: (data) => http.post('/api/companion/posts', data),
   join: (id) => http.post(`/api/companion/posts/${id}/applications`),
   // 신청자 목록/승인/반려 (방장만)

@@ -110,6 +110,42 @@
         <p class="intro-text">{{ comp.intro }}</p>
       </div>
 
+      <!-- Linked plan: map + day-by-day route (연결된 계획이 있을 때만) -->
+      <div v-if="linkedPlan" class="section plan-section">
+        <h3 class="section-title">동행 일정</h3>
+        <p v-if="linkedPlan.title" class="plan-meta">
+          {{ linkedPlan.title }}
+          <span v-if="planDateRange" class="plan-date">· {{ planDateRange }}</span>
+        </p>
+
+        <!-- Kakao map -->
+        <div class="plan-map-wrap">
+          <div ref="mapEl" class="plan-map" />
+          <div v-if="mapError" class="plan-map-error">{{ mapError }}</div>
+          <div v-else-if="!hasPlaces" class="plan-map-error">표시할 장소 좌표가 없어요.</div>
+        </div>
+
+        <!-- Day-by-day place list -->
+        <div v-for="day in placesByDay" :key="day.dayNo" class="plan-day">
+          <div class="plan-day-head">
+            <span class="plan-day-pill">{{ day.dayNo }}일차</span>
+          </div>
+          <div class="plan-route">
+            <div
+              v-for="(place, idx) in day.places"
+              :key="`${day.dayNo}-${idx}`"
+              class="plan-stop"
+            >
+              <div class="plan-stop-left">
+                <div class="plan-stop-dot">{{ idx + 1 }}</div>
+                <div v-if="idx < day.places.length - 1" class="plan-stop-line" />
+              </div>
+              <div class="plan-stop-name">{{ place.title }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style="height: 100px" />
     </div>
 
@@ -153,7 +189,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 
@@ -180,8 +216,140 @@ const isApplied = computed(() =>
 const isApproved = computed(() => comp.value.myApplicationStatus === 'APPROVED')
 const applyError = ref('')
 
+// ── 연결된 계획(지도/동선) ──────────────────────────────────────────────────
+// 상세 응답의 linkedPlan = { planId, title, startDate, endDate, places:[{ dayNo, title, lat, lng }] }
+const linkedPlan = computed(() => comp.value.linkedPlan ?? null)
+// 좌표(lat,lng)가 모두 있는 장소만 (BE가 이미 걸러주지만 방어적으로 한 번 더)
+const mapPlaces = computed(() =>
+  (linkedPlan.value?.places ?? []).filter(
+    p => Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)),
+  ),
+)
+const hasPlaces = computed(() => mapPlaces.value.length > 0)
+// 일자(dayNo)별 그룹핑 — 순서 보존
+const placesByDay = computed(() => {
+  const groups = []
+  const byDay = new Map()
+  for (const p of mapPlaces.value) {
+    const dayNo = p.dayNo ?? 1
+    if (!byDay.has(dayNo)) {
+      const entry = { dayNo, places: [] }
+      byDay.set(dayNo, entry)
+      groups.push(entry)
+    }
+    byDay.get(dayNo).places.push(p)
+  }
+  return groups
+})
+const planDateRange = computed(() => {
+  const lp = linkedPlan.value
+  if (!lp?.startDate) return ''
+  return lp.endDate && lp.endDate !== lp.startDate
+    ? `${lp.startDate} ~ ${lp.endDate}`
+    : lp.startDate
+})
+
+// ── Kakao 지도 ──────────────────────────────────────────────────────────────
+const mapEl = ref(null)
+const mapError = ref('')
+const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY
+let map = null
+let markers = []
+let mapReady = false
+
+// HotplaceRegisterView 와 동일한 SDK 로딩 패턴(전역 캐시 + autoload=false)
+function loadKakao() {
+  if (window.kakao?.maps?.services) return Promise.resolve(window.kakao)
+  if (window.__kakaoMapLoading && !window.kakao?.maps?.services) {
+    window.__kakaoMapLoading = null
+  }
+  if (window.__kakaoMapLoading) return window.__kakaoMapLoading
+  window.__kakaoMapLoading = new Promise((resolve, reject) => {
+    if (!KAKAO_KEY) { reject(new Error('VITE_KAKAO_MAP_KEY 누락')); return }
+    const s = document.createElement('script')
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`
+    s.onload = () => window.kakao.maps.load(() => resolve(window.kakao))
+    s.onerror = () => reject(new Error('Kakao 지도 SDK 로드 실패'))
+    document.head.appendChild(s)
+  })
+  return window.__kakaoMapLoading
+}
+
+function clearMarkers() {
+  markers.forEach(m => m.setMap(null))
+  markers = []
+}
+
+// 장소 좌표로 마커를 찍고 bounds 에 맞춰 화면을 맞춘다
+function renderMarkers() {
+  if (!map || !window.kakao?.maps) return
+  clearMarkers()
+  const places = mapPlaces.value
+  if (!places.length) return
+  const bounds = new window.kakao.maps.LatLngBounds()
+  places.forEach((p, i) => {
+    const pos = new window.kakao.maps.LatLng(Number(p.lat), Number(p.lng))
+    const marker = new window.kakao.maps.Marker({ position: pos, map })
+    markers.push(marker)
+    bounds.extend(pos)
+    // 방문 순서/장소명 인포 라벨
+    const overlay = new window.kakao.maps.CustomOverlay({
+      position: pos,
+      yAnchor: 2.1,
+      content: `<div class="map-label">${i + 1}. ${escapeHtml(p.title ?? '')}</div>`,
+    })
+    overlay.setMap(map)
+    markers.push(overlay)
+  })
+  if (places.length === 1) {
+    map.setCenter(new window.kakao.maps.LatLng(Number(places[0].lat), Number(places[0].lng)))
+    map.setLevel(5)
+  } else {
+    map.setBounds(bounds)
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ))
+}
+
+// linkedPlan 이 준비되면(상세 비동기 로드 후) 지도를 초기화/갱신한다
+async function ensureMap() {
+  if (!hasPlaces.value) return
+  await nextTick()
+  if (!mapEl.value) return
+  try {
+    if (!map) {
+      const kakao = await loadKakao()
+      if (!mapEl.value) return
+      map = new kakao.maps.Map(mapEl.value, {
+        center: new kakao.maps.LatLng(Number(mapPlaces.value[0].lat), Number(mapPlaces.value[0].lng)),
+        level: 7,
+      })
+      mapReady = true
+      setTimeout(() => map?.relayout(), 200)
+    }
+    renderMarkers()
+  } catch (e) {
+    mapError.value = e.message || '지도를 불러올 수 없습니다.'
+  }
+}
+
+watch(hasPlaces, (ready) => {
+  if (ready) ensureMap()
+})
+
 onMounted(async () => {
   await companionStore.getDetail(route.params.id)
+  if (hasPlaces.value) ensureMap()
+})
+
+onBeforeUnmount(() => {
+  clearMarkers()
+  map = null
+  mapReady = false
 })
 
 async function apply() {
@@ -471,5 +639,99 @@ function share() {
   font-weight: 500;
   text-align: center;
   padding-bottom: 4px;
+}
+
+/* ── Linked plan: map + route ─────────────────────────────────────────────── */
+.plan-section { padding-top: 4px; }
+.plan-meta {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  margin: -4px 0 12px;
+  font-weight: 600;
+}
+.plan-date { color: var(--color-ink-muted); font-weight: 500; }
+
+.plan-map-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-line-light);
+  background: var(--color-surface);
+  margin-bottom: 16px;
+}
+.plan-map { width: 100%; height: 100%; }
+.plan-map-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+}
+
+.plan-day { margin-bottom: 14px; }
+.plan-day-head { margin-bottom: 8px; }
+.plan-day-pill {
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+}
+.plan-route { display: flex; flex-direction: column; }
+.plan-stop { display: flex; gap: 10px; align-items: stretch; }
+.plan-stop-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22px;
+  flex-shrink: 0;
+}
+.plan-stop-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--color-peach);
+  background: var(--color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--color-peach);
+  flex-shrink: 0;
+  z-index: 1;
+}
+.plan-stop-line {
+  width: 2px;
+  flex: 1;
+  background: var(--color-line-light);
+  margin: 2px 0;
+  min-height: 14px;
+}
+.plan-stop-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.2px;
+  padding: 1px 0 12px;
+}
+
+/* Kakao CustomOverlay 라벨 — scoped 밖에서 렌더되므로 :deep 사용 */
+:deep(.map-label) {
+  background: rgba(30, 30, 30, 0.86);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 </style>

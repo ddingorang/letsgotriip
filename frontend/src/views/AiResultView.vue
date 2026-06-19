@@ -142,6 +142,14 @@
           </div>
         </Transition>
 
+        <!-- 저장된 계획으로 동행 모집하기 -->
+        <Transition name="slide-down">
+          <button v-if="savedPlanId" class="companion-cta" @click="goCompanion">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></svg>
+            이 일정으로 동행 모집하기
+          </button>
+        </Transition>
+
         <div class="bottom-spacer" />
       </div>
 
@@ -187,6 +195,8 @@ function goBack() {
 const pageLoading = ref(false)
 const saveLoading = ref(false)
 const saveDone = ref(false)
+// 저장 후 반환된 계획 ID — 동행 모집 연결용
+const savedPlanId = ref(null)
 
 // ── Bootstrap: if no current recommendation, try loading latest from history ──
 onMounted(async () => {
@@ -225,17 +235,26 @@ async function handleSavePlan() {
   saveLoading.value = true
   recommendStore.error = null
   try {
-    await recommendStore.savePlan(rec.value.id)
+    // savePlan 은 저장된 PlanDetail({ id, ... })을 반환 — id 를 동행 모집 연결에 사용
+    const plan = await recommendStore.savePlan(rec.value.id)
     saveDone.value = true
-    // Navigate to plan hub after a brief moment so user sees the "저장됨" state
-    setTimeout(() => {
-      router.replace('/plan')
-    }, 800)
+    savedPlanId.value = plan?.id ?? null
+    // 저장 후 계획 보러 가기 / 동행 모집하기 선택지를 노출하기 위해
+    // 자동 이동을 하지 않는다(savedPlanId 없으면 기존처럼 계획 허브로 이동).
+    if (!savedPlanId.value) {
+      setTimeout(() => router.replace('/plan'), 800)
+    }
   } catch {
     // error shown via store.error
   } finally {
     saveLoading.value = false
   }
+}
+
+// 저장된 계획 ID 를 동행 작성 화면에 query 로 전달(라우트 변경 없음)
+function goCompanion() {
+  if (!savedPlanId.value) return
+  router.push({ name: 'companion-write', query: { planId: String(savedPlanId.value) } })
 }
 </script>
 
@@ -675,6 +694,24 @@ async function handleSavePlan() {
   font-weight: 700;
   color: var(--color-peach);
   white-space: nowrap;
+}
+
+.companion-cta {
+  width: 100%;
+  margin-top: 12px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--color-white);
+  color: var(--color-peach-pressed);
+  border: 1.5px solid var(--color-peach);
+  border-radius: var(--radius-xl);
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  cursor: pointer;
 }
 
 .slide-down-enter-active,

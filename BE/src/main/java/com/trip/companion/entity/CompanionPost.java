@@ -58,6 +58,14 @@ public class CompanionPost extends BaseEntity {
     @Builder.Default
     private CompanionStatus status = CompanionStatus.OPEN;
 
+    /**
+     * 연결된 여행 계획 ID (nullable). 동행 모집을 작성자의 여행 계획·지도와 연동하기 위한 약한 참조.
+     * FK 조인 대신 단순 Long 컬럼으로 보유한다(plan 도메인과 느슨한 결합 유지).
+     * ddl-auto=update가 컬럼을 추가한다.
+     */
+    @Column(name = "plan_id")
+    private Long planId;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chat_room_id", nullable = false, unique = true)
     private ChatRoom chatRoom;
@@ -87,6 +95,11 @@ public class CompanionPost extends BaseEntity {
 
     public void assignChatRoom(ChatRoom chatRoom) {
         this.chatRoom = chatRoom;
+    }
+
+    /** 연결할 여행 계획 ID 지정. null이면 연결 해제. */
+    public void linkPlan(Long planId) {
+        this.planId = planId;
     }
 
     /** 콤마 구분 tags 문자열을 리스트로 반환. 비어 있으면 빈 리스트. */

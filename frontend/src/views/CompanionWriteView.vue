@@ -13,6 +13,30 @@
 
     <div class="scroll-content">
       <div class="form-body">
+        <!-- 연결할 계획 (선택) -->
+        <div class="field">
+          <label class="field-label">여행 계획 연결 <span class="optional">(선택)</span></label>
+          <div v-if="plansLoading" class="plan-loading">계획을 불러오는 중…</div>
+          <template v-else>
+            <div v-if="myPlans.length" class="plan-select-list">
+              <button
+                v-for="plan in myPlans"
+                :key="plan.id"
+                :class="['plan-option', { active: form.planId === plan.id }]"
+                @click="selectPlan(plan)"
+              >
+                <div class="plan-option-main">
+                  <span class="plan-option-title">{{ plan.title || '제목 없는 계획' }}</span>
+                  <span v-if="plan.startDate" class="plan-option-date">{{ planDateLabel(plan) }}</span>
+                </div>
+                <svg v-if="form.planId === plan.id" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+            </div>
+            <p v-else class="plan-empty">저장된 여행 계획이 없어요. 계획 없이도 모집할 수 있어요.</p>
+            <button v-if="form.planId" class="plan-clear" @click="clearPlan">연결 해제</button>
+          </template>
+        </div>
+
         <!-- 제목 -->
         <div class="field">
           <label class="field-label">제목 <span class="req">*</span></label>
@@ -113,11 +137,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { planApi } from '@/api/index.js'
 
+const route = useRoute()
 const router = useRouter()
 const companionStore = useCompanionStore()
 const authStore = useAuthStore()
@@ -135,6 +161,50 @@ const form = ref({
   description: '',
   estimatedCost: null,
   tags: [],
+  planId: null,   // 연결할 여행 계획 ID (선택). null이면 미연결
+})
+
+// ── 내 여행 계획 (연결용) ───────────────────────────────────────────────────
+const myPlans = ref([])
+const plansLoading = ref(false)
+
+function planDateLabel(plan) {
+  if (!plan.startDate) return ''
+  return plan.endDate && plan.endDate !== plan.startDate
+    ? `${plan.startDate} ~ ${plan.endDate}`
+    : plan.startDate
+}
+
+// 계획 선택 시 비어 있는 폼 필드를 계획 정보로 채워준다(사용자 입력은 덮어쓰지 않음)
+function selectPlan(plan) {
+  form.value.planId = plan.id
+  if (!form.value.title && plan.title) form.value.title = plan.title
+  if (!form.value.startDate && plan.startDate) form.value.startDate = plan.startDate
+  if (!form.value.endDate && plan.endDate) form.value.endDate = plan.endDate
+}
+
+function clearPlan() {
+  form.value.planId = null
+}
+
+onMounted(async () => {
+  plansLoading.value = true
+  try {
+    const { data } = await planApi.getMyPlans()
+    const items = Array.isArray(data) ? data : (data?.content ?? [])
+    myPlans.value = items
+    // AiResultView 등에서 query.planId 로 넘어온 계획을 자동 선택
+    const presetId = route.query.planId != null ? Number(route.query.planId) : null
+    if (presetId != null && !Number.isNaN(presetId)) {
+      const preset = items.find(p => Number(p.id) === presetId)
+      if (preset) selectPlan(preset)
+      else form.value.planId = presetId // 목록에 없어도 연결 의도는 보존(BE가 소유 검증)
+    }
+  } catch {
+    myPlans.value = []
+  } finally {
+    plansLoading.value = false
+  }
 })
 
 const computedDuration = computed(() => {
@@ -207,6 +277,8 @@ async function submit() {
       : 0,
     description: form.value.description,
     tags: form.value.tags,
+    // 연결된 계획이 있으면 함께 전송. null이면 BE는 미연결로 처리(하위호환).
+    planId: form.value.planId ?? null,
   }
   try {
     const created = await companionStore.create(payload)
@@ -355,6 +427,53 @@ async function submit() {
   border-color: var(--color-peach);
 }
 .tag-chip { font-size: 13px; }
+
+.optional { color: var(--color-ink-muted); font-weight: 500; font-size: 12px; }
+
+.plan-loading,
+.plan-empty {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  padding: 4px 2px;
+  line-height: 1.5;
+}
+
+.plan-select-list { display: flex; flex-direction: column; gap: 8px; }
+.plan-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.plan-option.active {
+  border-color: var(--color-peach);
+  background: var(--color-peach-light);
+}
+.plan-option-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.plan-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-option-date { font-size: 12px; color: var(--color-ink-muted); }
+.plan-clear {
+  align-self: flex-start;
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+}
 
 .info-banner {
   display: flex;

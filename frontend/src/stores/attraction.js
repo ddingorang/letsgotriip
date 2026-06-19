@@ -184,9 +184,16 @@ export const useAttractionStore = defineStore('attraction', () => {
   const searchResults = ref([])      // raw list (kept for backwards compat)
   const currentAttraction = ref(null)
   const loading = ref(false)
+  const loadingMore = ref(false)     // 무한스크롤 다음 페이지 로딩 중
+  const hasMore = ref(true)          // 더 불러올 페이지가 남았는지(빈 결과 시 false)
   const error = ref(null)
   const searchParams = ref({})
   const areas = ref([])
+
+  // 동시/연속 list() 호출에서 늦게 도착한 응답이 최신 결과를 덮어쓰지 못하도록
+  // 단조 증가 토큰을 둔다. list()/loadMore() 진입 시 토큰을 올리고, 비동기 응답
+  // 반영 직전 토큰이 그대로면(= 더 새 요청이 없으면) 적용한다.
+  let requestSeq = 0
 
   // 마지막 탐색 스냅샷 (params + raw results + UI 필터값 + 갱신시각).
   // sessionStorage 와 동기화되어 재진입 시 복원에 쓰인다.
@@ -219,13 +226,29 @@ export const useAttractionStore = defineStore('attraction', () => {
     // 결과를 즉시 상태에 반영 (스피너 없이 바로 표시)
     applyRaw(snap.results, snap.params ?? {})
     loading.value = false
+    // 재진입 시 무한스크롤을 다시 사용할 수 있도록 페이지 상태 리셋
+    hasMore.value = snap.results.length > 0
     return snap
   }
 
-  // 주어진 raw 배열을 상태에 반영
-  function applyRaw(raw, params) {
-    searchResults.value = raw
-    attractions.value = raw.map((item, i) => mapAttraction(item, i + 1))
+  // 주어진 raw 배열을 상태에 반영.
+  // append=true 면 기존 목록 뒤에 누적하되 contentId 기준 중복을 제거한다.
+  function applyRaw(raw, params, append = false) {
+    if (append) {
+      const seen = new Set(searchResults.value.map((it) => String(it.contentId ?? it.id ?? '')))
+      const fresh = raw.filter((it) => {
+        const id = String(it.contentId ?? it.id ?? '')
+        if (!id || seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+      const merged = searchResults.value.concat(fresh)
+      searchResults.value = merged
+      attractions.value = merged.map((item, i) => mapAttraction(item, i + 1))
+    } else {
+      searchResults.value = raw
+      attractions.value = raw.map((item, i) => mapAttraction(item, i + 1))
+    }
     searchParams.value = params
   }
 
@@ -245,22 +268,33 @@ export const useAttractionStore = defineStore('attraction', () => {
    * 백그라운드로 최신화한다. 캐시가 없으면 기존처럼 로딩 후 조회한다.
    * Falls back to MOCK_ATTRACTIONS on network failure.
    */
-  async function list(params = {}, ui = undefined) {
+  async function list(params = {}, ui = undefined, opts = {}) {
+    // forceLoading: 카테고리/검색어 전환처럼 "결과가 바뀌어야 하는" 호출에서
+    // 기존 목록이 남아 있어도 스켈레톤을 띄워 즉시 전환을 알린다.
+    const { forceLoading = false } = opts
     error.value = null
     searchParams.value = params
+    // 새 1페이지 조회 — 페이지네이션 상태 리셋(다음 페이지 다시 탐색 가능)
+    hasMore.value = true
+
+    // 이번 호출의 토큰 — 늦게 도착한 이전 요청이 최신 결과를 덮어쓰는 것을 막는다
+    const seq = ++requestSeq
+    const isCurrent = () => seq === requestSeq
 
     const cached = readListCache(params)
     if (cached) {
       // 캐시 즉시 반영 — 로딩 스피너 없이 바로 표시
       applyRaw(cached, params)
       loading.value = false
+      hasMore.value = cached.length > 0
       // 사용자가 명시적으로 탐색한 경우(ui 전달) 즉시 마지막 탐색으로 보존
       if (ui) saveLastExplore(params, cached, ui)
       // 백그라운드 갱신 (조용히, 실패해도 캐시 유지)
       fetchAndStore(params)
         .then((raw) => {
-          if (raw) {
+          if (raw && isCurrent()) {
             applyRaw(raw, params)
+            hasMore.value = raw.length > 0
             if (ui) saveLastExplore(params, raw, ui)
           }
         })
@@ -270,17 +304,64 @@ export const useAttractionStore = defineStore('attraction', () => {
 
     // 이미 표시 중인 결과가 있으면(예: 마지막 탐색 복원 후 백그라운드 갱신)
     // 스켈레톤으로 덮지 않고 조용히 갱신 — "네트워크 없이 즉시 복원" 보장.
-    if (!attractions.value.length) loading.value = true
+    // 단, 카테고리/검색어 전환(forceLoading)이면 즉시 스켈레톤을 띄운다.
+    if (forceLoading || !attractions.value.length) loading.value = true
     try {
       const raw = await fetchAndStore(params)
+      // 더 새 요청이 시작됐으면 이 응답은 버린다(stale overwrite 방지)
+      if (!isCurrent()) return
       applyRaw(raw, params)
+      hasMore.value = raw.length > 0
       if (ui) saveLastExplore(params, raw, ui)
     } catch (e) {
+      if (!isCurrent()) return
       error.value = e.response?.data?.message ?? e.message ?? '검색 중 오류가 발생했습니다.'
       searchResults.value = MOCK_ATTRACTIONS
       attractions.value = MOCK_ATTRACTIONS.map((item, i) => mapAttraction(item, i + 1))
+      hasMore.value = false
     } finally {
-      loading.value = false
+      if (isCurrent()) loading.value = false
+    }
+  }
+
+  /**
+   * 무한스크롤 다음 페이지 로드 — 현재 searchParams 기준 page+1 을 조회해
+   * 기존 목록 뒤에 누적(append)한다. contentId 기준 중복은 제거한다.
+   *
+   * 빈 결과(마지막 페이지)면 hasMore=false 로 더 이상 호출하지 않는다.
+   * 기존 캐시/lastExplore 동작은 그대로 보존한다(append 결과는 캐시에 기록하지 않음).
+   * @returns {Promise<boolean>} 새 항목을 추가했으면 true
+   */
+  async function loadMore() {
+    // 더 없거나 이미 로딩 중/초기 로딩 중이면 무시
+    if (!hasMore.value || loadingMore.value || loading.value) return false
+    const base = searchParams.value ?? {}
+    const currentPage = Number(base.page) > 0 ? Number(base.page) : 1
+    const nextParams = { ...base, page: currentPage + 1 }
+
+    const seq = ++requestSeq
+    const isCurrent = () => seq === requestSeq
+
+    loadingMore.value = true
+    try {
+      const { data } = await attractionApi.list(nextParams)
+      const raw = Array.isArray(data) ? data : (data?.content ?? data?.items ?? [])
+      if (!isCurrent()) return false
+      if (!raw.length) {
+        hasMore.value = false
+        return false
+      }
+      const before = searchResults.value.length
+      applyRaw(raw, nextParams, true)   // append + dedup
+      const added = searchResults.value.length - before
+      // 모두 중복이었으면(서버가 같은 페이지 반복) 더 진행하지 않음
+      if (added === 0) hasMore.value = false
+      return added > 0
+    } catch {
+      // 다음 페이지 실패는 조용히 무시 — 현재 목록 유지, 재시도 가능하도록 page 유지
+      return false
+    } finally {
+      if (isCurrent()) loadingMore.value = false
     }
   }
 
@@ -343,12 +424,15 @@ export const useAttractionStore = defineStore('attraction', () => {
     searchResults,
     currentAttraction,
     loading,
+    loadingMore,
+    hasMore,
     error,
     searchParams,
     areas,
     lastExplore,
     // actions
     list,
+    loadMore,
     prefetch,
     search,
     fetchDetail,

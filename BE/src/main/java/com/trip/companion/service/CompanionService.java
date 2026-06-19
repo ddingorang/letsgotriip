@@ -15,6 +15,8 @@ import com.trip.companion.repository.CompanionPostRepository;
 import com.trip.community.dto.CursorPageResponse;
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
+import com.trip.plan.dto.PlanDetailResponseDto;
+import com.trip.plan.service.PlanService;
 import com.trip.user.entity.User;
 import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ public class CompanionService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatRoomMembershipRepository chatRoomMembershipRepository;
     private final UserRepository userRepository;
+    private final PlanService planService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // ─── 게시글 ───────────────────────────────────────────────
@@ -44,6 +47,12 @@ public class CompanionService {
     @Transactional
     public CompanionPostResponse createPost(Long userId, CompanionPostCreateRequest request) {
         User author = findUser(userId);
+
+        // 연결할 계획이 지정되면 작성자 소유인지 먼저 검증한다.
+        // PlanService.getDetail이 미존재 시 PLAN_NOT_FOUND(404), 타인 소유 시 PLAN_FORBIDDEN(403)을 던진다.
+        if (request.planId() != null) {
+            planService.getDetail(userId, request.planId());
+        }
 
         // 채팅방 생성 및 모임장 멤버십 등록 (chat_room_id NOT NULL 이므로 post 저장 전에 먼저 생성)
         String chatRoomTitle = request.title().length() > 18
@@ -68,6 +77,7 @@ public class CompanionService {
                 .estimatedCost(request.estimatedCost())
                 .description(request.description())
                 .tags(CompanionPost.joinTags(request.tags()))
+                .planId(request.planId())
                 .chatRoom(chatRoom)
                 .build();
 
@@ -351,6 +361,23 @@ public class CompanionService {
         }
 
         return CompanionPostResponse.of(post, currentMembers, pendingCount, approvedCount,
-                isApplied, myApplicationId, myApplicationStatus);
+                isApplied, myApplicationId, myApplicationStatus, buildLinkedPlan(post));
+    }
+
+    /**
+     * 연결된 여행 계획 요약(+지도용 장소)을 구성한다. 미연결이면 null.
+     * 계획은 작성자 소유이므로 작성자 기준으로 PlanService.getDetail을 호출해 좌표를 내려준다.
+     * 계획이 삭제되었거나 조회 불가한 경우에는 게시글 조회가 깨지지 않도록 null로 폴백한다.
+     */
+    private LinkedPlanResponse buildLinkedPlan(CompanionPost post) {
+        Long planId = post.getPlanId();
+        if (planId == null) return null;
+        try {
+            PlanDetailResponseDto plan = planService.getDetail(post.getAuthor().getId(), planId);
+            return LinkedPlanResponse.from(plan);
+        } catch (Exception e) {
+            // 계획 삭제/접근불가 등 — 동행 게시글 조회 자체는 유지
+            return null;
+        }
     }
 }

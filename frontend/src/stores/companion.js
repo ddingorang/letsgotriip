@@ -66,6 +66,10 @@ export const useCompanionStore = defineStore('companion', () => {
       myApplicationId: item.myApplicationId ?? null,
       myApplicationStatus: item.myApplicationStatus ?? null,
       chatRoomId: item.chatRoomId ?? null,
+      // 연결된 여행 계획 (상세 응답 기준). 미연결 시 null.
+      // linkedPlan = { planId, title, startDate, endDate, places:[{ dayNo, title, lat, lng }] }
+      planId: item.planId ?? null,
+      linkedPlan: item.linkedPlan ?? null,
     }
   }
 

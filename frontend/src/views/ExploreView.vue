@@ -48,7 +48,7 @@
     </div>
 
     <!-- ── Bottom sheet ──────────────────────────────────────────────────── -->
-    <div class="bottom-sheet" :class="{ expanded: sheetExpanded }">
+    <div ref="bottomSheet" class="bottom-sheet" :class="{ expanded: sheetExpanded }">
       <div class="sheet-handle" @click="sheetExpanded = !sheetExpanded" />
       <div class="sheet-header">
         <h2 class="sheet-title">
@@ -130,6 +130,20 @@
             </span>
           </div>
         </div>
+
+        <!-- 무한스크롤 센티넬 — 화면에 들어오면 다음 페이지 로드 -->
+        <div
+          v-if="displayedPlaces.length && store.hasMore && !searchQuery.trim()"
+          ref="loadMoreSentinel"
+          class="load-more-sentinel"
+        >
+          <div v-if="store.loadingMore" class="load-more-spinner">
+            <span class="spinner-dot" /><span class="spinner-dot" /><span class="spinner-dot" />
+          </div>
+        </div>
+        <div v-else-if="displayedPlaces.length && !store.hasMore" class="list-end">
+          마지막 결과입니다
+        </div>
       </div>
 
       <!-- Festival section (if loaded and fits cleanly) -->
@@ -162,7 +176,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { useFestivalStore } from '@/stores/festival.js'
 import { useLocationStore } from '@/stores/location.js'
@@ -177,6 +191,11 @@ const searchQuery = ref('')
 const sheetExpanded = ref(false)
 const selectedPlace = ref(null)
 const selectedCategory = ref('all')
+
+// 무한스크롤 — 바닥 센티넬이 보이면 다음 페이지를 누적 로드
+const bottomSheet = ref(null)          // 스크롤 컨테이너(IntersectionObserver root)
+const loadMoreSentinel = ref(null)     // 목록 끝 감지 대상
+let io = null                          // IntersectionObserver 인스턴스
 
 // ── Category chip definitions ─────────────────────────────────────────────────
 // contentTypeId mapping: 관광지=12, 축제행사=15, 음식점=39, 숙박=32, 전체=all
@@ -301,11 +320,13 @@ function selectCategory(key) {
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
   const params = {
+    page: 1,
     size: PAGE_SIZE,
     ...locParams(),
     ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
   }
-  store.list(params, currentUi())
+  // 카테고리 전환은 결과가 반드시 바뀌어야 하므로 즉시 로딩 표시(forceLoading)
+  store.list(params, currentUi(), { forceLoading: true })
 }
 
 function selectPlace(place) {
@@ -321,10 +342,12 @@ function onSearchInput() {
       const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
       const params = {
         keyword: q,
+        page: 1,
         size: PAGE_SIZE,
         ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
       }
-      store.list(params, currentUi())
+      // 검색어 변경도 결과 전환이므로 즉시 로딩 표시 + page 리셋
+      store.list(params, currentUi(), { forceLoading: true })
     } else {
       // Query cleared below threshold — reload the unfiltered list for current category
       loadAttractions()
@@ -340,6 +363,7 @@ function clearSearch() {
 function loadAttractions() {
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
   const params = {
+    page: 1,
     size: PAGE_SIZE,
     ...locParams(),
     ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
@@ -395,6 +419,47 @@ function restoreFromLastExplore(snap) {
   // 백그라운드 SWR 갱신 — 같은 params·ui 로 다시 list (캐시/네트워크 최신화)
   store.list(snap.params ?? {}, currentUi())
 }
+
+// ── 무한스크롤 ─────────────────────────────────────────────────────────────────
+// 바닥 센티넬이 스크롤 컨테이너(bottom-sheet) 안에서 보이면 다음 페이지를 누적 로드.
+// 페이지 누적 직후 센티넬이 여전히 보이면 IntersectionObserver 가 다시 발화하므로
+// 짧은 목록에서도 자연스럽게 이어진다(중복은 store.loadMore 가 contentId로 제거).
+function onSentinelIntersect(entries) {
+  if (!entries.some((e) => e.isIntersecting)) return
+  if (!store.hasMore || store.loading || store.loadingMore) return
+  store.loadMore()
+}
+
+function setupObserver() {
+  if (typeof IntersectionObserver === 'undefined') return
+  teardownObserver()
+  if (!loadMoreSentinel.value) return
+  io = new IntersectionObserver(onSentinelIntersect, {
+    root: bottomSheet.value ?? null,   // 시트 내부 스크롤 기준(없으면 뷰포트)
+    rootMargin: '120px',               // 바닥 도달 전 미리 로드
+    threshold: 0,
+  })
+  io.observe(loadMoreSentinel.value)
+}
+
+function teardownObserver() {
+  if (io) {
+    io.disconnect()
+    io = null
+  }
+}
+
+// 센티넬은 v-if 로 붙었다 떨어지므로(검색어 입력/마지막 페이지) DOM 변동마다 재관찰.
+watch(
+  () => loadMoreSentinel.value,
+  async () => {
+    await nextTick()
+    if (loadMoreSentinel.value) setupObserver()
+    else teardownObserver()
+  },
+)
+
+onBeforeUnmount(teardownObserver)
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
@@ -655,6 +720,45 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
+}
+
+/* ── 무한스크롤 (센티넬 / more 로딩 / 끝) ─────────────────────────────────── */
+.load-more-sentinel {
+  height: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 0 4px;
+}
+
+.load-more-spinner {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.spinner-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-peach);
+  opacity: 0.4;
+  animation: dot-pulse 1s infinite ease-in-out;
+}
+
+.spinner-dot:nth-child(2) { animation-delay: 0.15s; }
+.spinner-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50%      { opacity: 1;   transform: scale(1); }
+}
+
+.list-end {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--color-ink-muted);
+  padding: 14px 0 6px;
 }
 
 /* ── Loading skeleton ─────────────────────────────────────────────────────── */

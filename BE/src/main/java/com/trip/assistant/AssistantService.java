@@ -8,8 +8,10 @@ import com.trip.checklist.dto.ChecklistItemResponse;
 import com.trip.checklist.service.ChecklistService;
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
+import com.trip.plan.dto.PlanBudgetResponseDto;
 import com.trip.plan.dto.PlanDetailResponseDto;
 import com.trip.plan.dto.PlanSummaryResponseDto;
+import com.trip.plan.dto.RouteReportResponseDto;
 import com.trip.plan.service.PlanService;
 import com.trip.recommend.dto.RecommendRequestDto;
 import com.trip.recommend.dto.RecommendationResponseDto;
@@ -373,6 +375,83 @@ public class AssistantService {
             } catch (Exception e) {
                 log.warn("도구 getMyTravelPlans 실패 — error={}", e.getMessage());
                 return "여행 계획을 불러오는 중 오류가 발생했습니다.";
+            }
+        }
+
+        @Tool(description = "사용자의 특정 여행 계획(planId)을 동선·예산 관점에서 평가한다. "
+                + "사용자가 '내 ○○ 여행 평가해줘'처럼 요청하면 getMyTravelPlans로 planId를 찾은 뒤 호출.")
+        public String evaluatePlan(
+                @ToolParam(description = "평가할 여행 계획 ID")
+                Long planId) {
+            try {
+                if (planId == null) {
+                    return "평가할 여행 계획 ID가 필요합니다. 먼저 어떤 여행을 평가할지 알려 주세요.";
+                }
+
+                // 소유자 검증은 PlanService(verifyOwner)가 수행. userId는 서버가 주입(LLM 파라미터 아님).
+                RouteReportResponseDto route = planService.getRouteReport(userId, planId);
+                PlanBudgetResponseDto budget = planService.getBudget(userId, planId);
+
+                StringBuilder sb = new StringBuilder();
+                sb.append("여행 계획(planId=").append(planId).append(") 평가 결과입니다.\n\n");
+
+                // ── 동선 평가 ──────────────────────────────
+                sb.append("[동선]\n");
+                sb.append("- 총 이동거리: 약 ").append(route.totalDistanceKm()).append("km")
+                        .append(", 총 예상 이동시간: 약 ").append(route.totalEstimatedMinutes()).append("분\n");
+
+                for (RouteReportResponseDto.DayRoute day : route.days()) {
+                    sb.append("- ").append(day.dayNo()).append("일차: 장소 ")
+                            .append(day.placeCount()).append("곳, 이동거리 약 ")
+                            .append(day.distanceKm()).append("km, 이동시간 약 ")
+                            .append(day.estimatedMinutes()).append("분");
+                    if (day.reorderSuggested()) {
+                        sb.append(" — 방문 순서를 조정하면 더 효율적일 수 있어요.");
+                    }
+                    sb.append("\n");
+
+                    // 비효율 구간: 가장 긴 이동 구간을 안내(있을 때만)
+                    day.legs().stream()
+                            .max(java.util.Comparator.comparingDouble(RouteReportResponseDto.Leg::distanceKm))
+                            .filter(longest -> longest.distanceKm() > 0)
+                            .ifPresent(longest -> sb.append("  · 가장 긴 구간: ")
+                                    .append(nvl(longest.from())).append(" → ").append(nvl(longest.to()))
+                                    .append(" (약 ").append(longest.distanceKm()).append("km)\n"));
+                }
+
+                // ── 예산 평가 ──────────────────────────────
+                sb.append("\n[예산] (").append(nvl(budget.note())).append(")\n");
+                for (PlanBudgetResponseDto.DayBudget day : budget.dayBudgets()) {
+                    sb.append("- ").append(day.dayNo()).append("일차 추정 비용: 약 ")
+                            .append(day.estimatedCost()).append("원\n");
+                }
+                sb.append("- 총 추정 비용: 약 ").append(budget.totalEstimated()).append("원\n");
+                if (budget.plannedBudget() != null) {
+                    sb.append("- 계획 예산: ").append(budget.plannedBudget()).append("원");
+                    Integer diff = budget.difference();
+                    if (diff != null) {
+                        if (diff >= 0) {
+                            sb.append(" (예산 내, 약 ").append(diff).append("원 여유)\n");
+                        } else {
+                            sb.append(" (예산 초과, 약 ").append(-diff).append("원 부족)\n");
+                        }
+                    } else {
+                        sb.append("\n");
+                    }
+                } else {
+                    sb.append("- 계획에 저장된 예산이 없어 초과 여부는 비교할 수 없어요.\n");
+                }
+
+                return sb.toString();
+            } catch (GeneralException ge) {
+                // 비소유/부재 등 도메인 예외 — 예외 전파 대신 안내 문자열 반환(기존 툴 패턴과 동일).
+                log.warn("도구 evaluatePlan — 계획 접근 실패: userId={}, planId={}, code={}",
+                        userId, planId, ge.getErrorCode());
+                return "지정한 여행 계획(planId=" + planId + ")을 찾을 수 없거나 접근 권한이 없어요. "
+                        + "본인 계획 ID인지 확인해 주세요.";
+            } catch (Exception e) {
+                log.warn("도구 evaluatePlan 실패 — error={}", e.getMessage());
+                return "여행 계획 평가 중 오류가 발생했습니다.";
             }
         }
 
