@@ -14,11 +14,12 @@ public record CompanionPostSummaryResponse(
         String region,
         String duration,
         int maxMembers,
+        int currentMembers,
         CompanionStatus status,
         String authorNickname,
         LocalDateTime createdAt
 ) {
-    public static CompanionPostSummaryResponse of(CompanionPost post) {
+    public static CompanionPostSummaryResponse of(CompanionPost post, int currentMembers) {
         return new CompanionPostSummaryResponse(
                 post.getId(),
                 post.getTitle(),
@@ -26,6 +27,7 @@ public record CompanionPostSummaryResponse(
                 post.getRegion(),
                 post.getDuration(),
                 post.getMaxMembers(),
+                currentMembers,
                 post.getStatus(),
                 post.getAuthor().getNickname(),
                 post.getCreatedAt()

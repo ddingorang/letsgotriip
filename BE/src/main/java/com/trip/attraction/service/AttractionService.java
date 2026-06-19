@@ -160,16 +160,47 @@ public class AttractionService {
         if (item == null) {
             throw new AttractionHandler(ResponseCode.ATTRACTION_NOT_FOUND);
         }
+        return upsertFromItem(contentId, contentType, item);
+    }
+
+    /**
+     * contentType 힌트 없이 스냅샷을 upsert한다 (AI 초안 변환 등).
+     * detailCommon2 응답의 contentTypeId로 실제 유형을 추론하고,
+     * 응답에 없으면 12(관광지)로 폴백한다.
+     */
+    @Transactional
+    public Attraction upsertSnapshot(String contentId) {
+        AttractionItem item = tourApiClient.fetchDetail(contentId);
+        if (item == null) {
+            throw new AttractionHandler(ResponseCode.ATTRACTION_NOT_FOUND);
+        }
+        Integer contentType = parseInt(item.contentTypeId());
+        if (contentType == null) {
+            contentType = 12; // detailCommon2가 유형을 주지 않으면 관광지로 폴백
+        }
+        return upsertFromItem(contentId, contentType, item);
+    }
+
+    /**
+     * detailCommon2 응답(item)으로 (contentId, contentType) 스냅샷을 갱신/생성한다.
+     * 좌표(mapx/mapy)가 응답에 없으면 기존 스냅샷 좌표를 보존해 null 덮어쓰기를 막는다.
+     */
+    private Attraction upsertFromItem(String contentId, Integer contentType, AttractionItem item) {
+        Double lat = parseDouble(item.mapy());   // 위도
+        Double lng = parseDouble(item.mapx());   // 경도
 
         return attractionRepository.findByContentIdAndContentType(contentId, contentType)
                 .map(existing -> {
+                    // detailCommon2가 좌표를 반환하지 않으면 기존 좌표 유지 (null 덮어쓰기 방지)
+                    Double newLat = lat != null ? lat : existing.getLatitude();
+                    Double newLng = lng != null ? lng : existing.getLongitude();
                     existing.update(
                             item.title(),
                             item.addr1(),
                             item.areaCode(),
                             item.sigunguCode(),
-                            parseDouble(item.mapy()),   // 위도
-                            parseDouble(item.mapx()),   // 경도
+                            newLat,
+                            newLng,
                             item.firstimage(),
                             item.tel(),
                             item.overview()
@@ -185,8 +216,8 @@ public class AttractionService {
                                 .addr(item.addr1())
                                 .areaCode(item.areaCode())
                                 .sigunguCode(item.sigunguCode())
-                                .latitude(parseDouble(item.mapy()))
-                                .longitude(parseDouble(item.mapx()))
+                                .latitude(lat)
+                                .longitude(lng)
                                 .imageUrl(item.firstimage())
                                 .tel(item.tel())
                                 .overview(item.overview())
@@ -235,6 +266,12 @@ public class AttractionService {
     private Double parseDouble(String s) {
         if (s == null || s.isBlank()) return null;
         try { return Double.parseDouble(s); }
+        catch (NumberFormatException e) { return null; }
+    }
+
+    private Integer parseInt(String s) {
+        if (s == null || s.isBlank()) return null;
+        try { return Integer.parseInt(s.trim()); }
         catch (NumberFormatException e) { return null; }
     }
 

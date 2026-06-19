@@ -137,7 +137,7 @@
 
       <!-- Owner -->
       <template v-else>
-        <button class="cta-chat" @click="$router.push(`/chat/1`)">
+        <button class="cta-chat" :disabled="comp.chatRoomId == null" @click="openChat">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
         </button>
         <button class="cta-main" @click="$router.push(`/companion/${comp.id}/applicants`)">
@@ -163,9 +163,15 @@ const comp = computed(() => companionStore.getById(route.params.id) ?? {
   status: '모집중', currentCount: 0, maxCount: 4, author: { nickname: '-', tripCount: 0 },
   period: '-', estimatedCost: '-', tags: [], intro: '',
   isOwner: false, pendingCount: 0, approvedCount: 0,
+  isApplied: false, myApplicationId: null, chatRoomId: null,
 })
 
-const isApplied = ref(false)
+// 신청 여부는 서버 응답(comp.isApplied)을 기준으로 하되,
+// 신청/취소 직후에는 재조회 전까지 낙관적 오버라이드를 적용한다.
+const appliedOverride = ref(null)
+const isApplied = computed(() =>
+  appliedOverride.value !== null ? appliedOverride.value : !!comp.value.isApplied,
+)
 const applyError = ref('')
 
 onMounted(async () => {
@@ -176,15 +182,44 @@ async function apply() {
   applyError.value = ''
   try {
     await companionStore.join(comp.value.id)
-    isApplied.value = true
+    appliedOverride.value = true
+    // 서버 기준 isApplied/myApplicationId 동기화
+    await companionStore.getDetail(route.params.id)
+    appliedOverride.value = null
   } catch {
     applyError.value = companionStore.error || '신청에 실패했어요.'
   }
 }
-function cancelApply() {
-  // Cancellation endpoint not yet in BE; optimistic local only
-  isApplied.value = false
+
+async function cancelApply() {
+  applyError.value = ''
+  const applicationId = comp.value.myApplicationId
+  if (!applicationId) {
+    // 신청 ID를 모르면 최신 상세를 다시 받아 확인
+    await companionStore.getDetail(route.params.id)
+  }
+  const id = comp.value.myApplicationId
+  if (!id) {
+    applyError.value = '신청 정보를 찾을 수 없어요.'
+    return
+  }
+  try {
+    await companionStore.cancel(comp.value.id, id)
+    appliedOverride.value = false
+    await companionStore.getDetail(route.params.id)
+    appliedOverride.value = null
+  } catch {
+    applyError.value = companionStore.error || '신청 취소에 실패했어요.'
+  }
 }
+
+function openChat() {
+  const chatRoomId = comp.value.chatRoomId
+  if (chatRoomId != null) {
+    router.push(`/chat/${chatRoomId}`)
+  }
+}
+
 function share() {
   if (navigator.share) navigator.share({ title: comp.value.title, url: location.href })
 }

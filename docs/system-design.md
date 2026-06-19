@@ -1,9 +1,25 @@
 # 관통 여행 — 시스템 설계서 (v0.1 Draft)
 
 > ⚠️ **폐기됨(superseded)**: 이 문서는 강의용 backend/(MyBatis 데모) 전제로 작성된 v0.1입니다.
-> 실제 팀 백엔드(`BE/`, com.trip JPA) 기준의 최신 설계는 **`BE/docs/system-design.md` (v0.2)** 를 보세요.
+> 실제 팀 백엔드(`BE/`, com.trip JPA) 기준의 최신 설계는 **`BE/docs/system-design.md` (v0.2+)** 를 보세요.
+> 본문의 `com.ssafy.trip`·MyBatis·:8080·`enjoytrip` 등은 모두 **현행 코드와 다릅니다**(실제: `com.trip`·JPA·:9090·`trip_chat`).
 
-> 상태: **초안 — Codex 리뷰 대기**
+> ── 현행 구현 상태 주석 (2026-06-19) ────────────────────────────────────────────
+> 본 v0.1 의 MVP 스코프(인증·관광탐색·계획·AI추천)는 **모두 구현 완료**되었고, v0.1이 "MVP 제외"로
+> 둔 도메인까지 실제로는 컨트롤러·서비스·DB까지 **구현**되어 가동 중입니다. 현행 구현 도메인(9개):
+> **attraction · plan · recommend · community(+핫플) · companion · chat · festival · user · (+preprocessing)**.
+> 2차 수정(2026-06-19)으로 해소된 주요 항목:
+> - **계획**: PlanView 반응성·인라인 편집, PlanReport 동선 통계(Haversine + 도보/차량 추정·대체동선 적용).
+> - **추천/관광지**: 테마 한글 매핑 프롬프트, draft→plan contentType 추론(detailCommon2), 좌표 null 보존.
+> - **커뮤니티/핫플**: 핫플 등록 자동승인(즉시 노출), 지도 핀 실 lat/lng.
+> - **동행**: 신청취소(DELETE)·isApplied·채팅버튼 chatRoomId·status 한글 라벨·currentMembers·신청자 message/ageGroup.
+> - **채팅**: 무의존 STOMP 클라이언트(FE) + 히스토리 REST, RabbitMQ /topic 발행, WebSocket origin 제한.
+> - **축제**: FE가 BE `/api/festivals` 경유(TourAPI 직접호출 제거), 배치 areaCode 정합(lDongRegnCd) + ENDED cleanup.
+> - **인증/보안**: bio·온보딩 취향설문 영속화, 쿠키 secure 프로퍼티화, ROLE_ 접두어, 비밀번호 검증, CORS allowed-origins.
+> 미구현(스코프 밖, 백로그): 챌린지/뱃지/공지, 결제/예약, 체크리스트 BE, 탐색 지도. 종합 판정은 `ANALYSIS.md §10` 참조.
+> ─────────────────────────────────────────────────────────────────────────────
+
+> 상태: **초안(폐기) — 역사적 기록**
 > 범위: MVP (도메인 1 인증 · 2 관광 탐색 · 3 여행 계획 · 4 AI 추천) + 확장 대비 구조
 > 관련 문서: [domain-architecture.md](domain-architecture.md), [design/design-system.md](design/design-system.md)
 
@@ -25,6 +41,9 @@
 ### 1.3 MVP 제외 (구조만 대비)
 결제(04·07 화면은 목업 유지), 커뮤니티, 동행, 게임화, 체크리스트, 리뷰, 관리자.
 → 테이블·패키지 네이밍은 확장을 막지 않게 설계하되 **선구현하지 않는다.**
+
+> 현행(2026-06-19) 정정: **커뮤니티(+핫플)·동행·채팅·축제는 이미 구현되어 가동 중**입니다(v0.1 작성 이후 확장됨).
+> 여전히 미구현(백로그)은 결제/예약, 게임화(뱃지/챌린지), 체크리스트 BE, 관리자 백오피스입니다. 결제 화면은 '데모' 배지로 명시됩니다.
 
 ---
 

@@ -45,7 +45,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // sendError(403 등)로 발생하는 ERROR 디스패치가 401로 덮이지 않도록 허용
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        .requestMatchers("/ws/**").permitAll()                  // WebSocket 엔드포인트 인증 제외
+                        .requestMatchers("/ws/**", "/ws-sockjs/**").permitAll() // WebSocket 핸드셰이크 인증 제외(인증은 STOMP CONNECT 프레임에서)
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/login/**").permitAll()
                         .requestMatchers("/oauth2/**").permitAll()

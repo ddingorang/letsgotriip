@@ -196,20 +196,6 @@ const displayedPlaces = computed(() => {
   return list
 })
 
-// ── Map pins (fixed positions cycling through 6 slots) ───────────────────────
-const PIN_POSITIONS = [
-  { top: '30%', left: '62%' },
-  { top: '55%', left: '28%' },
-  { top: '22%', left: '70%' },
-  { top: '45%', left: '45%' },
-  { top: '35%', left: '38%' },
-  { top: '60%', left: '22%' },
-]
-
-function pinPosition(idx) {
-  return PIN_POSITIONS[idx % PIN_POSITIONS.length]
-}
-
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
   selectedCategory.value = key
@@ -338,75 +324,6 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   position: relative;
-}
-
-.map-placeholder {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-}
-
-.map-bg {
-  width: 100%;
-  height: 100%;
-  background: #e8f0e8;
-  background-image: radial-gradient(circle at 30% 40%, #d4e8d4 0%, transparent 40%),
-    radial-gradient(circle at 70% 60%, #c8ddc8 0%, transparent 35%),
-    linear-gradient(135deg, #e0ead8 0%, #d8e8d8 50%, #cce0cc 100%);
-}
-
-.map-pin {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  cursor: pointer;
-}
-
-.pin-bubble {
-  width: 32px;
-  height: 32px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: var(--color-white);
-  border: 2px solid var(--color-peach);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-ink);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  transition: all 0.15s;
-}
-
-.pin-bubble > * {
-  transform: rotate(45deg);
-}
-
-.pin-bubble span {
-  transform: rotate(45deg);
-}
-
-.pin-bubble.selected {
-  background: var(--color-peach);
-  color: white;
-  border-color: var(--color-peach-pressed);
-  transform: rotate(-45deg) scale(1.15);
-}
-
-.location-btn {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--color-white);
-  box-shadow: var(--shadow-card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-ink-muted);
 }
 
 /* ── Bottom sheet ─────────────────────────────────────────────────────────── */

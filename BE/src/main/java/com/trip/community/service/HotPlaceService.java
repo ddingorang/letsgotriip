@@ -48,6 +48,8 @@ public class HotPlaceService {
     public HotPlaceResponse register(Long userId, HotPlaceCreateRequest request) {
         User submitter = findUser(userId);
 
+        // 자동 승인 정책: 등록 즉시 목록/지도에 노출되도록 APPROVED 상태로 저장
+        // (별도 관리자 승인 플로우는 범위 밖)
         HotPlace hotPlace = hotPlaceRepository.save(HotPlace.builder()
                 .submitter(submitter)
                 .name(request.name())
@@ -56,6 +58,7 @@ public class HotPlaceService {
                 .longitude(request.longitude())
                 .category(request.category())
                 .description(request.description())
+                .status(HotPlaceStatus.APPROVED)
                 .build());
 
         List<String> imageUrls = savePhotos(hotPlace, request.imageUrls());

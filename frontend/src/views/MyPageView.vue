@@ -34,24 +34,24 @@
         </div>
         <div class="profile-info">
           <h2 class="profile-name">{{ authStore.user?.nickname ?? '프로필' }}</h2>
-          <p class="profile-bio">{{ authStore.user?.email ?? '' }}</p>
+          <p class="profile-bio">{{ authStore.user?.bio || authStore.user?.email || '' }}</p>
         </div>
       </div>
 
       <!-- Stats -->
       <div class="stats-row">
         <div class="stat">
-          <span class="stat-num">5</span>
+          <span class="stat-num">{{ planCount }}</span>
           <span class="stat-label">여행 계획</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">38</span>
-          <span class="stat-label">다녀온 곳</span>
+          <span class="stat-num">{{ completedCount }}</span>
+          <span class="stat-label">다녀온 여행</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">2</span>
+          <span class="stat-num">{{ unlockedBadgeCount }}</span>
           <span class="stat-label">뱃지</span>
         </div>
       </div>
@@ -68,16 +68,16 @@
           <span class="challenge-phase">준비 중 · Phase 2</span>
         </div>
         <div class="challenge-bar">
-          <div class="challenge-fill" style="width: 70%" />
+          <div class="challenge-fill" style="width: 0%" />
         </div>
-        <p class="challenge-hint">3곳 더 방문하면 여행자 뱃지 획득!</p>
+        <p class="challenge-hint">챌린지 기능은 곧 만나요. 여행을 기록하면 뱃지를 모을 수 있어요.</p>
       </div>
 
       <!-- Main tabs -->
       <div class="main-tab-bar">
         <button
           v-for="(tab, i) in mainTabs"
-          :key="tab"
+          :key="i"
           :class="['main-tab', { active: activeMain === i }]"
           @click="activeMain = i"
         >
@@ -115,7 +115,7 @@
               </div>
               <div class="plan-meta">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-                {{ plan.dateRange }} · {{ plan.spotCount }}곳
+                {{ plan.dateRange }}
               </div>
               <button v-if="plan.status === '완료'" class="album-link" @click.stop="$router.push(`/mypage/album/${plan.id}`)">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
@@ -188,7 +188,7 @@
 
       <!-- ③ 뱃지 -->
       <div v-show="activeMain === 2" class="tab-content">
-        <div class="badge-header">획득한 뱃지 <strong>2</strong> / 6</div>
+        <div class="badge-header">획득한 뱃지 <strong>{{ unlockedBadgeCount }}</strong> / {{ badges.length }}</div>
         <div class="badges-grid">
           <div v-for="badge in badges" :key="badge.key" class="badge-item">
             <div :class="['badge-circle', badge.unlocked ? 'unlocked' : 'locked']">
@@ -196,7 +196,7 @@
               <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
             </div>
             <span class="badge-name">{{ badge.name }}</span>
-            <span v-if="!badge.unlocked" class="badge-progress">{{ badge.progress }}</span>
+            <span v-if="!badge.unlocked && badge.progress" class="badge-progress">{{ badge.progress }}</span>
           </div>
         </div>
       </div>
@@ -218,9 +218,10 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { http } from '@/api/http.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -230,46 +231,117 @@ async function handleLogout() {
   router.push('/login')
 }
 
-const mainTabs = ['내 계획', '앨범 ·', '뱃지 ·']
 const activeMain = ref(0)
 
-// 내 계획
+// ── 내 계획 (GET /api/plans) ────────────────────────────────────────────────
 const planFilters = ['전체', '예정', '완료']
 const planFilter = ref('전체')
-const allPlans = ref([
-  { id: 1, title: '제주 3박 4일', status: '예정', dateRange: '6.12-6.15', spotCount: 12, thumbLabel: '제주\n일정' },
-  { id: 2, title: '부산 주말 여행', status: '완료', dateRange: '5.3-5.4', spotCount: 7, thumbLabel: '부산\n일정' },
-  { id: 3, title: '경주 역사 한바퀴', status: '완료', dateRange: '4.18-4.19', spotCount: 9, thumbLabel: '경주\n일정' },
-])
+const allPlans = ref([])
+
+// 날짜 포맷 'M.D' (예: 6.12)
+function fmtDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getMonth() + 1}.${d.getDate()}`
+}
+
+// 종료일이 오늘보다 과거면 '완료', 아니면 '예정'
+function deriveStatus(endDate) {
+  if (!endDate) return '예정'
+  const end = new Date(endDate)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return end < today ? '완료' : '예정'
+}
+
+function mapPlan(p) {
+  const dateRange = p.startDate && p.endDate
+    ? `${fmtDate(p.startDate)}-${fmtDate(p.endDate)}`
+    : fmtDate(p.startDate) || fmtDate(p.endDate)
+  return {
+    id: p.id,
+    title: p.title,
+    status: deriveStatus(p.endDate),
+    dateRange,
+    // 썸네일은 일정 제목 앞부분을 사용 (이미지 미보유)
+    thumbLabel: (p.title || '여행') + '\n일정',
+  }
+}
+
+async function loadPlans() {
+  try {
+    const { data } = await http.get('/api/plans', { params: { page: 0, size: 50 } })
+    // Page 응답: { content: [...] } 또는 배열 모두 허용
+    const list = Array.isArray(data) ? data : (data?.content ?? [])
+    allPlans.value = list.map(mapPlan)
+  } catch {
+    allPlans.value = []
+  }
+}
+
 const filteredPlans = computed(() => {
   if (planFilter.value === '전체') return allPlans.value
   return allPlans.value.filter((p) => p.status === planFilter.value)
 })
 
-// 앨범
-const albumPhase2 = ref(false)
-const albums = ref([
-  { id: 1, title: '제주 3박 4일', location: '제주 앨범', photoCount: 48 },
-  { id: 2, title: '부산 주말 여행', location: '부산 앨범', photoCount: 23 },
-  { id: 3, title: '경주 한바퀴', location: '경주 앨범', photoCount: 31 },
-  { id: 4, title: '봄 벚꽃 모음', location: '벚꽃 앨범', photoCount: 12 },
-])
+const planCount = computed(() => allPlans.value.length)
+const completedCount = computed(
+  () => allPlans.value.filter((p) => p.status === '완료').length,
+)
 
-// 뱃지
+// ── 앨범 (GET /users/me/albums) ─────────────────────────────────────────────
+const albums = ref([])
+// 앨범이 0개면 Phase 2 안내 플레이스홀더를 보여준다.
+const albumPhase2 = computed(() => albums.value.length === 0)
+
+async function loadAlbums() {
+  try {
+    const { data } = await http.get('/users/me/albums')
+    const list = Array.isArray(data) ? data : (data?.content ?? [])
+    albums.value = list.map((a) => ({
+      id: a.id,
+      title: a.name,
+      location: a.name,
+      photoCount: a.photoCount ?? 0,
+      thumbnailUrl: a.thumbnailUrl ?? null,
+    }))
+  } catch {
+    albums.value = []
+  }
+}
+
+// ── 뱃지 ────────────────────────────────────────────────────────────────────
+// BE 뱃지 시스템 미구현 — 모두 잠금 상태로 표시(가짜 진행도/획득 수치 제거).
 const badges = ref([
   {
-    key: 'first', name: '첫 여행', unlocked: true,
+    key: 'first', name: '첫 여행', unlocked: false,
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z"/></svg>`,
   },
   {
-    key: 'foodie', name: '미식가', unlocked: true,
+    key: 'foodie', name: '미식가', unlocked: false,
     icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
   },
-  { key: 'explorer', name: '탐험가', unlocked: false, progress: '3/5' },
-  { key: 'spots10', name: '10곳 달성', unlocked: false, progress: '7/10' },
-  { key: 'companion', name: '동행 에이커', unlocked: false, progress: '1/3' },
-  { key: 'photo', name: '사진가', unlocked: false, progress: '0/50' },
+  { key: 'explorer', name: '탐험가', unlocked: false, progress: '' },
+  { key: 'spots10', name: '10곳 달성', unlocked: false, progress: '' },
+  { key: 'companion', name: '동행 메이커', unlocked: false, progress: '' },
+  { key: 'photo', name: '사진가', unlocked: false, progress: '' },
 ])
+const unlockedBadgeCount = computed(
+  () => badges.value.filter((b) => b.unlocked).length,
+)
+
+// 탭 라벨에 실제 개수를 표시
+const mainTabs = computed(() => [
+  '내 계획',
+  `앨범 ${albums.value.length}`,
+  `뱃지 ${unlockedBadgeCount.value}`,
+])
+
+onMounted(() => {
+  loadPlans()
+  loadAlbums()
+})
 </script>
 
 <style scoped>

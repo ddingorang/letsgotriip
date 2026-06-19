@@ -34,7 +34,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         userPrincipal,
                         null,
-                        Collections.singletonList(new SimpleGrantedAuthority(userInfo.userRole().name()))
+                        // ROLE_ 접두어 부여 → 향후 hasRole(...) 정합. JWT 클레임(userRole)은 enum name 그대로 유지된다.
+                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + userInfo.userRole().name()))
                 );
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);

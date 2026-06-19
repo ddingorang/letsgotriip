@@ -281,6 +281,9 @@ const budgetOptions = [
 const selectedBudget = ref('10~30만원')
 
 // ── 테마 ──────────────────────────────────────────────────────────────────────
+// key 값(sea/mountain/food/...)이 BE로 전송되는 테마 코드다.
+// BE는 RecommendService.THEME_LABELS에서 이 키를 한글 의미로 매핑해 AI 프롬프트에 반영한다.
+// 키를 추가/변경하면 BE THEME_LABELS도 함께 갱신해야 한다(매핑 테이블 단일 소스 = BE).
 const themes = [
   { key: 'sea',      icon: '🌊', label: '바다/해변' },
   { key: 'mountain', icon: '🏔️', label: '산/자연'   },

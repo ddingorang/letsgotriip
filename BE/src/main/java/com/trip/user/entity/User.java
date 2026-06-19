@@ -54,6 +54,18 @@ public class User extends BaseEntity {
     @Column(name = "profile_image_url", nullable = false)
     private String profileImageUrl;
 
+    /** 프로필 한줄 소개 */
+    @Column(name = "bio", length = 100)
+    private String bio;
+
+    /** 온보딩 취향설문 — 관심사(복수). 콤마 구분 문자열로 저장 (예: "nature,food,activity") */
+    @Column(name = "preferred_interests", length = 255)
+    private String preferredInterests;
+
+    /** 온보딩 취향설문 — 동행 유형 (예: "혼자", "연인", "친구", "가족") */
+    @Column(name = "preferred_companion", length = 20)
+    private String preferredCompanion;
+
     @Column(name = "status", nullable = false)
     private boolean status; // 사용자 상태 (정상 회원: true, 삭제 요청 회원: false)
 
@@ -105,12 +117,26 @@ public class User extends BaseEntity {
                 .build();
     }
 
-    public void updateProfile(String nickname, String profileImageUrl) {
+    public void updateProfile(String nickname, String profileImageUrl, String bio) {
         if (nickname != null && !nickname.isBlank()) {
             this.nickname = nickname;
         }
         if (profileImageUrl != null) {
             this.profileImageUrl = profileImageUrl;
+        }
+        if (bio != null) {
+            // 빈 문자열이면 소개 제거(null), 아니면 갱신
+            this.bio = bio.isBlank() ? null : bio;
+        }
+    }
+
+    /** 온보딩 취향설문 저장. null 인자는 무시(기존 값 유지). */
+    public void updatePreferences(String preferredInterests, String preferredCompanion) {
+        if (preferredInterests != null) {
+            this.preferredInterests = preferredInterests.isBlank() ? null : preferredInterests;
+        }
+        if (preferredCompanion != null) {
+            this.preferredCompanion = preferredCompanion.isBlank() ? null : preferredCompanion;
         }
     }
 

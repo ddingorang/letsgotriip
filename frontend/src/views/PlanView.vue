@@ -47,12 +47,22 @@
               <span class="date-label">{{ formatDate(plan.endDate) }}</span>
             </div>
           </div>
-          <div class="plan-info" @click="togglePlan(plan)">
-            <h3 class="plan-name">{{ plan.title }}</h3>
-            <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
-            <div class="plan-spots">
-              <span v-for="spot in plan.spots?.slice(0, 3)" :key="spot" class="spot-chip">{{ spot }}</span>
+          <div class="plan-info">
+            <div class="plan-info-main" @click="togglePlan(plan)">
+              <h3 class="plan-name">{{ plan.title }}</h3>
+              <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
+              <div class="plan-spots">
+                <span v-for="spot in plan.spots?.slice(0, 3)" :key="spot" class="spot-chip">{{ spot }}</span>
+              </div>
             </div>
+            <button class="plan-delete-btn" title="여행 계획 삭제" @click.stop="confirmDeletePlan(plan)">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </button>
           </div>
 
           <!-- Expanded detail panel -->
@@ -81,6 +91,40 @@
                       <span class="detail-place-num">{{ idx + 1 }}</span>
                       <span class="detail-place-name">{{ place.attraction?.title ?? place.title ?? '장소' }}</span>
                       <span v-if="place.visitTime" class="detail-place-time">{{ place.visitTime }}</span>
+                      <!-- 인라인 편집: 위/아래 이동, 삭제 -->
+                      <div class="place-edit-actions">
+                        <button
+                          class="place-edit-btn"
+                          title="위로 이동"
+                          :disabled="idx === 0 || planStore.loading"
+                          @click="movePlace(plan.id, day, idx, -1)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="18 15 12 9 6 15" />
+                          </svg>
+                        </button>
+                        <button
+                          class="place-edit-btn"
+                          title="아래로 이동"
+                          :disabled="idx === (day.places.length - 1) || planStore.loading"
+                          @click="movePlace(plan.id, day, idx, 1)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+                        <button
+                          class="place-edit-btn danger"
+                          title="장소 삭제"
+                          :disabled="planStore.loading"
+                          @click="removePlace(plan.id, day.dayNo, place)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     <div v-if="!(day.places?.length)" class="detail-empty">일정이 없어요</div>
                   </div>
@@ -138,12 +182,14 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
 
 const router = useRouter()
 const planStore = usePlanStore()
-const plans = planStore.plans
+// storeToRefs로 반응성 유지 — 비반응적 destructure 시 loadPlans() 후 목록이 갱신되지 않음
+const { plans } = storeToRefs(planStore)
 
 const selectedPlanId = ref(null)
 
@@ -197,6 +243,44 @@ async function togglePlan(plan) {
 /** Navigate to the 동선 리포트 screen */
 function goReport(planId) {
   router.push(`/plan/${planId}/report`)
+}
+
+/** 여행 계획 삭제 — 확인 후 deletePlan 호출 */
+async function confirmDeletePlan(plan) {
+  if (!window.confirm(`'${plan.title}' 여행 계획을 삭제할까요?`)) return
+  try {
+    await planStore.deletePlan(plan.id)
+    if (selectedPlanId.value === plan.id) selectedPlanId.value = null
+  } catch {
+    // 오류는 planStore.error에 반영됨
+  }
+}
+
+/**
+ * 같은 날 안에서 장소 순서를 위/아래로 한 칸 이동.
+ * dir: -1(위) | +1(아래). 재정렬한 배열을 replacePlaces로 저장한다.
+ */
+async function movePlace(planId, day, idx, dir) {
+  const places = [...(day.places ?? [])]
+  const target = idx + dir
+  if (target < 0 || target >= places.length) return
+  // swap
+  ;[places[idx], places[target]] = [places[target], places[idx]]
+  try {
+    await planStore.replacePlaces(planId, day.dayNo, places)
+  } catch {
+    // 오류는 planStore.error에 반영됨
+  }
+}
+
+/** 장소 한 개 삭제 */
+async function removePlace(planId, dayNo, place) {
+  if (place.id == null) return
+  try {
+    await planStore.removePlace(planId, dayNo, place.id)
+  } catch {
+    // 오류는 planStore.error에 반영됨
+  }
 }
 </script>
 
@@ -331,6 +415,31 @@ function goReport(planId) {
 .plan-info {
   padding: 14px 16px 16px;
   background: var(--color-white);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.plan-info-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-delete-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.plan-delete-btn:hover {
+  background: var(--color-peach-light);
+  color: var(--color-error);
 }
 
 .plan-name {
@@ -453,6 +562,38 @@ function goReport(planId) {
   padding: 2px 8px;
   border-radius: var(--radius-full);
   white-space: nowrap;
+}
+
+.place-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.place-edit-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.place-edit-btn:hover:not(:disabled) {
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+}
+
+.place-edit-btn.danger:hover:not(:disabled) {
+  color: var(--color-error);
+}
+
+.place-edit-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .detail-empty {

@@ -49,8 +49,12 @@ public class CompanionController {
     }
 
     @GetMapping("/{postId}")
-    public ResponseEntity<CompanionPostResponse> getPost(@PathVariable Long postId) {
-        return ResponseEntity.ok(companionService.getPost(postId));
+    public ResponseEntity<CompanionPostResponse> getPost(
+            @PathVariable Long postId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        Long userId = principal != null ? principal.userId() : null;
+        return ResponseEntity.ok(companionService.getPost(postId, userId));
     }
 
     @PatchMapping("/{postId}")
@@ -85,9 +89,11 @@ public class CompanionController {
     @PostMapping("/{postId}/applications")
     public ResponseEntity<CompanionApplicationResponse> apply(
             @PathVariable Long postId,
-            @AuthenticationPrincipal UserPrincipal principal
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody(required = false) CompanionApplicationRequest request
     ) {
-        CompanionApplicationResponse response = companionService.apply(postId, principal.userId());
+        String message = request != null ? request.message() : null;
+        CompanionApplicationResponse response = companionService.apply(postId, principal.userId(), message);
         return ResponseEntity.created(URI.create("/companion/posts/" + postId + "/applications/" + response.id()))
                 .body(response);
     }

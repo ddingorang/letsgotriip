@@ -5,15 +5,23 @@ import com.trip.festival.entity.Festival;
 import com.trip.festival.entity.FestivalStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface FestivalRepository extends JpaRepository<Festival, String> {
 
+    // 추천 모듈(RecommendService)에서 사용 — 지역 코드별 전체 조회
     List<Festival> findByAreaCode(String areaCode);
 
-    List<Festival> findByStatus(FestivalStatus status);
+    // ── 조회용: end_date 미경과(>= today) 행사만 노출해 만료 행사 잔존을 차단 ──────────
+    List<Festival> findByEndDateGreaterThanEqual(LocalDate today);
 
-    List<Festival> findByAreaCodeAndStatus(String areaCode, FestivalStatus status);
+    List<Festival> findByAreaCodeAndEndDateGreaterThanEqual(String areaCode, LocalDate today);
 
-    List<Festival> findByStatusNot(FestivalStatus status);
+    List<Festival> findByStatusAndEndDateGreaterThanEqual(FestivalStatus status, LocalDate today);
+
+    List<Festival> findByAreaCodeAndStatusAndEndDateGreaterThanEqual(
+            String areaCode, FestivalStatus status, LocalDate today);
+
+    List<Festival> findByStatusNotAndEndDateGreaterThanEqual(FestivalStatus status, LocalDate today);
 }

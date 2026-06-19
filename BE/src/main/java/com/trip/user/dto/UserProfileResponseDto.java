@@ -5,6 +5,7 @@ import com.trip.user.entity.enums.UserRole;
 import lombok.Builder;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Builder
 public record UserProfileResponseDto(
@@ -15,6 +16,9 @@ public record UserProfileResponseDto(
         Gender gender,
         LocalDate birthDate,
         String profileImageUrl,
+        String bio,
+        List<String> preferredInterests,
+        String preferredCompanion,
         UserRole userRole
 ) {
 }

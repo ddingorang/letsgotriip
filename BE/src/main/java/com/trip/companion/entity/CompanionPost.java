@@ -9,6 +9,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 
 @Entity
 @Table(name = "companion_posts")
@@ -47,6 +49,10 @@ public class CompanionPost extends BaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
+    /** 태그 — 콤마 구분 문자열로 저장 (예: "#20대,#맛집투어") */
+    @Column(length = 255)
+    private String tags;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
@@ -81,5 +87,24 @@ public class CompanionPost extends BaseEntity {
 
     public void assignChatRoom(ChatRoom chatRoom) {
         this.chatRoom = chatRoom;
+    }
+
+    /** 콤마 구분 tags 문자열을 리스트로 반환. 비어 있으면 빈 리스트. */
+    public List<String> getTagList() {
+        if (tags == null || tags.isBlank()) return List.of();
+        return Arrays.stream(tags.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    /** tags 리스트를 콤마 구분 문자열로 직렬화. null/빈 리스트면 null 저장. */
+    public static String joinTags(List<String> tagList) {
+        if (tagList == null || tagList.isEmpty()) return null;
+        return tagList.stream()
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .reduce((a, b) -> a + "," + b)
+                .orElse(null);
     }
 }

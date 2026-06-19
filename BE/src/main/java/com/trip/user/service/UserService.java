@@ -3,6 +3,7 @@ package com.trip.user.service;
 import com.trip.global.error.ResponseCode;
 import com.trip.global.error.exception.handler.UserHandler;
 import com.trip.global.util.RedisKeyNamingUtil;
+import com.trip.user.dto.PreferenceUpdateRequestDto;
 import com.trip.user.dto.RedisSessionDto;
 import com.trip.user.dto.UserProfileResponseDto;
 import com.trip.user.dto.UserUpdateRequestDto;
@@ -14,6 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +38,9 @@ public class UserService {
                 .gender(user.getGender())
                 .birthDate(user.getBirthDate())
                 .profileImageUrl(user.getProfileImageUrl())
+                .bio(user.getBio())
+                .preferredInterests(splitInterests(user.getPreferredInterests()))
+                .preferredCompanion(user.getPreferredCompanion())
                 .userRole(user.getUserRole())
                 .build();
     }
@@ -40,9 +48,34 @@ public class UserService {
     @Transactional
     public void updateProfile(Long userId, UserUpdateRequestDto updateDto) {
         User user = findActiveUserById(userId);
-        
+
         // 도메인 모델의 비즈니스 메서드를 사용하여 프로필 업데이트 (유효성 검증 포함)
-        user.updateProfile(updateDto.nickname(), updateDto.profileImageUrl());
+        user.updateProfile(updateDto.nickname(), updateDto.profileImageUrl(), updateDto.bio());
+    }
+
+    /** 온보딩 취향설문 저장. 관심사 목록은 콤마 구분 문자열로 직렬화한다. */
+    @Transactional
+    public void updatePreferences(Long userId, PreferenceUpdateRequestDto request) {
+        User user = findActiveUserById(userId);
+
+        String interests = (request.interests() == null)
+                ? null
+                : request.interests().stream()
+                        .filter(s -> s != null && !s.isBlank())
+                        .collect(Collectors.joining(","));
+
+        user.updatePreferences(interests, request.companion());
+    }
+
+    /** 콤마 구분 관심사 문자열을 리스트로 역직렬화. null/빈 값이면 빈 리스트. */
+    private List<String> splitInterests(String interests) {
+        if (interests == null || interests.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(interests.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toList());
     }
 
     /**

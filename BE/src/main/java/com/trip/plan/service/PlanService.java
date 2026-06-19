@@ -319,8 +319,11 @@ public class PlanService {
                     for (ItineraryDraft.PlaceRecommendation p : dayPlan.places()) {
                         if (p.contentId() == null) continue;
                         try {
-                            // contentTypeId 는 draft에 없으므로 기본값 12(관광지)로 upsert
-                            Attraction attraction = attractionService.upsertSnapshot(p.contentId(), 12);
+                            // draft(PlaceRecommendation)에는 유형 필드가 없으므로
+                            // detailCommon2 응답의 contentTypeId로 실제 유형을 추론한다
+                            // (응답에 유형이 없으면 AttractionService가 12=관광지로 폴백).
+                            // 음식점(39)·축제(15) 등이 12로 오분류되던 문제 해소.
+                            Attraction attraction = attractionService.upsertSnapshot(p.contentId());
 
                             LocalTime visitTime = null;
                             if (p.visitTime() != null && !p.visitTime().isBlank()) {

@@ -68,6 +68,25 @@ public class RecommendService {
     private static final int    MAX_PAGE_SIZE     = 50;
     private static final String MODEL_NAME        = "gpt-4o-mini";
 
+    // FE(AiPlanInputView.vue themes[].key)에서 보내는 테마 영문 키 → LLM 프롬프트용 한글 의미 매핑.
+    // FE 키가 추가/변경되면 이 표를 함께 갱신해야 한다(매핑 테이블은 BE 단일 소스).
+    private static final Map<String, String> THEME_LABELS = Map.of(
+            "sea",      "바다·해변",
+            "mountain", "산·자연",
+            "food",     "맛집·미식 투어",
+            "history",  "역사·문화 유적",
+            "activity", "액티비티·체험",
+            "shopping", "쇼핑"
+    );
+
+    // 동행 코드(CompanionsType / FE apiVal) → 한글 의미
+    private static final Map<String, String> COMPANION_LABELS = Map.of(
+            "SOLO",    "혼자(솔로 여행)",
+            "COUPLE",  "커플(2명)",
+            "FAMILY",  "가족(아이 동반 가능)",
+            "FRIENDS", "친구(3명 이상)"
+    );
+
     // Lua compare-and-delete: 값이 일치할 때만 삭제 (원자적 해제)
     private static final String LUA_COMPARE_AND_DELETE =
             "if redis.call('get', KEYS[1]) == ARGV[1] then " +
@@ -341,13 +360,17 @@ public class RecommendService {
     private String buildPrompt(RecommendRequestDto req, String catalog, String format) {
         return String.format("""
                 당신은 여행 일정 전문가입니다. 아래 후보 장소 목록에서만 선택하여 %d일 여행 일정을 작성해주세요.
+                여행자의 동행·예산·테마 성향을 분석해 그에 맞는 장소를 우선 배치하고, reason에 선정 이유를 한국어로 적어주세요.
 
                 [여행 조건]
                 - 지역코드: %s
                 - 기간: %s ~ %s (%d일)
                 - 동행: %s
                 - 예산: %s
-                - 테마: %s
+                - 선호 테마: %s
+
+                [테마 반영 지침]
+                위 선호 테마에 부합하는 장소를 우선 선택하고, 동행 유형과 예산 수준에 어울리는 동선으로 구성하세요.
 
                 [후보 장소 목록] (contentId|contentTypeId|title|addr)
                 %s
@@ -364,13 +387,36 @@ public class RecommendService {
                 req.totalDays(),
                 req.areaCode(),
                 req.startDate(), req.endDate(), req.totalDays(),
-                nvl(req.companions()),
-                req.budget() != null ? req.budget() + "원" : "미지정",
-                req.themes() != null ? String.join(", ", req.themes()) : "미지정",
+                describeCompanions(req.companions()),
+                describeBudget(req.budget()),
+                describeThemes(req.themes()),
                 catalog,
                 req.totalDays(),
                 format
         );
+    }
+
+    // 테마 영문 키 목록을 한글 자연어로 변환 (매핑 없는 키는 원문 유지)
+    private String describeThemes(List<String> themes) {
+        if (themes == null || themes.isEmpty()) {
+            return "미지정";
+        }
+        return themes.stream()
+                .map(t -> THEME_LABELS.getOrDefault(t, t))
+                .collect(Collectors.joining(", "));
+    }
+
+    // 동행 코드를 한글 의미로 변환 (대소문자 무시, 매핑 없으면 원문)
+    private String describeCompanions(String companions) {
+        if (companions == null || companions.isBlank()) {
+            return "미지정";
+        }
+        return COMPANION_LABELS.getOrDefault(companions.toUpperCase(), companions);
+    }
+
+    // 예산을 한글 자연어로 변환
+    private String describeBudget(Integer budget) {
+        return budget != null ? String.format("약 %,d원", budget) : "미지정";
     }
 
     // ─────────────────────────────────────────────────────────────

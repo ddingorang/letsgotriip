@@ -30,10 +30,7 @@
           <div class="avatar" />
           <div class="applicant-info">
             <div class="applicant-name">{{ applicant.nickname }}</div>
-            <div class="applicant-meta">
-              {{ applicant.ageGroup }} · 동행 {{ applicant.tripCount }}회
-              <span v-if="applicant.mannerScore"> · 매너 {{ applicant.mannerScore }}</span>
-            </div>
+            <div v-if="metaText(applicant)" class="applicant-meta">{{ metaText(applicant) }}</div>
           </div>
           <div v-if="applicant.status === 'approved'" class="approved-badge">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
@@ -42,7 +39,8 @@
           <div v-else-if="applicant.status === 'rejected'" class="rejected-badge">거절됨</div>
         </div>
 
-        <p class="applicant-msg">{{ applicant.message }}</p>
+        <p v-if="applicant.message" class="applicant-msg">{{ applicant.message }}</p>
+        <p v-else class="applicant-msg applicant-msg-empty">남긴 메시지가 없어요.</p>
 
         <div v-if="applicant.status === 'pending'" class="action-row">
           <button class="reject-btn" @click="handleReject(applicant.id)">거절</button>
@@ -68,6 +66,16 @@ const postId = computed(() => route.params.id)
 const comp = computed(() => companionStore.getById(postId.value))
 const pending = computed(() => companionStore.applicants.filter((a) => a.status === 'pending'))
 const approved = computed(() => companionStore.applicants.filter((a) => a.status === 'approved'))
+
+// 신청자 메타(연령대·동행 횟수·매너점수)는 보유한 값만 모아 노출.
+// 통계 미보유 항목(null)은 표시하지 않는다.
+function metaText(applicant) {
+  const parts = []
+  if (applicant.ageGroup) parts.push(applicant.ageGroup)
+  if (applicant.tripCount != null) parts.push(`동행 ${applicant.tripCount}회`)
+  if (applicant.mannerScore != null) parts.push(`매너 ${applicant.mannerScore}`)
+  return parts.join(' · ')
+}
 
 onMounted(async () => {
   await companionStore.getApplications(postId.value)
@@ -168,6 +176,7 @@ async function handleReject(applicationId) {
   border-radius: var(--radius-md);
   margin-bottom: 12px;
 }
+.applicant-msg-empty { color: var(--color-ink-muted); font-style: italic; }
 
 .action-row { display: flex; gap: 8px; }
 .reject-btn {

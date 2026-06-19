@@ -54,6 +54,23 @@
           </div>
         </div>
 
+        <!-- 예상 비용 -->
+        <div class="field">
+          <label class="field-label">예상 비용 (1인)</label>
+          <div class="input-icon-wrap">
+            <input
+              v-model.number="form.estimatedCost"
+              type="number"
+              min="0"
+              step="10000"
+              inputmode="numeric"
+              class="field-input"
+              placeholder="예) 300000"
+            />
+            <span class="cost-unit">원</span>
+          </div>
+        </div>
+
         <!-- 설명 -->
         <div class="field">
           <label class="field-label">설명</label>
@@ -116,6 +133,7 @@ const form = ref({
   endDate: '',
   maxCount: null,
   description: '',
+  estimatedCost: null,
   tags: [],
 })
 
@@ -167,8 +185,11 @@ async function submit() {
     travelDate: form.value.startDate,
     duration: computedDuration.value || '미정',
     maxMembers: parseMax(form.value.maxCount),
-    estimatedCost: 0,
+    estimatedCost: Number.isFinite(form.value.estimatedCost) && form.value.estimatedCost > 0
+      ? Math.trunc(form.value.estimatedCost)
+      : 0,
     description: form.value.description,
+    tags: form.value.tags,
   }
   try {
     const created = await companionStore.create(payload)
@@ -242,6 +263,13 @@ async function submit() {
 .input-icon-wrap svg {
   position: absolute;
   right: 12px;
+  pointer-events: none;
+}
+.cost-unit {
+  position: absolute;
+  right: 14px;
+  font-size: 14px;
+  color: var(--color-ink-muted);
   pointer-events: none;
 }
 

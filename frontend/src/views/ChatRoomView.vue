@@ -83,16 +83,20 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
+import { useChatStore } from '@/stores/chat.js'
 import { useAuthStore } from '@/stores/auth.js'
 
 const route = useRoute()
 const companionStore = useCompanionStore()
+const chatStore = useChatStore()
 const authStore = useAuthStore()
 const msgScroll = ref(null)
 const inputText = ref('')
+
+const roomId = computed(() => route.params.id)
 
 function isMyMessage(msg) {
   const myId = authStore.user?.userId
@@ -100,28 +104,39 @@ function isMyMessage(msg) {
 }
 
 const room = computed(() => companionStore.myRooms.find((r) => r.id === Number(route.params.id)))
-const messages = computed(() => companionStore.messages[route.params.id] ?? [])
+const messages = computed(() => chatStore.messages[String(route.params.id)] ?? [])
 
-function sendMessage() {
-  const text = inputText.value.trim()
-  if (!text) return
-  if (!companionStore.messages[route.params.id]) companionStore.messages[route.params.id] = []
-  companionStore.messages[route.params.id].push({
-    id: Date.now(),
-    senderId: authStore.user?.userId,
-    text,
-    time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-  })
-  inputText.value = ''
+function scrollToBottom() {
   nextTick(() => {
     if (msgScroll.value) msgScroll.value.scrollTop = msgScroll.value.scrollHeight
   })
 }
 
-onMounted(() => {
-  nextTick(() => {
-    if (msgScroll.value) msgScroll.value.scrollTop = msgScroll.value.scrollHeight
-  })
+function sendMessage() {
+  const text = inputText.value.trim()
+  if (!text) return
+  const sent = chatStore.sendMessage(roomId.value, text)
+  if (sent) {
+    inputText.value = ''
+    // 실제 메시지는 STOMP 브로드캐스트(에코)로 수신되어 목록에 추가된다.
+  }
+}
+
+// 새 메시지가 들어오면 자동 스크롤
+watch(() => messages.value.length, () => scrollToBottom())
+
+onMounted(async () => {
+  // 참여 중인 방 목록이 비어 있으면 헤더 정보를 위해 로드
+  if (companionStore.myRooms.length === 0) {
+    await companionStore.fetchMyRooms()
+  }
+  await chatStore.loadHistory(roomId.value)
+  await chatStore.connect(roomId.value)
+  scrollToBottom()
+})
+
+onBeforeUnmount(() => {
+  chatStore.disconnect()
 })
 </script>
 

@@ -56,7 +56,7 @@
 
     <!-- Next button -->
     <div class="cta-bar">
-      <button class="next-btn" @click="next">다음</button>
+      <button class="next-btn" :disabled="saving" @click="next">{{ saving ? '저장 중...' : '다음' }}</button>
     </div>
   </div>
 </template>
@@ -64,8 +64,11 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
+import { http } from '@/api/http.js'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const interests = [
   {
@@ -107,8 +110,10 @@ const interests = [
 ]
 
 const companionTypes = ['혼자', '연인', '친구', '가족']
-const selectedInterests = ref(['nature', 'food', 'activity', 'resort'])
-const selectedCompanion = ref('')
+// 기존 저장값이 있으면 프리필, 없으면 빈 선택으로 시작(하드코딩 프리셋 제거)
+const selectedInterests = ref([...(authStore.user?.preferredInterests ?? [])])
+const selectedCompanion = ref(authStore.user?.preferredCompanion ?? '')
+const saving = ref(false)
 
 function toggleInterest(key) {
   const idx = selectedInterests.value.indexOf(key)
@@ -116,10 +121,31 @@ function toggleInterest(key) {
   else selectedInterests.value.splice(idx, 1)
 }
 
-function skip() {
+/** 취향설문을 서버에 저장한다. 실패해도 온보딩 흐름은 막지 않는다. */
+async function savePreferences() {
+  try {
+    await http.patch('/users/me/preferences', {
+      interests: selectedInterests.value,
+      companion: selectedCompanion.value || null,
+    })
+    // 저장된 취향을 스토어에 반영
+    await authStore.fetchMe()
+  } catch {
+    // 비로그인/네트워크 오류 시 조용히 무시하고 다음 단계로 진행
+  }
+}
+
+async function skip() {
   router.push('/home')
 }
-function next() {
+async function next() {
+  if (saving.value) return
+  saving.value = true
+  try {
+    await savePreferences()
+  } finally {
+    saving.value = false
+  }
   router.push('/home')
 }
 </script>
@@ -268,5 +294,9 @@ function next() {
   font-weight: 700;
   border-radius: var(--radius-xl);
   letter-spacing: -0.3px;
+}
+.next-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

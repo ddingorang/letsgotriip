@@ -40,6 +40,12 @@ public class FestivalItemProcessor implements ItemProcessor<TourApiResponse.Fest
                 .collect(Collectors.joining(" "))
                 .strip();
 
+        // 지역 코드 체계 통일: 배치가 TourAPI를 조회할 때 사용하는 키가 lDongRegnCd 이므로
+        // 저장도 lDongRegnCd 를 표준으로 한다. 응답에 누락 시 areacode 로 폴백한다.
+        // (FestivalService.getFestivals 의 areaCode 필터도 이 컬럼을 조회한다)
+        String areaCode    = firstNonBlank(item.lDongRegnCd(), item.areaCode());
+        String sigunguCode = firstNonBlank(item.lDongSignguCd(), item.sigunguCode());
+
         return Festival.builder()
                 .contentId(item.contentId())
                 .title(item.title())
@@ -50,10 +56,16 @@ public class FestivalItemProcessor implements ItemProcessor<TourApiResponse.Fest
                 .endDate(endDate)
                 .latitude(parseCoord(item.mapy()))
                 .longitude(parseCoord(item.mapx()))
-                .areaCode(item.lDongRegnCd())
-                .sigunguCode(item.lDongSignguCd())
+                .areaCode(areaCode)
+                .sigunguCode(sigunguCode)
                 .status(status)
                 .build();
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) return primary;
+        if (fallback != null && !fallback.isBlank()) return fallback;
+        return null;
     }
 
     private LocalDate parseDate(String s) {

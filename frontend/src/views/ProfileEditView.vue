@@ -76,7 +76,7 @@ const authStore = useAuthStore()
 const form = ref({
   nickname: authStore.user?.nickname ?? '',
   profileImageUrl: authStore.user?.profileImageUrl ?? '',
-  bio: '',
+  bio: authStore.user?.bio ?? '',
 })
 
 const saving = ref(false)
@@ -90,6 +90,7 @@ async function save() {
     await http.patch('/users/me', {
       nickname: form.value.nickname,
       profileImageUrl: form.value.profileImageUrl || undefined,
+      bio: form.value.bio ?? '',
     })
     await authStore.fetchMe()
     router.back()

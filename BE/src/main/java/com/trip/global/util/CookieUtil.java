@@ -2,6 +2,7 @@ package com.trip.global.util;
 
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,10 @@ import java.time.Duration;
 public class CookieUtil {
 
     private final JwtUtil jwtUtil;
+
+    // 환경별 Secure 플래그 제어 — 운영(HTTPS) 기본 true, 로컬 개발은 application.yaml에서 false로 오버라이드
+    @Value("${app.cookie.secure:true}")
+    private boolean cookieSecure;
 
     public void addAuthCookies(HttpServletResponse response,
                                       String refreshToken,
@@ -40,7 +45,7 @@ public class CookieUtil {
                 .path("/")
                 .maxAge(maxAge)
                 .sameSite("Lax")
-                .secure(false) // TODO 운영 HTTPS 전환 시 secure(true)
+                .secure(cookieSecure) // 운영 HTTPS는 true, 로컬 HTTP는 app.cookie.secure=false로 허용
                 .build();
     }
 }

@@ -104,10 +104,10 @@
           <div class="map-block water" style="top:68%;left:0%;width:35%;height:28%" />
 
           <button
-            v-for="hp in filteredHotplaces"
+            v-for="hp in mappableHotplaces"
             :key="hp.id"
             :class="['pin-btn', { selected: selectedHp?.id === hp.id }]"
-            :style="{ left: hp.x + '%', top: hp.y + '%' }"
+            :style="pinStyle(hp)"
             @click="selectedHp = selectedHp?.id === hp.id ? null : hp"
           >
             <svg width="30" height="38" viewBox="0 0 30 38" :fill="selectedHp?.id === hp.id ? '#e0743a' : '#f78f57'">
@@ -277,6 +277,50 @@ const filteredHotplaces = computed(() => {
   if (hpCat.value === '전체') return hotplaceStore.hotplaces
   return hotplaceStore.hotplaces.filter((h) => h.category === hpCat.value)
 })
+
+// 지도에 표시 가능한(실좌표 보유) 핫플만 핀으로 렌더
+const mappableHotplaces = computed(() =>
+  filteredHotplaces.value.filter(
+    (h) => Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lng)),
+  ),
+)
+
+// 표시 대상 핫플들의 위경도 경계 박스 (핀 화면좌표 계산용)
+const mapBounds = computed(() => {
+  const pts = mappableHotplaces.value
+  if (!pts.length) return null
+  const lats = pts.map((h) => Number(h.lat))
+  const lngs = pts.map((h) => Number(h.lng))
+  return {
+    minLat: Math.min(...lats),
+    maxLat: Math.max(...lats),
+    minLng: Math.min(...lngs),
+    maxLng: Math.max(...lngs),
+  }
+})
+
+/**
+ * 실제 위경도를 데코레이션 지도 영역(0~100%)의 화면 좌표로 투영.
+ * 경계 박스 기준으로 정규화하며, 핀이 가장자리에 붙지 않도록 패딩(12~88%)을 둔다.
+ * 좌표가 하나뿐이거나 모두 동일하면 중앙(50%)에 배치한다.
+ */
+function pinStyle(hp) {
+  const b = mapBounds.value
+  const lat = Number(hp.lat)
+  const lng = Number(hp.lng)
+  const PAD_MIN = 12
+  const PAD_MAX = 88
+  const span = PAD_MAX - PAD_MIN
+
+  const lngSpan = b ? b.maxLng - b.minLng : 0
+  const latSpan = b ? b.maxLat - b.minLat : 0
+
+  // 경도 → left(%), 위도 → top(%) (위도가 클수록 북쪽이므로 위쪽=작은 top)
+  const left = lngSpan > 0 ? PAD_MIN + ((lng - b.minLng) / lngSpan) * span : 50
+  const top = latSpan > 0 ? PAD_MIN + ((b.maxLat - lat) / latSpan) * span : 50
+
+  return { left: left + '%', top: top + '%' }
+}
 
 onMounted(() => {
   postsStore.fetchPosts(true)

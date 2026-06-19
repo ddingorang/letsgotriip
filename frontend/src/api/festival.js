@@ -1,80 +1,42 @@
-// TourAPI direct calls via /api/tour proxy → https://apis.data.go.kr
-// Proxy rule in vite.config.js: '/api/tour' → rewrite to '' (strip prefix)
-import axios from 'axios'
+// Festival API — BE 경유 래퍼.
+// 과거에는 FE가 TourAPI(/api/tour)를 직접 호출하고 서비스키를 하드코딩했으나,
+// 이제는 Spring 백엔드(GET /api/festivals)만 호출한다. TourAPI 호출/키 관리는
+// 전적으로 BE 책임이다. (festivalApi 정의는 @/api/index.js 참고)
+import { festivalApi } from '@/api/index.js'
 
-const BASE = '/api/tour/B551011/KorService2'
-
-export function getFestivalDateRange() {
-  const today = new Date()
-  const from = new Date(today)
-  from.setMonth(from.getMonth() - 1)
-  const to = new Date(today)
-  to.setMonth(to.getMonth() + 1)
-  const fmt = (d) => d.toISOString().slice(0, 10).replace(/-/g, '')
-  return { from: fmt(from), to: fmt(to), today: fmt(today) }
-}
-
-const SERVICE_KEY =
-  import.meta.env.VITE_KOREA_TOURISM_API_KEY ||
-  '73c339a232ae3d694d3f76d524933ae3fda8c253c457a71fa3cf0bfe73609c7c'
-
-function extractHomepageUrl(raw) {
+/**
+ * BE 응답(YYYY-MM-DD)을 뷰가 기대하는 YYYYMMDD 형식으로 정규화.
+ * BE FestivalResponse.startDate/endDate 는 LocalDate.toString() → "2026-06-19".
+ */
+function normalizeDate(raw) {
   if (!raw) return ''
-  const trimmed = String(raw).trim()
-  if (trimmed.startsWith('http')) return trimmed
-  const match = trimmed.match(/href=["']([^"']+)["']/i)
-  return match ? match[1] : ''
+  return String(raw).replace(/-/g, '')
 }
 
-export async function fetchFestivals({ areaCode = '' } = {}) {
-  const { from, to, today } = getFestivalDateRange()
+/**
+ * 진행중/예정 축제 목록을 BE에서 조회해 뷰 표준 형태로 매핑한다.
+ * @param {{ areaCode?: string, status?: string }} options
+ *   - areaCode: 지역 코드(법정동 광역 코드, 예: "11"). 비우면 전체.
+ *   - status: UPCOMING | ONGOING | ENDED. 비우면 BE 기본(ENDED 제외).
+ * @returns {Promise<Array>} 정규화된 축제 목록
+ */
+export async function fetchFestivals({ areaCode = '', status = '' } = {}) {
+  const params = {}
+  if (areaCode) params.areaCode = areaCode
+  if (status) params.status = status
 
-  const params = {
-    serviceKey: SERVICE_KEY,
-    numOfRows: 100,
-    pageNo: 1,
-    MobileOS: 'ETC',
-    MobileApp: 'EnjoyTrip',
-    _type: 'json',
-    arrange: 'A',
-    eventStartDate: from,
-    eventEndDate: to,
-  }
-  if (areaCode) params.lDongRegnCd = areaCode
+  const { data } = await festivalApi.list(params)
+  const items = Array.isArray(data) ? data : []
 
-  const { data } = await axios.get(`${BASE}/searchFestival2`, { params })
-
-  // flat error format
-  if (data?.resultCode && data.resultCode !== '0') {
-    throw new Error(`[${data.resultCode}] ${data.resultMsg ?? '관광정보 서비스 오류'}`)
-  }
-
-  // nested success format
-  const header = data?.response?.header
-  if (header && header.resultCode !== '0000') {
-    throw new Error(`[${header.resultCode}] ${header.resultMsg ?? '관광정보 서비스 오류'}`)
-  }
-
-  const raw = data?.response?.body?.items?.item
-  if (!raw) return []
-
-  const items = Array.isArray(raw) ? raw : [raw]
-
-  return items
-    .filter((item) => {
-      const start = String(item.eventstartdate ?? '')
-      const end = String(item.eventenddate ?? start)
-      return end >= today && start <= to
-    })
-    .map((item) => ({
-      id: String(item.contentid),
-      title: String(item.title ?? '').trim(),
-      address: [item.addr1, item.addr2].filter(Boolean).join(' ').trim(),
-      image: String(item.firstimage ?? ''),
-      startDate: String(item.eventstartdate ?? ''),
-      endDate: String(item.eventenddate ?? item.eventstartdate ?? ''),
-      latitude: Number(item.mapy) || null,
-      longitude: Number(item.mapx) || null,
-      homepage: extractHomepageUrl(item.homepage),
-    }))
+  return items.map((item) => ({
+    id: String(item.contentId ?? ''),
+    title: String(item.title ?? '').trim(),
+    address: String(item.address ?? '').trim(),
+    image: String(item.imageUrl ?? ''),
+    startDate: normalizeDate(item.startDate),
+    endDate: normalizeDate(item.endDate),
+    latitude: item.latitude != null ? Number(item.latitude) : null,
+    longitude: item.longitude != null ? Number(item.longitude) : null,
+    status: item.status ?? '',
+  }))
 }

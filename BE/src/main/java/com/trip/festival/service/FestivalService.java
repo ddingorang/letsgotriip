@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -22,19 +23,23 @@ public class FestivalService {
         boolean hasArea   = areaCode != null && !areaCode.isBlank();
         boolean hasStatus = status   != null && !status.isBlank();
 
+        // 만료(end_date 경과) 행사는 sync 사이에도 노출되지 않도록 항상 end_date >= today 로 거른다.
+        LocalDate today = LocalDate.now();
+
         List<Festival> festivals;
 
         if (hasArea && hasStatus) {
-            festivals = festivalRepository.findByAreaCodeAndStatus(
-                    areaCode, FestivalStatus.valueOf(status.toUpperCase()));
+            festivals = festivalRepository.findByAreaCodeAndStatusAndEndDateGreaterThanEqual(
+                    areaCode, FestivalStatus.valueOf(status.toUpperCase()), today);
         } else if (hasArea) {
-            festivals = festivalRepository.findByAreaCode(areaCode);
+            festivals = festivalRepository.findByAreaCodeAndEndDateGreaterThanEqual(areaCode, today);
         } else if (hasStatus) {
-            festivals = festivalRepository.findByStatus(
-                    FestivalStatus.valueOf(status.toUpperCase()));
+            festivals = festivalRepository.findByStatusAndEndDateGreaterThanEqual(
+                    FestivalStatus.valueOf(status.toUpperCase()), today);
         } else {
-            // 기본: 종료된 행사 제외
-            festivals = festivalRepository.findByStatusNot(FestivalStatus.ENDED);
+            // 기본: 종료된 행사 제외 + 만료 행사 제외
+            festivals = festivalRepository.findByStatusNotAndEndDateGreaterThanEqual(
+                    FestivalStatus.ENDED, today);
         }
 
         return festivals.stream()

@@ -2,6 +2,7 @@ package com.trip.user.controller;
 
 import com.trip.global.security.UserPrincipal;
 import com.trip.global.util.CookieUtil;
+import com.trip.user.dto.PreferenceUpdateRequestDto;
 import com.trip.user.dto.UserProfileResponseDto;
 import com.trip.user.dto.UserUpdateRequestDto;
 import com.trip.user.service.UserService;
@@ -32,6 +33,16 @@ public class UserController {
             @RequestBody UserUpdateRequestDto updateDto
     ) {
         userService.updateProfile(userPrincipal.userId(), updateDto);
+        return ResponseEntity.ok().build();
+    }
+
+    /** 온보딩 취향설문 저장 */
+    @PatchMapping("me/preferences")
+    public ResponseEntity<Void> updatePreferences(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @RequestBody PreferenceUpdateRequestDto request
+    ) {
+        userService.updatePreferences(userPrincipal.userId(), request);
         return ResponseEntity.ok().build();
     }
 

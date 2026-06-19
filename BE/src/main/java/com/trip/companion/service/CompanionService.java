@@ -65,6 +65,7 @@ public class CompanionService {
                 .maxMembers(request.maxMembers())
                 .estimatedCost(request.estimatedCost())
                 .description(request.description())
+                .tags(CompanionPost.joinTags(request.tags()))
                 .chatRoom(chatRoom)
                 .build();
 
@@ -93,15 +94,15 @@ public class CompanionService {
         List<CompanionPost> content = hasNext ? posts.subList(0, size) : posts;
 
         List<CompanionPostSummaryResponse> responses = content.stream()
-                .map(CompanionPostSummaryResponse::of)
+                .map(post -> CompanionPostSummaryResponse.of(post, countCurrentMembers(post)))
                 .toList();
 
         Long nextCursor = hasNext ? content.get(content.size() - 1).getId() : null;
         return new CursorPageResponse<>(responses, nextCursor, hasNext);
     }
 
-    public CompanionPostResponse getPost(Long postId) {
-        return buildResponse(findPost(postId));
+    public CompanionPostResponse getPost(Long postId, Long currentUserId) {
+        return buildResponse(findPost(postId), currentUserId);
     }
 
     @Transactional
@@ -132,7 +133,7 @@ public class CompanionService {
     // ─── 동행 신청 ────────────────────────────────────────────
 
     @Transactional
-    public CompanionApplicationResponse apply(Long postId, Long userId) {
+    public CompanionApplicationResponse apply(Long postId, Long userId, String message) {
         CompanionPost post = findPost(postId);
         User applicant = findUser(userId);
 
@@ -151,6 +152,7 @@ public class CompanionService {
         CompanionApplication application = CompanionApplication.builder()
                 .companionPost(post)
                 .applicant(applicant)
+                .message(message != null && !message.isBlank() ? message.trim() : null)
                 .build();
 
         companionApplicationRepository.save(application);
@@ -266,14 +268,37 @@ public class CompanionService {
                 .toList();
     }
 
-    private CompanionPostResponse buildResponse(CompanionPost post) {
-        int currentMembers = post.getChatRoom() != null
+    private int countCurrentMembers(CompanionPost post) {
+        return post.getChatRoom() != null
                 ? chatRoomMembershipRepository.findByChatRoomId(post.getChatRoom().getId()).size()
                 : 0;
+    }
+
+    private CompanionPostResponse buildResponse(CompanionPost post) {
+        return buildResponse(post, null);
+    }
+
+    private CompanionPostResponse buildResponse(CompanionPost post, Long currentUserId) {
+        int currentMembers = countCurrentMembers(post);
         int pendingCount = companionApplicationRepository
                 .countByCompanionPostAndStatus(post, ApplicationStatus.PENDING);
         int approvedCount = companionApplicationRepository
                 .countByCompanionPostAndStatus(post, ApplicationStatus.APPROVED);
-        return CompanionPostResponse.of(post, currentMembers, pendingCount, approvedCount);
+
+        // 현재 사용자가 이미 신청(PENDING/APPROVED)한 상태인지 — REJECTED는 미신청으로 간주
+        boolean isApplied = false;
+        Long myApplicationId = null;
+        if (currentUserId != null) {
+            CompanionApplication active = companionApplicationRepository
+                    .findFirstByCompanionPostAndApplicant_IdAndStatusNot(
+                            post, currentUserId, ApplicationStatus.REJECTED)
+                    .orElse(null);
+            if (active != null) {
+                isApplied = true;
+                myApplicationId = active.getId();
+            }
+        }
+
+        return CompanionPostResponse.of(post, currentMembers, pendingCount, approvedCount, isApplied, myApplicationId);
     }
 }
