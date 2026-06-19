@@ -11,11 +11,13 @@ import com.trip.plan.entity.TripDay;
 import com.trip.plan.entity.TripPlace;
 import com.trip.plan.entity.TripPlan;
 import com.trip.plan.repository.PlanRepository;
+import com.trip.rag.UserDataIndexer;
 import com.trip.recommend.dto.ItineraryDraft;
 import com.trip.recommend.dto.RecommendRequestDto;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -37,6 +39,7 @@ import java.util.List;
  *   entityManager.lock(plan, LockModeType.OPTIMISTIC_FORCE_INCREMENT) 호출.
  *   이 방식은 트랜잭션 커밋 시 Hibernate가 version을 강제 증가시킨다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -48,6 +51,7 @@ public class PlanService {
     private final PlanRepository planRepository;
     private final AttractionService attractionService;
     private final EntityManager entityManager;
+    private final UserDataIndexer userDataIndexer;
 
     // ─────────────────────────────────────────────────────────────
     // 생성
@@ -75,6 +79,9 @@ public class PlanService {
         }
 
         planRepository.save(plan);
+
+        indexPlanSafely(userId, plan.getId());
+
         return PlanDetailResponseDto.from(plan);
     }
 
@@ -96,7 +103,101 @@ public class PlanService {
     public PlanDetailResponseDto getDetail(Long userId, Long planId) {
         TripPlan plan = findPlanWithDays(planId);
         verifyOwner(plan, userId);
-        return PlanDetailResponseDto.from(plan);
+        return toDetailDto(plan);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 공유 — 토큰 발급 / 공개 조회
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 공유 토큰 발급(소유자 전용). 이미 발급된 경우 기존 토큰을 재사용(idempotent).
+     */
+    @Transactional
+    public PlanShareResponseDto createShare(Long userId, Long planId) {
+        TripPlan plan = findPlan(planId);
+        verifyOwner(plan, userId);
+        if (plan.getShareToken() == null) {
+            plan.markShared(java.util.UUID.randomUUID().toString().replace("-", ""));
+        }
+        return PlanShareResponseDto.of(plan.getShareToken());
+    }
+
+    /**
+     * 공유 토큰으로 공개 조회(소유 검증 없음). 토큰이 없으면 PLAN_NOT_FOUND.
+     */
+    public PlanDetailResponseDto getShared(String token) {
+        TripPlan plan = planRepository.findByShareToken(token)
+                .orElseThrow(() -> new PlanHandler(ResponseCode.PLAN_NOT_FOUND));
+        return toDetailDto(plan);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 비교 — 두 계획 요약 통계
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 두 계획 비교(둘 다 소유자여야 함, 아니면 PLAN_FORBIDDEN).
+     */
+    public PlanCompareResponseDto compare(Long userId, Long aId, Long bId) {
+        TripPlan a = findPlanWithDays(aId);
+        verifyOwner(a, userId);
+        TripPlan b = findPlanWithDays(bId);
+        verifyOwner(b, userId);
+        return PlanCompareResponseDto.of(a, b);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 예산 — 카테고리 기반 추정(데모)
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 카테고리(contentType)별 기본 단가로 일자별/전체 추정 비용 산출(소유자 전용).
+     * 가격 필드가 없으므로 데모 추정치다.
+     */
+    public PlanBudgetResponseDto getBudget(Long userId, Long planId) {
+        TripPlan plan = findPlanWithDays(planId);
+        verifyOwner(plan, userId);
+
+        List<PlanBudgetResponseDto.DayBudget> dayBudgets = new ArrayList<>();
+        long total = 0;
+        for (TripDay day : plan.getDays()) {
+            long cost = day.getPlaces().stream()
+                    .mapToLong(p -> estimatePlaceCost(p.getAttraction().getContentType()))
+                    .sum();
+            total += cost;
+            dayBudgets.add(new PlanBudgetResponseDto.DayBudget(day.getDayNo(), cost));
+        }
+
+        Integer planned = plan.getBudget();
+        Integer difference = planned != null ? (int) (planned - total) : null;
+
+        return new PlanBudgetResponseDto(
+                plan.getId(),
+                dayBudgets,
+                total,
+                planned,
+                difference,
+                "카테고리 기반 추정치(데모)"
+        );
+    }
+
+    /** TourAPI contentType별 기본 단가 추정. 12=관광지, 39=음식점, 32=숙박, 그 외=기타. */
+    private long estimatePlaceCost(Integer contentType) {
+        if (contentType == null) return 10000L;
+        return switch (contentType) {
+            case 12 -> 5000L;   // 관광지
+            case 39 -> 15000L;  // 음식점
+            case 32 -> 80000L;  // 숙박
+            default -> 10000L;  // 기타
+        };
+    }
+
+    /** 동선 리포트 — 좌표 기반 거리·소요시간 + 최근접 이웃 추천 순서 */
+    public com.trip.plan.dto.RouteReportResponseDto getRouteReport(Long userId, Long planId) {
+        TripPlan plan = findPlanWithDays(planId);
+        verifyOwner(plan, userId);
+        return com.trip.plan.dto.RouteReportResponseDto.from(plan);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -136,6 +237,9 @@ public class PlanService {
         }
 
         plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget());
+
+        indexPlanSafely(userId, plan.getId());
+
         return PlanDetailResponseDto.from(plan);
     }
 
@@ -319,8 +423,11 @@ public class PlanService {
                     for (ItineraryDraft.PlaceRecommendation p : dayPlan.places()) {
                         if (p.contentId() == null) continue;
                         try {
-                            // contentTypeId 는 draft에 없으므로 기본값 12(관광지)로 upsert
-                            Attraction attraction = attractionService.upsertSnapshot(p.contentId(), 12);
+                            // draft(PlaceRecommendation)에는 유형 필드가 없으므로
+                            // detailCommon2 응답의 contentTypeId로 실제 유형을 추론한다
+                            // (응답에 유형이 없으면 AttractionService가 12=관광지로 폴백).
+                            // 음식점(39)·축제(15) 등이 12로 오분류되던 문제 해소.
+                            Attraction attraction = attractionService.upsertSnapshot(p.contentId());
 
                             LocalTime visitTime = null;
                             if (p.visitTime() != null && !p.visitTime().isBlank()) {
@@ -347,12 +454,31 @@ public class PlanService {
             }
         }
 
+        indexPlanSafely(userId, plan.getId());
+
         return PlanDetailResponseDto.from(plan);
     }
 
     // ─────────────────────────────────────────────────────────────
     // 내부 헬퍼
     // ─────────────────────────────────────────────────────────────
+
+    /** 상세 응답 변환 — getDetail/getShared 공통. */
+    private PlanDetailResponseDto toDetailDto(TripPlan plan) {
+        return PlanDetailResponseDto.from(plan);
+    }
+
+    /**
+     * 플랜을 RAG 벡터스토어에 색인한다("내 지난 여행" 검색용).
+     * 임베딩(외부) 호출 실패가 본 트랜잭션을 깨면 안 되므로 예외는 로그만 남기고 삼킨다.
+     */
+    private void indexPlanSafely(Long userId, Long planId) {
+        try {
+            userDataIndexer.indexPlan(userId, planId);
+        } catch (Exception e) {
+            log.warn("plan RAG 색인 실패 — userId={}, planId={}, error={}", userId, planId, e.getMessage());
+        }
+    }
 
     private TripPlan findPlan(Long planId) {
         return planRepository.findById(planId)

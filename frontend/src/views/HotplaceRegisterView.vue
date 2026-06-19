@@ -61,6 +61,7 @@
 
       <!-- Form -->
       <div class="form-section">
+        <div v-if="submitError" class="submit-error" role="alert">{{ submitError }}</div>
         <div class="loc-label">선택한 위치</div>
         <div class="loc-input-wrap">
           <span class="loc-text" :class="{ placeholder: !selectedAddress }">
@@ -99,14 +100,38 @@
         <div class="field">
           <label class="field-label">사진</label>
           <div class="photo-grid">
-            <button class="photo-add-btn">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round">
+            <!-- 업로드된 사진 미리보기 -->
+            <div v-for="(p, i) in photos" :key="p.url" class="photo-thumb">
+              <img :src="p.preview" class="photo-img" alt="" />
+              <button class="photo-remove" type="button" @click="removePhoto(i)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <!-- 추가 버튼 (5장 미만 + 비업로드 중) -->
+            <button
+              v-if="photos.length < 5"
+              class="photo-add-btn"
+              type="button"
+              :disabled="uploading"
+              @click="triggerPhotoSelect"
+            >
+              <svg v-if="!uploading" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
-              <span class="photo-count">0/5</span>
+              <span class="photo-count">{{ uploading ? '업로드 중…' : `${photos.length}/5` }}</span>
             </button>
+            <input
+              ref="fileInput"
+              type="file"
+              accept="image/*"
+              multiple
+              class="hidden-input"
+              @change="onPhotoSelect"
+            />
           </div>
         </div>
         <div style="height: 32px" />
@@ -119,6 +144,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHotplaceStore } from '@/stores/hotplace.js'
+import { communityApi } from '@/api/index.js'
 
 const router = useRouter()
 const hotplaceStore = useHotplaceStore()
@@ -134,8 +160,15 @@ const selectedLng = ref(126.570667)
 const categories = ['카페', '맛집', '명소', '포토존', '숙소']
 const form = ref({ name: '', category: '', description: '' })
 const submitting = ref(false)
+const submitError = ref('')
 
-const isValid = computed(() => form.value.name && form.value.category)
+// 업로드된 사진: { url(서버 imageUrl), preview(blob URL) }
+const fileInput = ref(null)
+const photos = ref([])
+const uploading = ref(false)
+
+// 업로드 진행 중에는 등록 비활성(미완 이미지로 제출 방지)
+const isValid = computed(() => form.value.name && form.value.category && !uploading.value)
 
 const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY
 
@@ -264,9 +297,54 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearTimeout(searchTimer)
+  // 미리보기 blob URL 메모리 해제
+  photos.value.forEach(p => URL.revokeObjectURL(p.preview))
   map = null
   marker = null
 })
+
+function triggerPhotoSelect() {
+  fileInput.value?.click()
+}
+
+// 선택 파일을 서버에 업로드해 imageUrl만 모은다. 미리보기는 로컬 blob URL.
+// (커뮤니티 글쓰기 PostWriteView의 업로드 패턴과 동일)
+async function onPhotoSelect(e) {
+  const files = Array.from(e.target.files || [])
+  // 같은 파일 재선택 시에도 change가 발화하도록 input 값 초기화
+  if (fileInput.value) fileInput.value.value = ''
+  if (!files.length) return
+
+  // 최대 5장까지만 처리
+  const room = 5 - photos.value.length
+  const targets = files.slice(0, room)
+
+  uploading.value = true
+  try {
+    for (const file of targets) {
+      const preview = URL.createObjectURL(file)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await communityApi.uploadImage(fd)
+        const url = res.data?.imageUrl
+        if (!url) throw new Error('이미지 응답에 imageUrl이 없습니다')
+        photos.value.push({ url, preview })
+      } catch {
+        // 업로드 실패를 가짜 성공으로 숨기지 않는다 — 미리보기를 정리하고 알린다.
+        URL.revokeObjectURL(preview)
+        alert('이미지 업로드에 실패했어요. 다시 시도해주세요.')
+      }
+    }
+  } finally {
+    uploading.value = false
+  }
+}
+
+function removePhoto(index) {
+  const [removed] = photos.value.splice(index, 1)
+  if (removed) URL.revokeObjectURL(removed.preview)
+}
 
 async function submit() {
   if (!isValid.value || submitting.value) return
@@ -275,28 +353,19 @@ async function submit() {
     address: selectedAddress.value || '',
     description: form.value.description || '',
     category: hotplaceStore.toCategoryEnum(form.value.category),
-    imageUrls: [],
+    imageUrls: photos.value.map(p => p.url),
     latitude: selectedLat.value,
     longitude: selectedLng.value,
   }
   submitting.value = true
+  submitError.value = ''
   try {
     await hotplaceStore.create(payload)
     hotplaceStore.registrationSuccess = true
     router.back()
   } catch (e) {
-    hotplaceStore.hotplaces.push({
-      id: Date.now(),
-      name: form.value.name,
-      category: form.value.category,
-      address: selectedAddress.value,
-      description: form.value.description,
-      rating: 0, ratingCount: 0, saveCount: 0,
-      registrant: '나', registeredAt: '방금',
-      intro: form.value.description,
-    })
-    hotplaceStore.registrationSuccess = true
-    router.back()
+    // 서버 저장 실패 시 가짜 저장/성공 위장 없이 에러를 노출하고 화면을 유지한다.
+    submitError.value = e?.response?.data?.message || e?.message || '등록에 실패했어요. 다시 시도해주세요.'
   } finally {
     submitting.value = false
   }
@@ -409,6 +478,17 @@ async function submit() {
 /* Form */
 .form-section { padding: 20px 16px; }
 
+.submit-error {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: #fdecea;
+  color: #c0392b;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.2px;
+}
+
 .loc-label {
   font-size: 11.5px; font-weight: 600;
   color: var(--color-ink-muted);
@@ -455,7 +535,7 @@ async function submit() {
 }
 .chip-btn.active { background: var(--color-peach); color: white; border-color: var(--color-peach); }
 
-.photo-grid { display: flex; gap: 8px; }
+.photo-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .photo-add-btn {
   width: 80px; height: 80px;
   border-radius: var(--radius-md);
@@ -463,5 +543,24 @@ async function submit() {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   background: var(--color-surface);
 }
+.photo-add-btn:disabled { opacity: 0.5; }
 .photo-count { font-size: 11px; color: var(--color-ink-muted); }
+
+.hidden-input { display: none; }
+
+.photo-thumb {
+  position: relative;
+  width: 80px; height: 80px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.photo-img { width: 100%; height: 100%; object-fit: cover; }
+.photo-remove {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+}
 </style>

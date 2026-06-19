@@ -5,6 +5,7 @@ import { http } from '@/api/http.js'
 export const usePlanStore = defineStore('plan', () => {
   const plans = ref([])
   const current = ref(null)
+  const routeReport = ref(null)
   const loading = ref(false)
   const error = ref(null)
 
@@ -45,6 +46,18 @@ export const usePlanStore = defineStore('plan', () => {
       error.value = msg
     } finally {
       loading.value = false
+    }
+  }
+
+  /** 동선 리포트 로드 — 거리·소요시간·추천순서 (GET /api/plans/{id}/route-report) */
+  async function loadRouteReport(id) {
+    try {
+      const { data } = await http.get(`/api/plans/${id}/route-report`)
+      routeReport.value = data
+      return data
+    } catch (e) {
+      routeReport.value = null
+      throw e
     }
   }
 
@@ -174,10 +187,12 @@ export const usePlanStore = defineStore('plan', () => {
   return {
     plans,
     current,
+    routeReport,
     loading,
     error,
     loadPlans,
     loadPlan,
+    loadRouteReport,
     createPlan,
     updatePlan,
     deletePlan,

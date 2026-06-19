@@ -12,12 +12,7 @@
           </svg>
         </button>
         <div class="hero-top-right">
-          <button v-if="comp.isOwner" class="ghost-btn" @click="$router.push(`/companion/${comp.id}/edit`)">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
+          <!-- 수정 화면(/companion/:id/edit) 라우트가 없어 깨진 이동을 방지하기 위해 수정 버튼 제거 -->
           <button class="ghost-btn" @click="share">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
@@ -29,6 +24,41 @@
     </div>
 
     <div class="content-scroll">
+      <!-- 로딩 -->
+      <div v-if="detailState === 'loading'" class="detail-state">
+        <div class="detail-skeleton w70" />
+        <div class="detail-skeleton w90" />
+        <div class="detail-skeleton w50" />
+      </div>
+
+      <!-- 없는 글(404) -->
+      <div v-else-if="detailState === 'not-found'" class="detail-state detail-state-msg">
+        <div class="detail-state-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </div>
+        <p class="detail-state-title">모집글을 찾을 수 없어요</p>
+        <p class="detail-state-sub">삭제되었거나 잘못된 링크일 수 있어요.</p>
+        <button class="detail-state-btn" @click="$router.back()">돌아가기</button>
+      </div>
+
+      <!-- 로드 실패 -->
+      <div v-else-if="detailState === 'error'" class="detail-state detail-state-msg">
+        <div class="detail-state-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        </div>
+        <p class="detail-state-title">정보를 불러오지 못했어요</p>
+        <p class="detail-state-sub">{{ companionStore.detailError ?? '잠시 후 다시 시도해 주세요.' }}</p>
+        <button class="detail-state-btn" :disabled="companionStore.detailLoading" @click="reloadDetail">
+          {{ companionStore.detailLoading ? '불러오는 중...' : '다시 시도' }}
+        </button>
+      </div>
+
+      <!-- 정상 로드 -->
+      <template v-else>
       <!-- Status & title -->
       <div class="title-area">
         <div class="badges-row">
@@ -72,7 +102,7 @@
         </div>
       </div>
 
-      <!-- Approved state -->
+      <!-- Approved state (origin) -->
       <div v-if="myApplicationStatus === 'APPROVED' && !comp.isOwner" class="approved-banner">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2a7a4b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
@@ -83,6 +113,13 @@
         </div>
       </div>
 
+      <!-- 모집 조건 (HEAD) -->
+      <div class="cond-head">
+        <h3 class="section-title">모집 조건</h3>
+        <span v-if="seatsLeft > 0" class="cond-seats">남은 자리 {{ seatsLeft }}명</span>
+        <span v-else class="cond-seats cond-seats-full">모집 마감</span>
+      </div>
+
       <!-- Info grid -->
       <div class="info-grid">
         <div class="info-cell">
@@ -90,33 +127,40 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
             <span class="info-label">일정</span>
           </div>
-          <span class="info-val">{{ comp.dateRange }}</span>
-        </div>
-        <div class="info-cell">
-          <div class="info-icon-row">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
-            <span class="info-label">지역</span>
-          </div>
-          <span class="info-val">{{ comp.location }}</span>
+          <span class="info-val">{{ comp.dateRange || '-' }}</span>
         </div>
         <div class="info-cell">
           <div class="info-icon-row">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
             <span class="info-label">기간</span>
           </div>
-          <span class="info-val">{{ comp.period }}</span>
+          <span class="info-val">{{ comp.period || '-' }}</span>
         </div>
         <div class="info-cell">
+          <div class="info-icon-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
+            <span class="info-label">지역</span>
+          </div>
+          <span class="info-val">{{ comp.location || '-' }}</span>
+        </div>
+        <div class="info-cell">
+          <div class="info-icon-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
+            <span class="info-label">모집 인원</span>
+          </div>
+          <span class="info-val">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
+        </div>
+        <div class="info-cell info-cell-wide">
           <div class="info-icon-row">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>
             <span class="info-label">예상 비용</span>
           </div>
-          <span class="info-val">{{ comp.estimatedCost }}</span>
+          <span class="info-val">{{ comp.estimatedCost || '-' }}</span>
         </div>
       </div>
 
       <!-- Tags -->
-      <div class="tags-row">
+      <div v-if="comp.tags?.length" class="tags-row">
         <span v-for="tag in comp.tags" :key="tag" class="tag-chip">{{ tag }}</span>
       </div>
 
@@ -126,37 +170,81 @@
         <p class="intro-text">{{ comp.intro }}</p>
       </div>
 
+      <!-- 모집 위치/일정 지도 — 연결된 계획 장소(좌표) 또는 모집 위치 단일 마커 -->
+      <!-- 표시할 좌표가 하나도 없으면 지도 섹션 자체를 숨긴다(가짜 핀 금지). -->
+      <div v-if="hasMapPlaces" class="section plan-section">
+        <div class="cond-head">
+          <h3 class="section-title">{{ linkedPlan ? '정해진 일정' : '모집 위치' }}</h3>
+          <span v-if="linkedPlan" class="plan-fixed-pill">계획 연동</span>
+        </div>
+        <p v-if="linkedPlan?.title" class="plan-meta">
+          {{ linkedPlan.title }}
+          <span v-if="planDateRange" class="plan-date">· {{ planDateRange }}</span>
+        </p>
+
+        <!-- Kakao 지도(공통 TripMap 컴포넌트) -->
+        <div class="plan-map-wrap">
+          <TripMap :places="tripMapPlaces" :numbered="hasPlaces" />
+        </div>
+
+        <!-- Day-by-day place list (연결된 계획이 있을 때만) -->
+        <div v-for="day in placesByDay" :key="day.dayNo" class="plan-day">
+          <div class="plan-day-head">
+            <span class="plan-day-pill">{{ day.dayNo }}일차</span>
+          </div>
+          <div class="plan-route">
+            <div
+              v-for="(place, idx) in day.places"
+              :key="`${day.dayNo}-${idx}`"
+              class="plan-stop"
+            >
+              <div class="plan-stop-left">
+                <div class="plan-stop-dot">{{ idx + 1 }}</div>
+                <div v-if="idx < day.places.length - 1" class="plan-stop-line" />
+              </div>
+              <div class="plan-stop-name">{{ place.title }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style="height: 100px" />
+      </template>
     </div>
 
-    <!-- Bottom CTA -->
-    <div class="cta-bar">
+    <!-- Bottom CTA — 정상 로드된 경우에만 노출(가짜 신청 CTA 방지) -->
+    <div v-if="detailState === 'ready'" class="cta-bar">
       <div v-if="applyError" class="apply-error">{{ applyError }}</div>
-      <!-- Visitor: not applied -->
-      <template v-if="!comp.isOwner && !myApplicationStatus">
-        <div class="seats-left">남은 자리 {{ comp.maxCount - comp.currentCount }}명</div>
+      <!-- Visitor: not applied — 남은 자리가 있을 때만 신청 CTA 노출 -->
+      <template v-if="!comp.isOwner && !isApplied && seatsLeft > 0">
+        <div class="seats-left">남은 자리 {{ seatsLeft }}명</div>
         <button class="cta-main" :disabled="companionStore.loading" @click="apply">참여 신청하기</button>
       </template>
 
-      <!-- Visitor: pending -->
-      <template v-else-if="!comp.isOwner && myApplicationStatus === 'PENDING'">
+      <!-- Visitor: not applied & 정원 마감 — 신청 CTA 숨기고 마감 안내(sec2와 정합) -->
+      <template v-else-if="!comp.isOwner && !isApplied">
+        <button class="cta-main" disabled>모집이 마감되었어요</button>
+      </template>
+
+      <!-- Visitor: approved — 취소 불가, 채팅방 입장(동적 chatRoomId) -->
+      <template v-else-if="!comp.isOwner && isApplied && isApproved">
+        <button class="cta-main" :disabled="comp.chatRoomId == null" @click="openChat">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
+          채팅방 입장
+        </button>
+      </template>
+
+      <!-- Visitor: applied (pending) — 취소 가능 -->
+      <template v-else-if="!comp.isOwner && isApplied">
         <button class="cta-cancel" @click="cancelApply">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           신청 취소
         </button>
       </template>
 
-      <!-- Visitor: approved -->
-      <template v-else-if="!comp.isOwner && myApplicationStatus === 'APPROVED'">
-        <button class="cta-main" @click="$router.push(`/chat/${comp.chatRoomId}`)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
-          채팅방 가기
-        </button>
-      </template>
-
       <!-- Owner -->
       <template v-else>
-        <button class="cta-chat" @click="$router.push(`/chat/${comp.chatRoomId}`)">
+        <button class="cta-chat" :disabled="comp.chatRoomId == null" @click="openChat">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
         </button>
         <button class="cta-main" @click="$router.push(`/companion/${comp.id}/applicants`)">
@@ -169,54 +257,273 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const route = useRoute()
 const router = useRouter()
 const companionStore = useCompanionStore()
 
-const comp = computed(() => companionStore.getById(route.params.id) ?? {
-  id: route.params.id, title: '동행 모집', location: '-', dateRange: '-',
-  status: '모집중', currentCount: 0, maxCount: 4, author: { nickname: '-', tripCount: 0 },
-  period: '-', estimatedCost: '-', tags: [], intro: '',
-  isOwner: false, chatRoomId: null, pendingCount: 0, approvedCount: 0,
+// 실제 상세 데이터(없으면 null). 실패/404를 가짜 "동행 모집" 객체로 위장하지 않는다.
+const realComp = computed(() => companionStore.getById(route.params.id) ?? null)
+
+// 화면 상태: 로딩/404/오류/정상 분기.
+// - 데이터가 있으면 ready
+// - 없고 로딩 중이면 loading
+// - 없고 404면 not-found, 그 외 실패면 error
+const detailState = computed(() => {
+  if (realComp.value) return 'ready'
+  if (companionStore.detailLoading) return 'loading'
+  if (companionStore.detailNotFound) return 'not-found'
+  if (companionStore.detailError) return 'error'
+  return 'loading'
 })
 
-const myApplicationStatus = ref(null) // null | 'PENDING' | 'APPROVED' | 'REJECTED'
-const myApplicationId = ref(null)
+// 템플릿이 comp.value.* 를 참조하므로, 정상 로드 전/실패 시에도 null 접근이 없게
+// 중립 placeholder를 제공한다. 단 이 값은 화면 렌더(본문/CTA)에는 쓰지 않고,
+// detailState === 'ready' 일 때만 본문/CTA를 노출한다.
+const comp = computed(() => realComp.value ?? {
+  id: route.params.id, title: '', location: '-', dateRange: '-',
+  status: '', currentCount: 0, maxCount: 0, author: { nickname: '-', tripCount: 0 },
+  period: '-', estimatedCost: '-', tags: [], intro: '',
+  isOwner: false, pendingCount: 0, approvedCount: 0,
+  isApplied: false, myApplicationId: null, myApplicationStatus: null, chatRoomId: null,
+})
+
+// 내 신청 상태/ID — origin 의 /applications/me 조회(getMyApplication) 결과를 보관.
+// 신청/취소 직후 낙관적으로 갱신하고, 상세 재조회로 서버 기준 동기화한다.
+const fetchedStatus = ref(null) // null | 'PENDING' | 'APPROVED' | 'REJECTED'
+const fetchedAppId = ref(null)
+
+// 신청 여부는 서버 응답(comp.isApplied) 또는 /applications/me 조회를 기준으로 하되,
+// 신청/취소 직후에는 재조회 전까지 낙관적 오버라이드를 적용한다.
+const appliedOverride = ref(null)
+const isApplied = computed(() => {
+  if (appliedOverride.value !== null) return appliedOverride.value
+  if (comp.value.isApplied) return true
+  return !!fetchedStatus.value && fetchedStatus.value !== 'REJECTED'
+})
+
+// 신청 상태(PENDING/APPROVED/REJECTED) — 상세 응답값을 우선하고, 없으면 /me 조회값 사용.
+const myApplicationStatus = computed(
+  () => comp.value.myApplicationStatus ?? fetchedStatus.value ?? null,
+)
+// 신청 ID — 상세 응답값을 우선하고, 없으면 /me 조회값 사용(취소 시 사용).
+const myApplicationId = computed(
+  () => comp.value.myApplicationId ?? fetchedAppId.value ?? null,
+)
+// 승인된 신청은 채팅방 멤버십이 생성되어 취소가 불가하다(BE에서 409 반환).
+// → 취소 버튼 대신 채팅방 입장 안내를 노출한다.
+const isApproved = computed(() => myApplicationStatus.value === 'APPROVED')
 const applyError = ref('')
+
+// 남은 모집 자리 — 모집 조건 카드와 하단 CTA에서 공유(중복 계산 방지)
+const seatsLeft = computed(() =>
+  Math.max(0, (comp.value.maxCount ?? 0) - (comp.value.currentCount ?? 0)),
+)
+
+// ── 연결된 계획(지도/동선) ──────────────────────────────────────────────────
+// 상세 응답의 linkedPlan = { planId, title, startDate, endDate, places:[{ dayNo, title, lat, lng }] }
+const linkedPlan = computed(() => comp.value.linkedPlan ?? null)
+// 좌표(lat,lng)가 모두 있는 장소만 (BE가 이미 걸러주지만 방어적으로 한 번 더)
+const mapPlaces = computed(() =>
+  (linkedPlan.value?.places ?? []).filter(
+    p => Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)),
+  ),
+)
+const hasPlaces = computed(() => mapPlaces.value.length > 0)
+// 일자(dayNo)별 그룹핑 — 순서 보존
+const placesByDay = computed(() => {
+  const groups = []
+  const byDay = new Map()
+  for (const p of mapPlaces.value) {
+    const dayNo = p.dayNo ?? 1
+    if (!byDay.has(dayNo)) {
+      const entry = { dayNo, places: [] }
+      byDay.set(dayNo, entry)
+      groups.push(entry)
+    }
+    byDay.get(dayNo).places.push(p)
+  }
+  return groups
+})
+const planDateRange = computed(() => {
+  const lp = linkedPlan.value
+  if (!lp?.startDate) return ''
+  return lp.endDate && lp.endDate !== lp.startDate
+    ? `${lp.startDate} ~ ${lp.endDate}`
+    : lp.startDate
+})
+
+// ── 지도(공통 TripMap) ───────────────────────────────────────────────────────
+// 연결된 계획 장소(좌표)를 TripMap props({ id, name, lat, lng })로 변환.
+// 좌표가 하나라도 있으면 그 마커들을, 없으면 모집 위치(region)를 지오코딩한
+// 단일 마커를 표시한다. 둘 다 없으면 지도 섹션을 숨긴다.
+const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY
+
+// linkedPlan 장소 → TripMap 형식
+const linkedTripPlaces = computed(() =>
+  mapPlaces.value.map((p, i) => ({
+    id: `${p.dayNo ?? 1}-${i}`,
+    name: p.title ?? '',
+    lat: Number(p.lat),
+    lng: Number(p.lng),
+  })),
+)
+
+// 모집 위치(region) 지오코딩 결과 단일 마커(연결 계획 좌표가 없을 때만 사용)
+const regionPlace = ref(null) // { id, name, lat, lng } | null
+
+// 최종 TripMap에 넘길 장소 목록
+const tripMapPlaces = computed(() =>
+  hasPlaces.value
+    ? linkedTripPlaces.value
+    : (regionPlace.value ? [regionPlace.value] : []),
+)
+// 지도에 찍을 좌표가 하나라도 있는지(없으면 섹션 자체를 숨김)
+const hasMapPlaces = computed(() => tripMapPlaces.value.length > 0)
+
+// HotplaceRegisterView 와 동일한 SDK 로딩 패턴(전역 캐시 + autoload=false).
+// services 라이브러리(지오코더)를 보장한다.
+function loadKakao() {
+  if (window.kakao?.maps?.services) return Promise.resolve(window.kakao)
+  if (window.__kakaoMapLoading && !window.kakao?.maps?.services) {
+    window.__kakaoMapLoading = null
+  }
+  if (window.__kakaoMapLoading) return window.__kakaoMapLoading
+  window.__kakaoMapLoading = new Promise((resolve, reject) => {
+    if (!KAKAO_KEY) { reject(new Error('VITE_KAKAO_MAP_KEY 누락')); return }
+    const s = document.createElement('script')
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`
+    s.onload = () => window.kakao.maps.load(() => resolve(window.kakao))
+    s.onerror = () => reject(new Error('Kakao 지도 SDK 로드 실패'))
+    document.head.appendChild(s)
+  })
+  return window.__kakaoMapLoading
+}
+
+// 모집 위치(region 문자열)를 좌표로 지오코딩 → 단일 마커.
+// 연결 계획 좌표가 있으면 불필요하므로 건너뛴다. 실패 시 조용히 무시(지도 숨김).
+async function geocodeRegion() {
+  if (hasPlaces.value) { regionPlace.value = null; return }
+  const region = comp.value.location
+  if (!region || region === '-') { regionPlace.value = null; return }
+  try {
+    const kakao = await loadKakao()
+    const geocoder = new kakao.maps.services.Geocoder()
+    // 주소 검색 우선, 실패 시 키워드(장소) 검색으로 보강
+    const byAddress = await new Promise((resolve) => {
+      geocoder.addressSearch(region, (res, status) => {
+        if (status === kakao.maps.services.Status.OK && res[0]) {
+          resolve({ lat: Number(res[0].y), lng: Number(res[0].x) })
+        } else resolve(null)
+      })
+    })
+    let coord = byAddress
+    if (!coord && kakao.maps.services.Places) {
+      coord = await new Promise((resolve) => {
+        const ps = new kakao.maps.services.Places()
+        ps.keywordSearch(region, (res, status) => {
+          if (status === kakao.maps.services.Status.OK && res[0]) {
+            resolve({ lat: Number(res[0].y), lng: Number(res[0].x) })
+          } else resolve(null)
+        })
+      })
+    }
+    if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
+      regionPlace.value = { id: 'region', name: region, lat: coord.lat, lng: coord.lng }
+    } else {
+      regionPlace.value = null
+    }
+  } catch {
+    // SDK 로드/키 누락 등 — 지도는 숨김 처리(가짜 마커 금지)
+    regionPlace.value = null
+  }
+}
+
+// 상세 로드 후 좌표 상태가 바뀌면 지오코딩 갱신
+watch(
+  () => [hasPlaces.value, comp.value.location],
+  () => { geocodeRegion() },
+)
+
+// 내 신청 상태 조회(origin /applications/me 경로) — 방장이 아닐 때만.
+// 상세 응답에 isApplied/myApplicationStatus 가 없을 때 보강한다.
+async function refreshMyApplication() {
+  if (comp.value.isOwner) return
+  const app = await companionStore.getMyApplication(route.params.id)
+  if (app) {
+    fetchedStatus.value = app.status ?? null
+    fetchedAppId.value = app.id ?? null
+  } else {
+    fetchedStatus.value = null
+    fetchedAppId.value = null
+  }
+}
 
 onMounted(async () => {
   await companionStore.getDetail(route.params.id)
-  if (!comp.value.isOwner) {
-    const app = await companionStore.getMyApplication(route.params.id)
-    if (app) {
-      myApplicationStatus.value = app.status
-      myApplicationId.value = app.id
-    }
-  }
+  await refreshMyApplication()
+  // 연결 계획 좌표가 없으면 모집 위치를 지오코딩해 단일 마커 준비
+  geocodeRegion()
 })
+
+/** 상세 재시도 — 로드 실패 화면의 "다시 시도" 버튼용 */
+async function reloadDetail() {
+  await companionStore.getDetail(route.params.id)
+  await refreshMyApplication()
+  geocodeRegion()
+}
 
 async function apply() {
   applyError.value = ''
   try {
     const app = await companionStore.join(comp.value.id)
-    myApplicationStatus.value = app?.status ?? 'PENDING'
-    myApplicationId.value = app?.id ?? null
+    // origin: join 응답(status/id)을 우선 반영
+    fetchedStatus.value = app?.status ?? 'PENDING'
+    fetchedAppId.value = app?.id ?? null
+    appliedOverride.value = true
+    // 서버 기준 isApplied/myApplicationId 동기화
+    await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
+    appliedOverride.value = null
   } catch {
     applyError.value = companionStore.error || '신청에 실패했어요.'
   }
 }
 
 async function cancelApply() {
+  applyError.value = ''
+  // 신청 ID를 모르면 최신 상세 + /me 조회로 확인
+  if (!myApplicationId.value) {
+    await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
+  }
+  const id = myApplicationId.value
+  if (!id) {
+    applyError.value = '신청 정보를 찾을 수 없어요.'
+    return
+  }
   try {
-    await companionStore.cancelApplication(comp.value.id, myApplicationId.value)
-    myApplicationStatus.value = null
-    myApplicationId.value = null
+    // BE DELETE /companion/posts/{postId}/applications/{applicationId}
+    await companionStore.cancel(comp.value.id, id)
+    appliedOverride.value = false
+    fetchedStatus.value = null
+    fetchedAppId.value = null
+    await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
+    appliedOverride.value = null
   } catch {
-    applyError.value = companionStore.error || '취소에 실패했어요.'
+    applyError.value = companionStore.error || '신청 취소에 실패했어요.'
+  }
+}
+
+function openChat() {
+  const chatRoomId = comp.value.chatRoomId
+  if (chatRoomId != null) {
+    router.push(`/chat/${chatRoomId}`)
   }
 }
 
@@ -373,16 +680,38 @@ function share() {
 .approved-title { font-size: 13.5px; font-weight: 700; color: #2a7a4b; margin-bottom: 2px; }
 .approved-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
 
+.cond-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 20px 0;
+}
+.cond-head .section-title { margin-bottom: 0; flex: 1; }
+.cond-seats {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.cond-seats-full {
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1px;
-  margin: 16px 20px;
+  margin: 12px 20px 16px;
   background: var(--color-line-light);
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--color-line-light);
 }
+.info-cell-wide { grid-column: 1 / -1; }
 .info-cell {
   padding: 14px 16px;
   background: var(--color-white);
@@ -446,6 +775,11 @@ function share() {
   border-radius: var(--radius-xl);
   letter-spacing: -0.3px;
 }
+.cta-main:disabled {
+  background: var(--color-line);
+  color: var(--color-ink-muted);
+  cursor: not-allowed;
+}
 .cta-cancel {
   flex: 1;
   display: flex;
@@ -477,5 +811,138 @@ function share() {
   font-weight: 500;
   text-align: center;
   padding-bottom: 4px;
+}
+
+/* ── Linked plan: map + route ─────────────────────────────────────────────── */
+.plan-section { padding-top: 4px; }
+.plan-section .cond-head { padding: 0; margin-bottom: 8px; }
+.plan-fixed-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.plan-meta {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  margin: -4px 0 12px;
+  font-weight: 600;
+}
+.plan-date { color: var(--color-ink-muted); font-weight: 500; }
+
+.plan-map-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-line-light);
+  background: var(--color-surface);
+  margin-bottom: 16px;
+}
+
+.plan-day { margin-bottom: 14px; }
+.plan-day-head { margin-bottom: 8px; }
+.plan-day-pill {
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+}
+.plan-route { display: flex; flex-direction: column; }
+.plan-stop { display: flex; gap: 10px; align-items: stretch; }
+.plan-stop-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22px;
+  flex-shrink: 0;
+}
+.plan-stop-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--color-peach);
+  background: var(--color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--color-peach);
+  flex-shrink: 0;
+  z-index: 1;
+}
+.plan-stop-line {
+  width: 2px;
+  flex: 1;
+  background: var(--color-line-light);
+  margin: 2px 0;
+  min-height: 14px;
+}
+.plan-stop-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.2px;
+  padding: 1px 0 12px;
+}
+
+/* ── Detail load states (로딩/없음/오류) ──────────────────────────────────── */
+.detail-state {
+  padding: 24px 20px;
+}
+.detail-skeleton {
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  margin-bottom: 14px;
+  animation: comp-shimmer 1.2s infinite;
+}
+.detail-skeleton.w70 { width: 70%; }
+.detail-skeleton.w90 { width: 90%; }
+.detail-skeleton.w50 { width: 50%; }
+@keyframes comp-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.detail-state-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 64px 24px;
+  gap: 6px;
+}
+.detail-state-icon { margin-bottom: 6px; }
+.detail-state-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+.detail-state-sub {
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.detail-state-btn {
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 26px;
+  border-radius: var(--radius-full);
+  letter-spacing: -0.2px;
+}
+.detail-state-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

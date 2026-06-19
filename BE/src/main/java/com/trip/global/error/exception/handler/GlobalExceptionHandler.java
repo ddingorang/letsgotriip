@@ -6,10 +6,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.stream.Collectors;
 
@@ -62,6 +64,31 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(
                         ResponseCode._BAD_REQUEST.getCode(), // "400"
                         e.getMessage()                       // 예외 메시지 그대로
+                ));
+    }
+
+    // 요청 본문 파싱 실패(깨진 JSON, 잘못된 날짜/숫자 형식 등) → 400 (500 아님)
+    // 예: travelDate="22222-02-22" 같은 잘못된 LocalDate → 사용자 입력 오류이지 서버 오류가 아님
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
+        log.warn("Malformed request body: {}", e.getMostSpecificCause().getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        ResponseCode._BAD_REQUEST.getCode(),
+                        ResponseCode._BAD_REQUEST.getMessage("요청 형식이 올바르지 않습니다. 입력값(날짜·숫자 등)을 확인해주세요.")
+                ));
+    }
+
+    // 경로변수/쿼리 파라미터 타입 변환 실패(예: /applications/undefined → Long) → 400
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("Type mismatch on '{}': {}", e.getName(), e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(
+                        ResponseCode._BAD_REQUEST.getCode(),
+                        ResponseCode._BAD_REQUEST.getMessage("요청 파라미터 '" + e.getName() + "' 형식이 올바르지 않습니다.")
                 ));
     }
 

@@ -8,7 +8,12 @@
         </svg>
       </button>
       <span class="nav-title">AI 동선 리포트</span>
-      <div class="nav-spacer" />
+      <button v-if="plan" class="nav-btn" :disabled="shareLoading" title="공유하기" @click="sharePlan">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      </button>
+      <div v-else class="nav-spacer" />
     </div>
 
     <!-- Loading -->
@@ -46,7 +51,7 @@
           <div class="banner-tags">
             <span class="banner-tag">총 {{ totalPlaces }}개 장소</span>
             <span class="banner-tag">{{ totalDays }}일 일정</span>
-            <span v-if="plan.destination" class="banner-tag">{{ plan.destination }}</span>
+            <span v-if="report?.totalDistanceKm" class="banner-tag">이동 {{ report.totalDistanceKm }}km</span>
           </div>
         </div>
         <div class="route-badge">
@@ -64,11 +69,58 @@
           <line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        장소 간 이동 거리와 방문 시간을 고려한 최적 동선이에요
+        {{ optNote }}
+      </div>
+
+      <!-- 공유 링크 (공유 후 노출) -->
+      <div v-if="shareInfo" class="share-bar">
+        <span class="share-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+        </span>
+        <code class="share-url">{{ shareInfo.url }}</code>
+        <button class="share-copy-btn" @click="copyShareUrl">{{ shareCopied ? '복사됨' : '복사' }}</button>
       </div>
 
       <!-- Scroll area -->
       <div class="scroll-content">
+        <!-- 내 계획 지도 (좌표 보유 장소가 있을 때만) -->
+        <div v-if="hasMapPlaces" class="map-card">
+          <div class="map-card-head">
+            <span class="map-card-title">내 계획 지도</span>
+            <span class="map-card-count">장소 {{ mapPlaces.length }}곳</span>
+          </div>
+          <div class="map-wrap">
+            <TripMap :places="mapPlaces" :center="mapCenter" />
+          </div>
+        </div>
+
+        <!-- 예산 카드 -->
+        <div v-if="budget" class="budget-card">
+          <div class="budget-head">
+            <span class="budget-title">예상 예산</span>
+            <span class="budget-total">{{ formatWon(budget.totalEstimated) }}</span>
+          </div>
+          <div class="budget-days">
+            <div v-for="d in budget.dayBudgets" :key="d.dayNo" class="budget-day-row">
+              <span class="budget-day-label">{{ d.dayNo }}일차</span>
+              <span class="budget-day-cost">{{ formatWon(d.estimatedCost) }}</span>
+            </div>
+          </div>
+          <div v-if="budget.plannedBudget != null" class="budget-planned-row">
+            <span>설정 예산 {{ formatWon(budget.plannedBudget) }}</span>
+            <span
+              v-if="budget.difference != null"
+              class="budget-diff"
+              :class="{ over: budget.difference < 0 }"
+            >
+              {{ budget.difference >= 0 ? '여유 ' : '초과 ' }}{{ formatWon(Math.abs(budget.difference)) }}
+            </span>
+          </div>
+          <p v-if="budget.note" class="budget-note">{{ budget.note }}</p>
+        </div>
+
         <!-- Per-day optimized route -->
         <div
           v-for="day in days"
@@ -89,12 +141,12 @@
             <div class="stat-dot" />
             <div class="stat-item">
               <span class="stat-label">예상 이동</span>
-              <span class="stat-value">{{ estimatedDistance(day.places) }}</span>
+              <span class="stat-value">{{ estimatedDistance(day.dayNo) }}</span>
             </div>
             <div class="stat-dot" />
             <div class="stat-item">
               <span class="stat-label">소요 시간</span>
-              <span class="stat-value">{{ estimatedDuration(day.places) }}</span>
+              <span class="stat-value">{{ estimatedDuration(day.dayNo) }}</span>
             </div>
           </div>
 
@@ -122,8 +174,8 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     {{ place.visitTime }}
                   </div>
-                  <div v-if="idx < day.places.length - 1" class="travel-hint">
-                    다음 장소까지 약 {{ travelTime(idx, day.places) }}
+                  <div v-if="idx < day.places.length - 1 && travelTime(idx, day.dayNo)" class="travel-hint">
+                    다음 장소까지 {{ travelTime(idx, day.dayNo) }}
                   </div>
                 </div>
               </div>
@@ -142,9 +194,9 @@
 
       <!-- Bottom action bar -->
       <div class="bottom-bar">
-        <button class="btn-apply" @click="applyRoute">
+        <button class="btn-apply" :disabled="applying || planStore.loading || !canApply" @click="applyRoute">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-          대체 동선 적용
+          {{ applyLabel }}
         </button>
       </div>
     </template>
@@ -152,9 +204,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
+import { planApi } from '@/api/index.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -162,55 +216,385 @@ const planStore = usePlanStore()
 
 const planId = route.params.id
 
+const applying = ref(false)
+
+// 동선 리포트(route-report) 로드 실패 여부 — 실패 시 FE 거리기반 재정렬로
+// 슬쩍 대체해 "적용 성공"으로 위장하지 않고, 적용 버튼을 막고 에러를 노출한다.
+const reportFailed = ref(false)
+
+// ── 예산 ─────────────────────────────────────────────────────────────────────
+const budget = ref(null)        // { planId, dayBudgets, totalEstimated, plannedBudget, difference, note }
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+const shareInfo = ref(null)     // { url }
+const shareLoading = ref(false)
+const shareCopied = ref(false)
+
 onMounted(async () => {
-  // Always reload to get fresh data
   try {
     await planStore.loadPlan(planId)
   } catch {
     // error shown via planStore.error
   }
+  // 동선 리포트는 별도 try로 분리 — 실패를 삼켜 FE Haversine 재정렬을
+  // "거리기반 적용"으로 위장하지 않도록 실패 상태(reportFailed)를 기록한다.
+  try {
+    await planStore.loadRouteReport(planId)   // 좌표 기반 거리·추천순서 (BE Haversine)
+    reportFailed.value = false
+  } catch {
+    reportFailed.value = true
+  }
+  // 예산은 별도로(실패해도 리포트 화면에는 영향 없음)
+  try {
+    const { data } = await planApi.getBudget(planId)
+    budget.value = data
+  } catch {
+    budget.value = null
+  }
 })
+
+/** 원(₩) 포맷 */
+function formatWon(n) {
+  if (n == null) return '-'
+  return `${Number(n).toLocaleString('ko-KR')}원`
+}
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+async function sharePlan() {
+  if (shareLoading.value) return
+  shareLoading.value = true
+  shareCopied.value = false
+  try {
+    const { data } = await planApi.share(planId)
+    const path = data?.shareUrl ?? `/plan/shared/${data?.shareToken}`
+    shareInfo.value = { url: `${window.location.origin}${path}` }
+    await copyToClipboard(shareInfo.value.url)
+  } catch {
+    // 공유 실패 — 별도 알림 없이 무시(리포트 흐름 방해 방지)
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+async function copyShareUrl() {
+  if (!shareInfo.value) return
+  await copyToClipboard(shareInfo.value.url)
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    shareCopied.value = true
+    setTimeout(() => { shareCopied.value = false }, 1500)
+  } catch {
+    // 클립보드 접근 불가 — 표시된 링크를 직접 복사
+  }
+}
 
 const plan = computed(() => planStore.current?.id == planId ? planStore.current : null)
 const days = computed(() => plan.value?.days ?? [])
 const totalDays = computed(() => days.value.length)
 const totalPlaces = computed(() => days.value.reduce((acc, d) => acc + (d.places?.length ?? 0), 0))
 
-/**
- * Illustrative distance estimate: assumes ~3 km average gap between places.
- * Real distance would come from a routing BE endpoint.
- */
-function estimatedDistance(places) {
-  const n = places?.length ?? 0
-  if (n <= 1) return '–'
-  const km = (n - 1) * 3
-  return `약 ${km}km`
+// ── 지도 표시용 장소 ─────────────────────────────────────────────────────────
+// 모든 일자의 장소를 순서대로 펼치고, 좌표(attraction.latitude/longitude)가 있는
+// 장소만 TripMap 이 기대하는 형태({ id, name, lat, lng })로 변환한다.
+// (coordOf 는 아래에 선언된 함수 — 함수 선언이므로 호이스팅되어 여기서 사용 가능)
+const mapPlaces = computed(() => {
+  const out = []
+  for (const day of days.value) {
+    for (const p of day.places ?? []) {
+      const c = coordOf(p)
+      if (!c) continue
+      out.push({
+        id: p.id ?? p.attraction?.id ?? p.attraction?.contentId ?? `${day.dayNo}-${out.length}`,
+        name: p.attraction?.title ?? p.title ?? '장소',
+        lat: c.lat,
+        lng: c.lng,
+      })
+    }
+  }
+  return out
+})
+const hasMapPlaces = computed(() => mapPlaces.value.length > 0)
+// 첫 장소 기준 center(좌표 보유 장소가 여러 개면 TripMap 이 bounds 로 자동 보정)
+const mapCenter = computed(() =>
+  hasMapPlaces.value ? [mapPlaces.value[0].lat, mapPlaces.value[0].lng] : [37.5665, 126.978],
+)
+
+// ── 동선 리포트: BE 실데이터를 주 데이터원으로, 좌표 기반 Haversine을 폴백으로 ──
+// 우선순위 1) 서버 동선 리포트(planStore.routeReport, BE RouteCalculator 계산값)
+//          2) 서버 리포트가 없거나 해당 일자가 비면 FE Haversine 추정(좌표 보유 시)
+// 이동시간/거리는 외부 라우팅 API가 아닌 직선거리 기반 추정값이다.
+
+const report = computed(() => planStore.routeReport)
+function dayReport(dayNo) {
+  return report.value?.days?.find((d) => d.dayNo === dayNo) ?? null
+}
+// 서버가 한 곳이라도 추천 순서가 현재와 다르다고 하면 "대체 동선 적용" 가능
+const hasSuggestion = computed(() =>
+  (report.value?.days ?? []).some((d) => d.reorderSuggested),
+)
+
+// ── FE 폴백용 Haversine 계산 ────────────────────────────────────────────────
+// 장소의 위경도(attraction.latitude / attraction.longitude, TourAPI mapy/mapx)를
+// 사용해 직선거리를 합산한다. 도보 ≤2km 4.5km/h, 그 이상 차량 30km/h를 가정.
+const WALK_THRESHOLD_KM = 2   // 이 거리 이하면 도보로 가정
+const WALK_SPEED_KMH = 4.5
+const DRIVE_SPEED_KMH = 30
+
+function coordOf(place) {
+  const a = place?.attraction
+  const lat = a?.latitude
+  const lng = a?.longitude
+  if (lat == null || lng == null) return null
+  return { lat: Number(lat), lng: Number(lng) }
+}
+
+/** 두 좌표 사이 Haversine 거리(km) */
+function haversineKm(a, b) {
+  const R = 6371
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180
+  const lat1 = (a.lat * Math.PI) / 180
+  const lat2 = (b.lat * Math.PI) / 180
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+/** 한 구간(직선)의 이동시간(분) — 거리에 따라 도보/차량 속도 가정 */
+function legMinutes(km) {
+  const speed = km <= WALK_THRESHOLD_KM ? WALK_SPEED_KMH : DRIVE_SPEED_KMH
+  return (km / speed) * 60
+}
+
+/** 해당 일자의 place 배열을 dayNo로 조회 */
+function placesOf(dayNo) {
+  return days.value.find((d) => d.dayNo === dayNo)?.places ?? []
 }
 
 /**
- * Illustrative duration: ~30 min per place + 20 min travel between each.
+ * 하루 일정의 총 직선 이동거리(km)와 좌표 보유 여부를 계산.
+ * coords: 좌표가 있는 장소 목록 수, missing: 좌표가 없는 장소 수
  */
-function estimatedDuration(places) {
-  const n = places?.length ?? 0
+function dayDistance(places) {
+  const list = places ?? []
+  const coords = []
+  let missing = 0
+  for (const p of list) {
+    const c = coordOf(p)
+    if (c) coords.push(c)
+    else missing++
+  }
+  let km = 0
+  for (let i = 0; i < coords.length - 1; i++) {
+    km += haversineKm(coords[i], coords[i + 1])
+  }
+  return { km, usable: coords.length, missing }
+}
+
+/** 하루 전체 구간 이동시간 합(분, FE 추정) */
+function legSumMinutes(places) {
+  const list = places ?? []
+  let mins = 0
+  for (let i = 0; i < list.length - 1; i++) {
+    const a = coordOf(list[i])
+    const b = coordOf(list[i + 1])
+    if (a && b) mins += legMinutes(haversineKm(a, b))
+  }
+  return mins
+}
+
+// ── 화면용 텍스트: 서버 리포트 우선, 없으면 FE 폴백 ───────────────────────────
+
+/** 예상 이동 거리 텍스트 */
+function estimatedDistance(dayNo) {
+  const r = dayReport(dayNo)
+  if (r) {
+    if (r.placeCount <= 1) return '–'
+    return `약 ${r.totalDistanceKm ?? r.distanceKm}km`
+  }
+  // 폴백: FE Haversine
+  const places = placesOf(dayNo)
+  if ((places.length ?? 0) <= 1) return '–'
+  const { km, usable, missing } = dayDistance(places)
+  if (usable < 2) return '좌표 없음'
+  const txt = km < 1 ? `약 ${Math.round(km * 1000)}m` : `약 ${km.toFixed(1)}km`
+  return missing > 0 ? `${txt}~` : txt
+}
+
+/** 예상 소요 시간 텍스트 */
+function estimatedDuration(dayNo) {
+  const r = dayReport(dayNo)
+  if (r) {
+    if (r.placeCount === 0) return '–'
+    return formatMinutes(r.estimatedMinutes)
+  }
+  // 폴백: FE Haversine (장소당 체류 60분 가정)
+  const places = placesOf(dayNo)
+  const n = places.length ?? 0
   if (n === 0) return '–'
-  const mins = n * 30 + (n - 1) * 20
+  const { usable } = dayDistance(places)
+  if (usable < 2) return '추정 불가'
+  const STAY_MIN = 60
+  const mins = Math.round(n * STAY_MIN + legSumMinutes(places))
+  return formatMinutes(mins)
+}
+
+/** 분(minutes) → "약 N시간 M분" 텍스트 */
+function formatMinutes(mins) {
   const h = Math.floor(mins / 60)
   const m = mins % 60
-  return h > 0 ? `약 ${h}시간 ${m > 0 ? m + '분' : ''}` : `약 ${m}분`
+  return h > 0 ? `약 ${h}시간${m > 0 ? ' ' + m + '분' : ''}` : `약 ${m}분`
 }
 
-/** Illustrative per-leg travel time */
-function travelTime(idx, places) {
-  if (!places || idx >= places.length - 1) return ''
-  return '약 20분'
+/** 구간별 이동시간 텍스트 — 서버 leg 우선, 없으면 FE 추정 */
+function travelTime(idx, dayNo) {
+  const r = dayReport(dayNo)
+  const leg = r?.legs?.[idx]
+  if (leg) {
+    const mins = Math.max(1, Math.round((leg.distanceKm / DRIVE_SPEED_KMH) * 60)) // 30km/h 가정
+    return `${leg.distanceKm}km · 약 ${mins}분`
+  }
+  // 폴백: FE Haversine
+  const places = placesOf(dayNo)
+  if (!places.length || idx >= places.length - 1) return ''
+  const a = coordOf(places[idx])
+  const b = coordOf(places[idx + 1])
+  if (!a || !b) return '거리 추정 불가'
+  const km = haversineKm(a, b)
+  const mins = Math.round(legMinutes(km))
+  const mode = km <= WALK_THRESHOLD_KM ? '도보' : '차량'
+  const dist = km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`
+  return `${dist} · ${mode} ${mins}분`
+}
+
+// ── 대체 동선 적용 (재정렬) ──────────────────────────────────────────────────
+
+/** 하루 일정 중 좌표를 가진 장소가 2곳 이상이면 FE 거리기반 재정렬 가능 */
+function canOptimize(places) {
+  const list = places ?? []
+  let usable = 0
+  for (const p of list) if (coordOf(p)) usable++
+  return usable >= 2
+}
+
+/** FE 폴백으로라도 재정렬 가능한 날이 하나라도 있는지 */
+const hasOptimizable = computed(() => days.value.some((d) => canOptimize(d.places)))
+
+// 서버 추천이 있거나, 서버 리포트가 없더라도 FE로 재정렬할 수 있으면 적용 버튼 활성.
+// 단, 리포트 로드가 실패한 경우(reportFailed)에는 임의 저장을 막아 비활성.
+const canApply = computed(() => {
+  if (reportFailed.value) return false
+  if (report.value) return hasSuggestion.value
+  return hasOptimizable.value
+})
+
+const optNote = computed(() => {
+  if (reportFailed.value) {
+    return planStore.error ?? '동선 리포트를 불러오지 못해 적용할 수 없어요. 잠시 후 다시 시도해 주세요.'
+  }
+  if (report.value) {
+    return hasSuggestion.value
+      ? '더 짧은 동선을 찾았어요. 아래에서 적용해 보세요.'
+      : '장소 간 좌표 거리로 계산한 동선이에요'
+  }
+  return `거리·시간은 장소 좌표 기준 직선거리 추정값이에요 (도보 ${WALK_THRESHOLD_KM}km 이하·차량 가정)`
+})
+
+const applyLabel = computed(() => {
+  if (applying.value) return '적용 중...'
+  if (reportFailed.value) return '리포트를 불러올 수 없어 적용 불가'
+  if (report.value) return hasSuggestion.value ? '대체 동선 적용' : '확인'
+  return hasOptimizable.value ? '거리 기반 동선 적용' : '좌표가 없어 적용 불가'
+})
+
+/**
+ * 최근접 이웃(greedy nearest-neighbor)으로 장소 순서를 재정렬 (FE 폴백).
+ * 첫 장소를 출발점으로 고정하고, 가장 가까운 장소를 차례로 잇는다.
+ * 좌표가 없는 장소는 원래 상대순서를 유지하며 뒤에 붙인다.
+ */
+function reorderByDistance(places) {
+  const list = [...(places ?? [])]
+  const withCoord = list.filter((p) => coordOf(p))
+  const without = list.filter((p) => !coordOf(p))
+  if (withCoord.length < 2) return list
+
+  const remaining = [...withCoord]
+  const ordered = [remaining.shift()] // 첫 장소 고정
+  while (remaining.length) {
+    const last = coordOf(ordered[ordered.length - 1])
+    let bestIdx = 0
+    let bestKm = Infinity
+    remaining.forEach((p, i) => {
+      const km = haversineKm(last, coordOf(p))
+      if (km < bestKm) {
+        bestKm = km
+        bestIdx = i
+      }
+    })
+    ordered.push(remaining.splice(bestIdx, 1)[0])
+  }
+  // 좌표 없는 장소는 끝에 추가(거리 계산 불가하므로 후순위)
+  return [...ordered, ...without]
 }
 
 /**
- * "대체 동선 적용" — currently navigates back to the plan hub.
- * When the BE exposes an optimized-route apply endpoint, call it here first.
+ * "대체 동선 적용" — 서버 추천 순서(suggestedOrder)가 있으면 그것으로,
+ * 서버 리포트가 없으면 FE 거리기반(nearest-neighbor)으로 각 일자를 재배치.
+ * 기존 PUT /api/plans/{id}/days/{dayNo}/places(replacePlaces)를 재사용한다.
  */
-function applyRoute() {
-  router.replace('/plan')
+async function applyRoute() {
+  if (applying.value) return
+  // 리포트 로드 실패 시에는 임의 재정렬·저장 금지(성공 위장 방지)
+  if (reportFailed.value) return
+
+  // 서버 리포트가 있는 경우
+  if (report.value) {
+    if (!hasSuggestion.value) {
+      router.replace('/plan')
+      return
+    }
+    applying.value = true
+    try {
+      for (const dr of report.value.days) {
+        if (!dr.reorderSuggested) continue
+        const day = days.value.find((d) => d.dayNo === dr.dayNo)
+        if (!day?.places?.length) continue
+        // suggestedOrder(placeId 목록) → 실제 place 객체 순서로 매핑
+        const byId = new Map(day.places.map((p) => [p.id, p]))
+        const reordered = dr.suggestedOrder.map((id) => byId.get(id)).filter(Boolean)
+        if (reordered.length === day.places.length) {
+          await planStore.replacePlaces(planId, dr.dayNo, reordered)
+        }
+      }
+      await planStore.loadRouteReport(planId).catch(() => {})
+      router.replace('/plan')
+    } catch {
+      // error in planStore.error
+    } finally {
+      applying.value = false
+    }
+    return
+  }
+
+  // 폴백: 서버 리포트가 없을 때 FE 거리기반 재정렬
+  const targets = days.value.filter((d) => canOptimize(d.places))
+  if (!targets.length) return
+  applying.value = true
+  try {
+    for (const day of targets) {
+      const reordered = reorderByDistance(day.places)
+      await planStore.replacePlaces(planId, day.dayNo, reordered)
+    }
+    router.replace('/plan')
+  } catch {
+    // 오류는 planStore.error에 반영됨 (상단 에러 상태로 표시)
+  } finally {
+    applying.value = false
+  }
 }
 </script>
 
@@ -400,6 +784,159 @@ function applyRoute() {
   font-weight: 500;
   color: var(--color-peach-pressed);
   flex-shrink: 0;
+}
+
+/* ── Share bar ────────────────────────────────────────────────────────────── */
+.share-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-line-light);
+  flex-shrink: 0;
+}
+
+.share-icon {
+  flex-shrink: 0;
+  color: var(--color-peach-pressed);
+  display: flex;
+}
+
+.share-url {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--color-ink-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-copy-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  padding: 4px 8px;
+}
+
+/* ── Map card ─────────────────────────────────────────────────────────────── */
+.map-card {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.map-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.map-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.map-card-count {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+}
+
+.map-wrap {
+  width: 100%;
+  height: 220px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-line-light);
+  background: var(--color-surface);
+}
+
+/* ── Budget card ──────────────────────────────────────────────────────────── */
+.budget-card {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.budget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.budget-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.budget-total {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-peach-pressed);
+  letter-spacing: -0.3px;
+}
+
+.budget-days {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budget-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.budget-day-label {
+  color: var(--color-ink-muted);
+}
+
+.budget-day-cost {
+  color: var(--color-ink-secondary);
+  font-weight: 600;
+}
+
+.budget-planned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-line-light);
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+
+.budget-diff {
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+}
+
+.budget-diff.over {
+  color: var(--color-error);
+}
+
+.budget-note {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  margin-top: 10px;
 }
 
 /* ── Scroll area ──────────────────────────────────────────────────────────── */
@@ -631,5 +1168,12 @@ function applyRoute() {
   justify-content: center;
   gap: 8px;
   box-shadow: 0 4px 14px rgba(247, 143, 87, 0.3);
+}
+
+.btn-apply:disabled {
+  background: var(--color-line);
+  color: var(--color-ink-muted);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 </style>

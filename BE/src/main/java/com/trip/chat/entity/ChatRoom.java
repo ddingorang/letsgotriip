@@ -45,4 +45,9 @@ public class ChatRoom extends BaseEntity {
 
     @OneToMany(mappedBy = "chatRoom", cascade = CascadeType.ALL)
     private List<ChatRoomMembership> chatRoomMembershipList = new ArrayList<>();
+
+    /** 방 프로필 이미지 URL 갱신(방장 전용 동작). */
+    public void changeImageUrl(final String imageUrl) {
+        this.imageUrl = imageUrl;
+    }
 }

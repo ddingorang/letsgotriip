@@ -20,5 +20,8 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     List<Post> findAllByDeletedFalseAndCategoryAndIdLessThanOrderByIdDesc(PostCategory category, Long cursorId, Pageable pageable);
 
+    // 통합검색: 제목 부분일치(대소문자 무시) + 미삭제, DB 상한
+    List<Post> findAllByDeletedFalseAndTitleContainingIgnoreCaseOrderByIdDesc(String title, Pageable pageable);
+
     Optional<Post> findByIdAndDeletedFalse(Long id);
 }

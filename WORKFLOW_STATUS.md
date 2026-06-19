@@ -1,9 +1,14 @@
 # 관통 여행(Triip) — 워크플로우 구현 상태 (됨/안됨)
 
+> ⚠️ **OUTDATED 배너 유지(역사적 맥락)** — 아래 §1~§5 상태표는 **2차 수정(2026-06-19) 반영본**으로
+> 갱신되었습니다. 단, 본 문서는 2026-06-18 라이브 테스트를 기점으로 작성된 스냅샷이며, 일부 라이브
+> 호출 결과(§2)는 수정 전 기록입니다. 결함 #1~#29의 종합 판정은 `ANALYSIS.md`(§10, 2026-06-19)를
+> 기준으로 삼으세요. 본 문서는 화면/시나리오 단위 현황 추적용입니다.
+
 > 기준: `tree/WORKFLOW.md`(Figma 45화면 IA·전이도·시나리오)
 > 대상: `trip-fe`(통합 FE) + `springaitrip/BE`(Spring Boot, 9090)
 > 방법: BE 라이브 API 호출 테스트 + codex 4종 워크플로우 검사 + 코드 대조
-> 작성일: 2026-06-18
+> 최초 작성: 2026-06-18 · 상태표 갱신: 2026-06-19(2차 수정 반영)
 
 ## 범례
 - ✅ **동작**: BE 연동까지 라이브 검증됨
@@ -15,16 +20,16 @@
 
 ## 1. 시나리오별 한눈 요약 (WORKFLOW.md §5)
 
-| # | 시나리오 | 상태 | 비고 |
+| # | 시나리오 | 상태 | 비고 (2026-06-19 기준) |
 |---|---|---|---|
-| 1 | 탐색 → 일정 (home→place-detail→plan→report) | ⚠️ | 관광지/장소담기 ✅, 계획화면(PlanView) mock, 동선리포트 없음 |
-| 2 | AI 계획 (ai-planner→plan→report) | ⚠️ | AI 생성·결과·저장 ✅, **생성 전 계획입력 페이지 분리 안 됨**, 동선리포트 화면 없음 |
-| 3 | 커뮤니티 글 (community→post→comment/menu→editor) | ⚠️ | API 전부 ✅(작성/상세/댓글/좋아요), **FE 표시 필드 깨짐**(작성자/이미지/카테고리) |
-| 4 | 핫플 등록 (explore→hotspot→create→duplicate) | ❌ | 목록 ✅, **등록 500(category NOT NULL)**, 중복확인 화면 없음 |
-| 5 | 동행 (community→list→detail→apply→manage→chat) | ❌ | 목록 ✅, **모집글 작성 500(chat_room_id NOT NULL)**, FE store mock |
-| 6 | 챌린지 (my→empty→list→chat→leave) | ❌ | BE 엔드포인트 없음, FE 화면 일부만 |
-| 7 | 마이/기록 (my→profile/album/badge/notices) | ⚠️ | 내정보/프로필수정/앨범 ✅, 뱃지/체크리스트/공지 정적 |
-| 8 | 인증 (gate→login→onboarding→home) | ✅ | 회원가입/로그인/refresh/내정보/탈퇴 전부 검증됨 |
+| 1 | 탐색 → 일정 (home→place-detail→plan→report) | ✅ | 관광지/장소담기 ✅, PlanView BE 배선+반응성 수정·인라인 편집(삭제/순서이동) ✅, 동선리포트(Haversine 거리+도보/차량 추정, 대체동선 적용) ✅ |
+| 2 | AI 계획 (ai-planner→plan→report) | ✅ | AI 생성·결과·저장 ✅, draft→plan contentType 추론(detailCommon2) ✅. 입력+생성이 한 화면인 점은 설계상 유지(백로그 아님) |
+| 3 | 커뮤니티 글 (community→post→comment/menu→editor) | ✅ | 작성/상세/댓글/좋아요 ✅, FE 표시 필드(작성자/이미지/카테고리 한글 라벨) 매핑 ✅ |
+| 4 | 핫플 등록 (explore→hotspot→create→duplicate) | ⚠️ | 등록 시 status=APPROVED 자동승인→즉시 노출 ✅, 지도 핀 실 lat/lng ✅. 중복확인 화면은 여전히 없음(백로그) |
+| 5 | 동행 (community→list→detail→apply→manage→chat) | ✅ | 모집/신청/취소(DELETE)/승인 ✅, isApplied·myApplicationId 서버 조회 ✅, 채팅버튼 chatRoomId 사용 ✅, 신청자 관리(message·ageGroup) ✅. tripCount·mannerScore는 통계모델 부재로 null(백로그) |
+| 6 | 챌린지 (my→empty→list→chat→leave) | ❌ | BE 엔드포인트 미구현(백로그). FE 화면 일부만 |
+| 7 | 마이/기록 (my→profile/album/badge/notices) | ⚠️ | 내정보/프로필수정(bio)/앨범 ✅, MyPage 통계 실데이터(/api/plans)·빈상태 정직 표시 ✅. 뱃지/챌린지/공지는 BE 미구현→0/준비중 정직 표기(백로그) |
+| 8 | 인증 (gate→login→onboarding→home) | ✅ | 회원가입/로그인/refresh/내정보/탈퇴 ✅, 온보딩 취향설문 영속화(PATCH /users/me/preferences) ✅ |
 
 ---
 
@@ -49,12 +54,14 @@
 | 마이 | `GET /users/me/albums` | 200 |
 | 이미지 | `POST /community/images` (멀티파트 업로드) | 200 |
 
-### ❌ 실패 (실제 BE 버그 — 우리 변경과 무관한 기존 결함)
-| 엔드포인트 | 코드 | 원인 (BE 로그 확인) |
-|---|---|---|
-| `POST /companion/posts` (동행 모집글) | **500** | `Column 'chat_room_id' cannot be null` — 저장 전 채팅방 미생성/미연결 |
-| `POST /community/hotplaces` (핫플 등록) | **500** | `Column 'category' cannot be null` — `HotPlaceCreateRequest`에 category 필드 없음 |
-| `POST /api/festivals/sync` (축제 동기화) | **403** | Spring Security가 차단 (permit 목록/권한 누락) → 그래서 `/api/festivals`가 빈 배열 |
+### ❌ 실패 → ✅ 해소 (2026-06-18 라이브 테스트 시점 버그, 이후 수정)
+> 아래는 2026-06-18 라이브 호출 당시의 실패 기록입니다. 이후 커밋으로 모두 해소되었습니다(아래 "해소" 열 참조).
+
+| 엔드포인트 | 당시 코드 | 당시 원인 | 해소 |
+|---|---|---|---|
+| `POST /companion/posts` (동행 모집글) | 500 | `Column 'chat_room_id' cannot be null` | ✅ 저장 시 ChatRoom 선생성·연결 |
+| `POST /community/hotplaces` (핫플 등록) | 500 | `category` NOT NULL인데 DTO에 필드 없음 | ✅ `HotPlaceCreateRequest`에 category 추가(이미 수정됨, ANALYSIS §7 확인) + 등록 시 status=APPROVED 자동승인으로 즉시 노출 |
+| `POST /api/festivals/sync` (축제 동기화) | 403 | 미인증 접근 차단(=의도된 401/403 동작) | 정책상 인증 필요 동작(반증, ANALYSIS §5-3). 축제 데이터는 인증된 sync 배치 1회 실행 후 채워짐 |
 
 ---
 
@@ -65,13 +72,13 @@
 |---|---|---|
 | 로그인 게이트 | 라우터 가드 | ✅ |
 | 로그인 | LoginView | ✅ |
-| 취향 설문(온보딩) | PreferenceSurveyView | ⚠️ 화면 있음, 저장 연동 확인 필요 |
+| 취향 설문(온보딩) | PreferenceSurveyView | ✅ PATCH /users/me/preferences 실제 저장 |
 
 ### 🏠 홈·탐색·장소
 | 화면 | FE 뷰 | 상태 |
 |---|---|---|
 | 홈 | HomeView | ⚠️ 일부 정적/mock |
-| 탐색 목록 | ExploreView | ✅ 관광지 실데이터 |
+| 탐색 목록 | ExploreView | ✅ 관광지 실데이터 (죽은 코드 제거됨) |
 | 탐색 지도 | (없음) | ❌ 미구현 |
 | 장소 상세 | PlaceDetailView | ✅ ‘일정에 담기’ BE 연동 |
 
@@ -80,33 +87,33 @@
 |---|---|---|
 | AI 일정 생성 | AiInputView | ✅ (단, 입력+생성 한 화면) |
 | AI 결과 | AiResultView | ✅ save-plan 연동 |
-| 계획 상세 | PlanView | ⚠️ **mock 로컬 배열, planStore/BE 미배선** |
-| 동선 리포트 | (없음) | ❌ 미구현 |
-| 계획 없음(빈상태)→새여행 | (없음) | ❌ WORKFLOW.md에서도 미배선 화면 |
+| 계획 상세 | PlanView | ✅ planStore(BE) 배선 + storeToRefs 반응성 수정 + 인라인 편집(삭제/장소 위아래 이동/장소 삭제) |
+| 동선 리포트 | PlanReportView | ✅ Haversine 직선거리 + 도보/차량 시간 추정(좌표없으면 '추정불가' 정직표기), '대체 동선 적용'(nearest-neighbor 재정렬 후 replacePlaces 저장) |
+| 계획 없음(빈상태)→새여행 | (없음) | ❌ WORKFLOW.md에서도 미배선 화면(백로그) |
 
 ### 💬 커뮤니티
 | 화면 | FE 뷰 | 상태 |
 |---|---|---|
-| 커뮤니티/목록/검색 | CommunityView | ⚠️ API ✅ / **카테고리 영문·본문요약 깨짐** |
-| 게시글 상세 | PostDetailView | ⚠️ API ✅ / **작성자·이미지 필드 불일치로 공백** |
-| 글쓰기 | PostWriteView | ⚠️ 작성 ✅ / 이미지는 base64로 전송(업로드 API 미사용) |
-| 댓글/좋아요 | PostDetailView | ⚠️ API ✅ / 댓글 작성자 필드 불일치 |
+| 커뮤니티/목록/검색 | CommunityView | ✅ API + 카테고리 한글 라벨/표시 필드 매핑 |
+| 게시글 상세 | PostDetailView | ✅ 작성자·이미지 필드 매핑 정규화 |
+| 글쓰기 | PostWriteView | ✅ 작성. (이미지 업로드 API 전환은 별도 추적) |
+| 댓글/좋아요 | PostDetailView | ✅ 좋아요 토글·댓글 삭제·작성자 닉네임 표시 |
 
 ### 📍 핫플
 | 화면 | FE 뷰 | 상태 |
 |---|---|---|
-| 핫플 상세 | HotplaceDetailView | ⚠️ |
-| 핫플 등록 | HotplaceRegisterView | ❌ **등록 500** |
-| 중복 위치 확인 | (없음) | ❌ |
+| 핫플 상세 | HotplaceDetailView | ✅ 미니맵 Kakao 실좌표 |
+| 핫플 등록 | HotplaceRegisterView | ✅ 카카오 지도 연동 + status=APPROVED 자동승인(즉시 노출) + 목록 실데이터 |
+| 중복 위치 확인 | (없음) | ❌ 미구현(백로그) |
 
 ### 🧑‍🤝‍🧑 동행
 | 화면 | FE 뷰 | 상태 |
 |---|---|---|
-| 동행 목록 | (CompanionListView 없음/CommunityView 탭) | ⚠️ store mock |
-| 동행 상세 | CompanionDetailView | ⚠️ 신청이 서버 호출 없이 로컬만 |
-| 모집글 작성 | CompanionWriteView | ❌ **생성 500** |
-| 신청자 관리/목록 | CompanionApplicantsView | 🔌 BE 있음, FE 미배선 |
-| 동행 채팅 | ChatRoomView/ChatRoomListView | ⚠️ STOMP 연동 확인 필요 |
+| 동행 목록 | (CommunityView 탭) | ✅ 실데이터 + status 한글 라벨 + currentMembers 표시 |
+| 동행 상세 | CompanionDetailView | ✅ 신청/취소(DELETE) 실배선 + isApplied·myApplicationId 서버 조회(새로고침/중복신청 방지) + 채팅버튼 chatRoomId 사용 |
+| 모집글 작성 | CompanionWriteView | ✅ 생성 + tags·estimatedCost payload 포함 |
+| 신청자 관리/목록 | CompanionApplicantsView | ✅ FE 배선 + message 실데이터 + birthDate 파생 ageGroup. tripCount·mannerScore는 null(백로그) |
+| 동행 채팅 | ChatRoomView/ChatRoomListView | ✅ 무의존 native WebSocket STOMP 클라이언트(api/stomp.js)+chat 스토어로 실시간 송수신, 히스토리 REST. RabbitMQ+MongoDB 구동 필요 |
 
 ### 🏅 챌린지
 | 화면 | FE 뷰 | 상태 |
@@ -116,20 +123,24 @@
 ### 👤 마이·기록·뱃지·공지
 | 화면 | FE 뷰 | 상태 |
 |---|---|---|
-| 마이 | MyPageView | ⚠️ 일부 정적 |
-| 프로필 수정 | ProfileEditView | ⚠️ 화면 있으나 PATCH 미호출(자동) |
-| 체크리스트 | ChecklistView | ⚠️ 로컬 상태 |
-| 축제 상세 | (Explore/Festival) | ⚠️ TourAPI 직접 |
-| 앨범 목록/상세 | AlbumDetailView | ✅ 앨범 API 존재 |
-| 뱃지 목록/진행/획득 | BadgesView | ❌ BE 없음, 정적 |
-| 공지/공지상세 | (없음) | ❌ 미구현 |
-| 결제/예약확정 | PaymentView/ConfirmationView | ⚠️ FE 고유, BE 무관 |
+| 마이 | MyPageView | ✅ /api/plans 실데이터 개수·앨범 실 API·빈상태 정직 표시. 뱃지/챌린지 진행도는 BE 미구현→0/준비중 정직 표기 |
+| 프로필 수정 | ProfileEditView | ✅ bio 포함 PATCH /users/me 저장 |
+| 체크리스트 | ChecklistView | ⚠️ 로컬 상태(BE 미구현, 백로그) |
+| 축제 상세 | (Explore/Festival) | ✅ BE /api/festivals 경유(TourAPI 직접호출 제거). 데이터는 sync 배치 1회 실행 후 노출 |
+| 앨범 목록/상세 | AlbumDetailView | ⚠️ 앨범 실 API 연동. 계획↔앨범 매핑·AlbumDetail 상세는 백로그 |
+| 뱃지 목록/진행/획득 | BadgesView | ⚠️ BE 미구현→준비중/0 정직 표기(백로그) |
+| 공지/공지상세 | (없음) | ❌ 미구현(백로그) |
+| 결제/예약확정 | PaymentView/ConfirmationView | ⚠️ FE 데모 — '데모·실제아님' 배지+주석 명시. BE 미구현(백로그) |
 
 ---
 
-## 4. 핵심 결함 상세 & 수정 방향
+## 4. 핵심 결함 상세 & 수정 방향 (2026-06-18 기록 · 대부분 해소)
 
-### A. 게시글 표시 깨짐 (FE 필드 ≠ BE 응답) — High
+> 아래 A~G는 2026-06-18 분석 시점의 결함 상세입니다. **A·C·D·E·F·G는 2차 수정(2026-06-19)으로 해소**되었습니다
+> (A 표시 필드 매핑, B `/uploads` 프록시 추가, C ChatRoom 선연결, D category DTO + 자동승인, E 인증 sync 정책 정리,
+> F PlanView BE 배선, G 각 store BE 배선·축제 BE 경유). 종합 판정은 `ANALYSIS.md §10` 참조. 원문은 추적용으로 보존합니다.
+
+### A. 게시글 표시 깨짐 (FE 필드 ≠ BE 응답) — High [해소]
 | FE가 읽음 | BE 실제 | 수정 |
 |---|---|---|
 | `post.imageUrl` | `imageUrls[]`(상세)/`thumbnailUrl`(목록) | 매핑 |
@@ -164,9 +175,31 @@
 
 ---
 
-## 5. 권장 수정 우선순위
-1. **게시글 표시 필드 매핑 + 이미지 proxy** (사용자 체감 가장 큼) — FE
-2. **동행/핫플 생성 500** — BE (NOT NULL 컬럼 처리)
-3. **PlanView BE 배선 + AI 전 계획 입력 페이지** — FE (요청사항)
-4. 축제 sync 403, 동행/마이페이지 store 배선
-5. 챌린지/공지/동선리포트/탐색지도 등 미구현 화면 (백로그)
+## 5. 권장 수정 우선순위 (2026-06-18 작성 · 1~4 완료)
+1. ~~게시글 표시 필드 매핑 + 이미지 proxy~~ — ✅ 완료
+2. ~~동행/핫플 생성 500~~ — ✅ 완료 (ChatRoom 선연결 / category DTO + 자동승인)
+3. ~~PlanView BE 배선 + 인라인 편집 + 동선 리포트~~ — ✅ 완료
+4. ~~축제 BE 경유 전환, 동행/마이페이지 store 배선~~ — ✅ 완료
+5. 챌린지/공지/탐색지도 등 미구현 화면 — 여전히 백로그(아래 §6 참조)
+
+---
+
+## 6. 남은 백로그 (2026-06-19 정직 표기)
+
+2차 수정 이후에도 미해결로 남은 항목. 과장 없이 백로그로 추적합니다.
+
+### 기능/데이터 공백
+- **동행 신청자 메타**: tripCount·mannerScore는 통계 모델 부재로 응답 null(ageGroup·message는 실데이터로 채워짐).
+- **일정 표시 일부 공백**: `PlanSummaryResponseDto`에 destination/spots, `DayResponseDto`에 summary 필드가 없어 일부 표시가 비어 있음(FE 옵셔널 체이닝으로 무해).
+- **축제 RecommendService 매칭**: 축제 areaCode 코드체계(legacy ↔ lDongRegnCd) cross-domain 매칭은 기존 한계로 백로그.
+- **핫플 요약**: `HotPlaceSummaryResponse`에 description 필드 부재.
+- **앨범**: AlbumDetail 상세, 계획↔앨범 매핑 미구현.
+
+### BE 자체 미구현(화면은 정직 표기/데모)
+- 챌린지·뱃지·퀘스트, 공지(notice), 결제(payment)/예약(booking) 컨트롤러 부재 → 해당 화면은 0/준비중/데모 배지로 정직 표기.
+- 체크리스트 BE 미구현(로컬 상태).
+- 중복 위치 확인·탐색 지도 화면 미구현.
+
+### 런타임 전제
+- **축제**: 데이터는 인증된 `/api/festivals/sync` 배치를 1회 실행해야 채워짐(네트워크 + TourAPI 키 필요).
+- **채팅**: RabbitMQ STOMP 릴레이(61613) + MongoDB(히스토리) 구동 필요. dev에서 WebSocket은 클라이언트가 BE(:9090)로 직접 연결.

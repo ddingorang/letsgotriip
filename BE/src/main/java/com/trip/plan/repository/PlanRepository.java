@@ -33,4 +33,22 @@ public interface PlanRepository extends JpaRepository<TripPlan, Long> {
            "LEFT JOIN FETCH p.days d " +
            "WHERE p.id = :id")
     Optional<TripPlan> findByIdWithDays(@Param("id") Long id);
+
+    /**
+     * 공유 토큰으로 days fetch join 조회 (공개 공유 화면용).
+     * places는 @BatchSize IN-query로 자동 처리.
+     */
+    @Query("SELECT DISTINCT p FROM TripPlan p " +
+           "LEFT JOIN FETCH p.days d " +
+           "WHERE p.shareToken = :shareToken")
+    Optional<TripPlan> findByShareToken(@Param("shareToken") String shareToken);
+
+    // ── 게임화(챌린지/뱃지) 집계 ────────────────────────────────
+    long countByUserId(Long userId);
+
+    @Query("SELECT COUNT(pl) FROM TripPlan p JOIN p.days d JOIN d.places pl WHERE p.userId = :userId")
+    long countPlacesByUserId(@Param("userId") Long userId);
+
+    @Query("SELECT COUNT(p) FROM TripPlan p WHERE p.userId = :userId AND p.endDate < CURRENT_DATE")
+    long countCompletedByUserId(@Param("userId") Long userId);
 }

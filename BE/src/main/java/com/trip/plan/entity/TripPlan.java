@@ -52,6 +52,14 @@ public class TripPlan extends BaseEntity {
     private OriginType origin;
 
     /**
+     * 공개 공유 토큰. null이면 미공유 상태.
+     * 공유 활성화 시 UUID 기반 토큰을 1회 발급하고 이후 재사용한다(idempotent).
+     * unique 제약으로 토큰 충돌 방지. (ddl-auto=update가 컬럼을 추가)
+     */
+    @Column(name = "share_token", unique = true, length = 64)
+    private String shareToken;
+
+    /**
      * 낙관적 잠금 버전.
      * plan 메타 수정뿐 아니라 days/places 변경 시에도
      * entityManager.lock(plan, LockModeType.OPTIMISTIC_FORCE_INCREMENT)으로 명시적 증가.
@@ -84,5 +92,10 @@ public class TripPlan extends BaseEntity {
         this.endDate    = endDate;
         this.companions = companions;
         this.budget     = budget;
+    }
+
+    /** 공유 토큰 발급. 이미 발급된 경우 호출 측에서 재사용하므로 여기서는 단순 세팅만. */
+    public void markShared(String token) {
+        this.shareToken = token;
     }
 }

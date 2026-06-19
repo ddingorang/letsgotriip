@@ -4,6 +4,11 @@
     <header class="ai-header">
       <div class="ai-hero-glow" />
       <div class="ai-hero-glow2" />
+      <button class="ai-back-btn" aria-label="뒤로가기" @click="goBack">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
       <div class="ai-badge">
         <span class="ai-badge-dot" />
         AI 분석 준비 완료
@@ -179,6 +184,12 @@ import { http } from '@/api/http.js'
 
 const router = useRouter()
 
+// 뒤로가기 — 직접 진입(history 없음) 시 홈으로 안전 폴백
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push('/')
+}
+
 // ── 지역 ──────────────────────────────────────────────────────────────────────
 const areas = ref([])
 const areasLoading = ref(true)
@@ -281,6 +292,9 @@ const budgetOptions = [
 const selectedBudget = ref('10~30만원')
 
 // ── 테마 ──────────────────────────────────────────────────────────────────────
+// key 값(sea/mountain/food/...)이 BE로 전송되는 테마 코드다.
+// BE는 RecommendService.THEME_LABELS에서 이 키를 한글 의미로 매핑해 AI 프롬프트에 반영한다.
+// 키를 추가/변경하면 BE THEME_LABELS도 함께 갱신해야 한다(매핑 테이블 단일 소스 = BE).
 const themes = [
   { key: 'sea',      icon: '🌊', label: '바다/해변' },
   { key: 'mountain', icon: '🏔️', label: '산/자연'   },
@@ -362,6 +376,26 @@ function handleNext() {
   height: 110px;
   background: radial-gradient(circle, rgba(100, 180, 240, 0.15) 0%, transparent 70%);
   pointer-events: none;
+}
+
+.ai-back-btn {
+  position: relative;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  margin: 0 0 8px -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ai-back-btn:active {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .ai-badge {

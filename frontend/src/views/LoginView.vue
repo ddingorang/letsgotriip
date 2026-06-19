@@ -23,6 +23,12 @@
         </svg>
         로그인이 필요한 서비스예요.
       </div>
+      <div v-if="isResetDone" class="auth-notice success">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+        비밀번호가 변경되었어요. 새 비밀번호로 로그인해 주세요.
+      </div>
       <h2 class="form-title">다시 만나서 반가워요</h2>
       <p class="form-sub">로그인하고 나만의 여행을 계획해보세요.</p>
 
@@ -72,6 +78,9 @@
         <span v-if="!loading">로그인</span>
         <div v-else class="btn-spinner" />
       </button>
+
+      <!-- Forgot password -->
+      <button class="forgot-link" @click="goPasswordReset">비밀번호를 잊으셨나요?</button>
 
       <!-- Divider -->
       <div class="divider-row">
@@ -123,12 +132,14 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-const email = ref('')
-const password = ref('')
+// 데모 편의: VITE_DEMO_EMAIL/PASSWORD 가 비어있지 않으면 로그인 폼을 미리 채움(운영은 빈칸)
+const email = ref(import.meta.env.VITE_DEMO_EMAIL || '')
+const password = ref(import.meta.env.VITE_DEMO_PASSWORD || '')
 const loading = ref(false)
 const error = ref('')
 const passwordRef = ref(null)
 const isRedirected = !!route.query.redirect
+const isResetDone = route.query.reset === 'done'
 
 function focusPassword() {
   passwordRef.value?.focus()
@@ -175,6 +186,10 @@ function handleGoogle() {
 
 function goSignup() {
   router.push('/signup')
+}
+
+function goPasswordReset() {
+  router.push('/password-reset')
 }
 </script>
 
@@ -238,6 +253,10 @@ function goSignup() {
   border-radius: var(--radius-md);
   margin-bottom: 16px;
   letter-spacing: -0.2px;
+}
+.auth-notice.success {
+  background: var(--color-success-light, #e7f6ec);
+  color: var(--color-success, #1f9d55);
 }
 
 /* Form */
@@ -307,6 +326,18 @@ function goSignup() {
 }
 .login-btn:hover:not(:disabled) { background: var(--color-peach-pressed); }
 .login-btn:disabled { opacity: 0.6; }
+
+.forgot-link {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .btn-spinner {
   width: 20px;
   height: 20px;

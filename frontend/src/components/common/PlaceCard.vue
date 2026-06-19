@@ -8,22 +8,19 @@
           <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
         </svg>
       </button>
-      <div v-if="place.imageUrl" class="img-wrapper">
-        <img :src="place.imageUrl" :alt="place.name" />
-      </div>
-      <div v-else class="img-placeholder">
-        <span class="place-caption">{{ place.address }}</span>
+      <div class="img-wrapper">
+        <img :src="thumb" :alt="place.name" @error="onImgError" />
       </div>
     </div>
     <div class="card-body">
       <div class="card-top">
         <div class="place-name">{{ place.name }}</div>
-        <div class="place-rating">
+        <div v-if="place.rating != null" class="place-rating">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--color-gold)" stroke="none">
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
           <span>{{ place.rating }}</span>
-          <span class="review-count">({{ place.reviewCount?.toLocaleString() }})</span>
+          <span v-if="place.reviewCount != null" class="review-count">({{ place.reviewCount?.toLocaleString() }})</span>
         </div>
       </div>
       <div class="place-address">
@@ -39,13 +36,23 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, computed } from 'vue'
+
+const props = defineProps({
   place: { type: Object, required: true },
   rank: { type: Number, default: null },
   bookmarked: { type: Boolean, default: false },
 })
 
 defineEmits(['click', 'bookmark'])
+
+// 썸네일 — 업로드/관광 이미지가 없거나 로딩 실패 시 로컬 기본 썸네일로 채움(외부 더미 미사용)
+const imgFailed = ref(false)
+const placeholder = computed(() => '/images/placeholder-thumb.png')
+const thumb = computed(() => (!imgFailed.value && props.place.imageUrl) ? props.place.imageUrl : placeholder.value)
+function onImgError() {
+  imgFailed.value = true
+}
 </script>
 
 <style scoped>

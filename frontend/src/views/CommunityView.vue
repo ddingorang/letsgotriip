@@ -5,16 +5,16 @@
     <header class="comm-header">
       <h1 class="header-title">커뮤니티</h1>
       <div class="header-right">
-        <button class="icon-btn">
+        <button class="icon-btn" @click="$router.push('/search')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
           </svg>
         </button>
-        <button class="icon-btn bell-wrap">
+        <button class="icon-btn bell-wrap" @click="$router.push('/notifications')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          <span class="notif-dot" />
+          <span v-if="notifStore.hasUnread" class="notif-dot" />
         </button>
       </div>
     </header>
@@ -38,7 +38,7 @@
           v-for="f in filterTabs"
           :key="f"
           :class="['chip-btn', { active: activeFilter === f }]"
-          @click="activeFilter = f"
+          @click="selectFilter(f)"
         >
           {{ f }}
         </button>
@@ -46,17 +46,18 @@
       <div class="scroll-content" @scroll="onScroll">
         <div class="post-list">
           <PostCard
-            v-for="post in filteredPosts"
+            v-for="post in postsStore.posts"
             :key="post.id"
             :post="post"
             @click="$router.push(`/community/${post.id}`)"
             @like="postsStore.likePost($event)"
+            @bookmark="postsStore.bookmarkPost($event)"
           />
         </div>
         <div v-if="postsStore.loading" class="loading-row">
           <div class="spinner" />
         </div>
-        <div v-if="!postsStore.hasMore && filteredPosts.length > 0" class="end-msg">모든 게시글을 불러왔어요</div>
+        <div v-if="!postsStore.hasMore && postsStore.posts.length > 0" class="end-msg">모든 게시글을 불러왔어요</div>
         <div class="bottom-spacer" />
       </div>
     </div>
@@ -92,35 +93,22 @@
         </div>
       </div>
 
-      <!-- Map view -->
+      <!-- Map view (실제 카카오 지도) -->
       <div v-if="hpView === 'map'" class="map-wrap">
-        <div class="map-bg">
-          <div class="map-road h-road" style="top: 32%" />
-          <div class="map-road h-road thin" style="top: 58%" />
-          <div class="map-road v-road" style="left: 42%" />
-          <div class="map-road v-road thin" style="left: 68%" />
-          <div class="map-block" style="top:8%;left:10%;width:22%;height:18%;background:#d8e8d0" />
-          <div class="map-block" style="top:38%;left:55%;width:28%;height:14%;background:#dde8d8" />
-          <div class="map-block water" style="top:68%;left:0%;width:35%;height:28%" />
-
-          <button
-            v-for="hp in filteredHotplaces"
-            :key="hp.id"
-            :class="['pin-btn', { selected: selectedHp?.id === hp.id }]"
-            :style="{ left: hp.x + '%', top: hp.y + '%' }"
-            @click="selectedHp = selectedHp?.id === hp.id ? null : hp"
-          >
-            <svg width="30" height="38" viewBox="0 0 30 38" :fill="selectedHp?.id === hp.id ? '#e0743a' : '#f78f57'">
-              <path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 23 15 23S30 25.5 30 15C30 6.716 23.284 0 15 0z" />
-              <circle cx="15" cy="15" r="6" fill="white" />
-            </svg>
-            <span v-if="selectedHp?.id === hp.id" class="pin-label">{{ hp.name }}</span>
-          </button>
+        <TripMap
+          :places="mappableHotplaces"
+          :selected-id="selectedHp?.id"
+          @select="onHpSelect"
+        />
+        <div v-if="!mappableHotplaces.length" class="map-empty">
+          지도에 표시할 핫플이 아직 없어요
         </div>
 
         <Transition name="slide-up">
           <div v-if="selectedHp" class="map-card" @click="$router.push(`/hotplace/${selectedHp.id}`)">
-            <div class="map-thumb" />
+            <div class="map-thumb">
+              <img :src="selectedHp.imageUrl || seedImg('hp-' + selectedHp.id)" :alt="selectedHp.name" @error="onThumbError($event, 'hp-' + selectedHp.id)" />
+            </div>
             <div class="map-card-body">
               <div class="map-card-row1">
                 <span class="cat-tag">{{ selectedHp.category }}</span>
@@ -140,6 +128,13 @@
 
       <!-- List view -->
       <div v-else class="hp-list">
+        <div v-if="!filteredHotplaces.length" class="hp-empty">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
+          </svg>
+          <span>아직 등록된 핫플이 없어요</span>
+          <button class="hp-empty-btn" @click="$router.push('/hotplace/register')">핫플 등록하기</button>
+        </div>
         <div
           v-for="hp in filteredHotplaces"
           :key="hp.id"
@@ -147,6 +142,7 @@
           @click="$router.push(`/hotplace/${hp.id}`)"
         >
           <div class="hp-thumb">
+            <img :src="hp.imageUrl || seedImg('hp-' + hp.id)" :alt="hp.name" @error="onThumbError($event, 'hp-' + hp.id)" />
             <span class="cat-tag">{{ hp.category }}</span>
           </div>
           <div class="hp-info">
@@ -173,7 +169,7 @@
 
     <!-- ③ 동행 -->
     <div v-show="activeMain === 2" class="tab-pane companion-pane">
-      <div class="scroll-content">
+      <div class="scroll-content" @scroll="onCompanionScroll">
         <div class="section-header">
           <span class="section-title">참여 중인 방</span>
           <button class="see-all-btn" @click="$router.push('/chat')">전체보기</button>
@@ -185,7 +181,9 @@
             class="room-card"
             @click="$router.push(`/chat/${room.id}`)"
           >
-            <div class="room-avatar-area" />
+            <div class="room-avatar-area">
+              <img :src="seedImg('room-' + room.id, 240, 140)" :alt="room.title" />
+            </div>
             <div class="room-bottom">
               <div class="room-name">{{ room.title }}</div>
               <div class="room-d-row">
@@ -212,7 +210,9 @@
             class="comp-item"
             @click="$router.push(`/companion/${comp.id}`)"
           >
-            <div class="comp-thumb" />
+            <div class="comp-thumb">
+              <img :src="comp.thumbnail || seedImg('comp-' + comp.id)" :alt="comp.title" @error="onThumbError($event, 'comp-' + comp.id)" />
+            </div>
             <div class="comp-info">
               <div class="comp-header-row">
                 <span :class="['status-badge', { urgent: comp.status === '마감임박' }]">{{ comp.status }}</span>
@@ -232,6 +232,13 @@
             </div>
           </div>
         </div>
+        <div v-if="companionStore.loadingMore" class="loading-row">
+          <div class="spinner" />
+        </div>
+        <div
+          v-else-if="!companionStore.hasMore && companionStore.companions.length > 0"
+          class="end-msg"
+        >모든 동행을 불러왔어요</div>
         <div class="bottom-spacer" />
       </div>
 
@@ -245,27 +252,50 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import PostCard from '@/components/community/PostCard.vue'
+import TripMap from '@/components/common/TripMap.vue'
 import { usePostsStore } from '@/stores/posts.js'
 import { useHotplaceStore } from '@/stores/hotplace.js'
 import { useCompanionStore } from '@/stores/companion.js'
+import { useNotificationStore } from '@/stores/notification.js'
 
 const postsStore = usePostsStore()
 const hotplaceStore = useHotplaceStore()
 const companionStore = useCompanionStore()
+const notifStore = useNotificationStore()
+const route = useRoute()
 
-const activeMain = ref(0)
+// 진입 쿼리(?tab=companion|hotplace)로 초기 탭 선택 — 0:공유게시판 1:핫플 2:동행
+const TAB_INDEX = { board: 0, hotplace: 1, companion: 2 }
+const activeMain = ref(TAB_INDEX[route.query.tab] ?? 0)
 
 // 공유게시판
-const filterTabs = ['전체', '후기', '꿀팁', '동행']
+const filterTabs = ['전체', '후기', '질문', '꿀팁', '맛집', '동행']
 const activeFilter = ref('전체')
-const filteredPosts = computed(() => {
-  if (activeFilter.value === '전체') return postsStore.posts
-  return postsStore.posts.filter((p) => (p.categoryLabel ?? p.category) === activeFilter.value)
-})
+// 라벨 → BE PostCategory enum. '전체'는 무필터(undefined).
+const FILTER_ENUM = {
+  후기: 'REVIEW',
+  질문: 'QUESTION',
+  꿀팁: 'TIP',
+  맛집: 'RESTAURANT',
+  동행: 'COMPANION',
+}
+// 카테고리 필터 변경 시 서버에서 재조회(클라이언트 필터 제거 — 페이지네이션과 정합)
+function selectFilter(f) {
+  if (activeFilter.value === f) return
+  activeFilter.value = f
+  postsStore.fetchPosts(true, FILTER_ENUM[f])
+}
 function onScroll(e) {
   const el = e.target
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) postsStore.fetchPosts()
+}
+
+// 동행 탭 무한스크롤 — 하단 근접 시 다음 페이지 로드(스토어가 hasMore/중복 호출 가드).
+function onCompanionScroll(e) {
+  const el = e.target
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) companionStore.fetchMoreCompanions()
 }
 
 // 핫플
@@ -277,9 +307,28 @@ const filteredHotplaces = computed(() => {
   if (hpCat.value === '전체') return hotplaceStore.hotplaces
   return hotplaceStore.hotplaces.filter((h) => h.category === hpCat.value)
 })
+// 지도용 — 좌표(lat/lng)가 있는 핫플만
+const mappableHotplaces = computed(() =>
+  filteredHotplaces.value.filter(
+    (h) => Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lng)),
+  ),
+)
+function onHpSelect(place) {
+  selectedHp.value = selectedHp.value?.id === place.id ? null : place
+}
+
+// 썸네일 — 업로드 이미지가 없거나 로딩 실패 시 로컬 기본 썸네일로 채움(외부 더미 미사용)
+const THUMB_PLACEHOLDER = '/images/placeholder-thumb.png'
+function seedImg() {
+  return THUMB_PLACEHOLDER
+}
+function onThumbError(e) {
+  if (!e.target.src.endsWith(THUMB_PLACEHOLDER)) e.target.src = THUMB_PLACEHOLDER
+}
 
 onMounted(() => {
   postsStore.fetchPosts(true)
+  notifStore.load()
   companionStore.fetchCompanions()
   companionStore.fetchMyRooms()
   hotplaceStore.getList()
@@ -436,7 +485,7 @@ onMounted(() => {
   font-size: 13px;
   color: var(--color-ink-muted);
 }
-.bottom-spacer { height: 16px; }
+.bottom-spacer { height: calc(28px + var(--safe-bottom)); }
 
 /* ====== 핫플 ====== */
 .hp-pane { background: var(--color-white); }
@@ -487,6 +536,42 @@ onMounted(() => {
   flex: 1;
   position: relative;
   overflow: hidden;
+}
+
+.map-empty {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: var(--color-white);
+  border: 1px solid var(--color-line-light);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-full);
+  padding: 8px 16px;
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.hp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 56px 20px;
+  color: var(--color-ink-muted);
+  font-size: 14px;
+}
+
+.hp-empty-btn {
+  margin-top: 4px;
+  padding: 11px 22px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .map-bg {
   width: 100%;
@@ -548,6 +633,16 @@ onMounted(() => {
   border-radius: var(--radius-md);
   background: var(--color-surface);
   flex-shrink: 0;
+  overflow: hidden;
+}
+.map-thumb img,
+.hp-thumb img,
+.comp-thumb img,
+.room-avatar-area img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .map-card-body { flex: 1; min-width: 0; }
 .map-card-row1 {
@@ -586,14 +681,20 @@ onMounted(() => {
   cursor: pointer;
 }
 .hp-thumb {
+  position: relative;
   width: 72px;
   height: 72px;
   border-radius: var(--radius-md);
   background: var(--color-surface);
   flex-shrink: 0;
-  display: flex;
-  align-items: flex-end;
-  padding: 6px;
+  overflow: hidden;
+}
+.hp-thumb .cat-tag {
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  padding: 2px 7px;
+  font-size: 10px;
 }
 .hp-info { flex: 1; min-width: 0; }
 .hp-name { font-size: 15px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.3px; margin-bottom: 4px; }
@@ -669,6 +770,7 @@ onMounted(() => {
   width: 100%;
   height: 70px;
   background: var(--color-surface);
+  overflow: hidden;
 }
 .room-bottom {
   padding: 8px 10px 10px;
@@ -717,6 +819,7 @@ onMounted(() => {
   border-radius: var(--radius-md);
   background: var(--color-surface);
   flex-shrink: 0;
+  overflow: hidden;
 }
 .comp-info { flex: 1; min-width: 0; }
 .comp-header-row {

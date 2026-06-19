@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public record PostSummaryResponse(
         Long id,
         String title,
+        Long authorId,
         String authorNickname,
         String authorProfileImageUrl,
         int viewCount,
@@ -16,12 +17,23 @@ public record PostSummaryResponse(
         int commentCount,
         PostCategory category,
         String thumbnailUrl,
+        boolean likedByMe,
+        boolean bookmarked,
         LocalDateTime createdAt
 ) {
     public static PostSummaryResponse of(Post post, int commentCount, String thumbnailUrl) {
+        return of(post, commentCount, thumbnailUrl, false, false);
+    }
+
+    public static PostSummaryResponse of(Post post, int commentCount, String thumbnailUrl, boolean likedByMe) {
+        return of(post, commentCount, thumbnailUrl, likedByMe, false);
+    }
+
+    public static PostSummaryResponse of(Post post, int commentCount, String thumbnailUrl, boolean likedByMe, boolean bookmarked) {
         return new PostSummaryResponse(
                 post.getId(),
                 post.getTitle(),
+                post.getAuthor().getId(),
                 post.getAuthor().getNickname(),
                 post.getAuthor().getProfileImageUrl(),
                 post.getViewCount(),
@@ -29,6 +41,8 @@ public record PostSummaryResponse(
                 commentCount,
                 post.getCategory(),
                 thumbnailUrl,
+                likedByMe,
+                bookmarked,
                 post.getCreatedAt()
         );
     }

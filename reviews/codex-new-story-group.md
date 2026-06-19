@@ -1,0 +1,17 @@
+리뷰만 수행했습니다. 수정 없음.
+
+- [high] 그룹 멤버 목록 IDOR / `BE/src/main/java/com/trip/group/controller/GroupController.java:59-61`, `BE/src/main/java/com/trip/group/service/GroupService.java:118-122`, `BE/src/main/java/com/trip/global/config/SecurityConfig.java:77-79` / `/api/groups/{id}/members`는 인증만 있으면 어떤 그룹 ID든 멤버 `userId`, `role`, `joinedAt`를 조회할 수 있습니다. 서비스는 `findGroup`만 하고 가입자 여부를 확인하지 않습니다. / 멤버 목록은 그룹 멤버 또는 OWNER만 조회 가능하게 `groupMemberRepository.findByGroupIdAndUserId` 검증을 추가하세요.
+
+- [high] 가입 정원 초과 레이스 / `BE/src/main/java/com/trip/group/service/GroupService.java:85-99`, `BE/src/main/java/com/trip/group/entity/GroupMember.java:9`, `BE/src/main/java/com/trip/group/repository/GroupMemberRepository.java:13-15` / `countByGroupId >= maxMembers` 확인 후 `save`까지 잠금이 없어 마지막 1자리에서 동시 가입 2건이 모두 통과할 수 있습니다. `group_members`에도 정원 보호용 버전/락/제약이 없습니다. / 그룹 row에 비관적 락 또는 `@Version`을 걸고 트랜잭션 안에서 카운트-삽입을 직렬화하세요.
+
+- [high] 중복 가입 레이스 / `BE/src/main/java/com/trip/group/service/GroupService.java:85-99`, `BE/src/main/java/com/trip/group/entity/GroupMember.java:9` / 같은 사용자의 동시 `join` 2건이 둘 다 `findByGroupIdAndUserId(...).isPresent()`를 false로 보고 중복 row를 저장할 수 있습니다. DB 유니크 제약도 없습니다. / `(group_id, user_id)` 유니크 제약을 엔티티/마이그레이션에 추가하고 `DataIntegrityViolationException`을 400/409로 변환하세요.
+
+- [med] 스토리 `planId` 소유자 검증 없음 / `BE/src/main/java/com/trip/story/service/TravelStoryService.java:40-48`, `BE/src/main/java/com/trip/story/service/TravelStoryService.java:53-62`, `BE/src/main/java/com/trip/plan/service/PlanService.java:96-98`, `BE/src/main/java/com/trip/plan/service/PlanService.java:469-471` / 스토리는 요청의 `planId`를 그대로 저장·수정하지만, 해당 여행 계획이 존재하는지 또는 현재 사용자 소유인지 확인하지 않습니다. 반면 PlanService는 계획 접근마다 owner 검증을 합니다. / `PlanRepository`로 `planId` 존재 및 `userId` 소유를 검증한 뒤 저장하세요.
+
+- [med] 그룹 GET 공개 여부/인가 계약 충돌 / `frontend/src/api/index.js:217-218`, `BE/src/main/java/com/trip/group/controller/GroupController.java:54-61`, `BE/src/main/java/com/trip/global/config/SecurityConfig.java:77-79` / FE API 주석은 그룹 단건·멤버 목록을 public이라고 명시하지만 실제 보안 설정은 `/api/groups/**` 전체 인증 필수입니다. 동시에 컨트롤러/서비스는 멤버십 검증이 없어 현재 동작은 “비로그인 차단, 로그인 사용자 전체 공개”입니다. / 공개 API인지 멤버 전용 API인지 정책을 하나로 정하고 SecurityConfig, 컨트롤러 시그니처, 서비스 검증을 맞추세요.
+
+- [med] 스토리 문자열 검증 누락으로 500 가능 / `BE/src/main/java/com/trip/story/dto/TravelStoryCreateRequest.java:10-16`, `BE/src/main/java/com/trip/story/dto/TravelStoryUpdateRequest.java:9-15`, `BE/src/main/java/com/trip/story/entity/TravelStory.java:31-46`, `BE/src/main/java/com/trip/global/error/exception/handler/GlobalExceptionHandler.java:167-179` / `title`은 DB length 200인데 DTO에 `@Size`가 없고, update의 `title`은 `@NotBlank`도 없습니다. 과길이 값은 DB 예외로 500 처리될 수 있고, 빈 제목은 API 직접 호출로 저장될 수 있습니다. / DTO에 `@NotBlank`, `@Size(max=200)`, URL/길이 제한을 추가하고 DB 제약 위반은 400으로 매핑하세요.
+
+- [low] 그룹 목록 N+1 쿼리 / `BE/src/main/java/com/trip/group/service/GroupService.java:65-73` / 내 그룹 목록에서 멤버십 조회 후 그룹마다 `findById`, 다시 그룹마다 `countByGroupId`를 호출합니다. 그룹 N개면 최소 1+2N 쿼리입니다. / groupId 목록으로 그룹을 일괄 조회하고, member count도 `GROUP BY groupId`로 한 번에 가져오세요.
+
+- [low] 그룹 목록 로드 실패가 빈 상태로 숨겨짐 / `frontend/src/views/GroupsView.vue:258-267`, `frontend/src/views/GroupsView.vue:34-40` / `groupApi.list()` 실패 시 에러를 표시하지 않고 `groups=[]`로 바꿔 “아직 속한 그룹이 없어요”를 보여줍니다. 401/500/네트워크 장애가 정상 빈 목록처럼 보입니다. / `loadError` 상태와 재시도 UI를 분리하세요.

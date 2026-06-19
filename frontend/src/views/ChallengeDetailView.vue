@@ -9,12 +9,28 @@
       </button>
       <div class="nav-title-col">
         <span class="nav-title">이달의 챌린지</span>
-        <span class="nav-sub">6월 · 여행자 뱃지 챌린지</span>
+        <span class="nav-sub">{{ ch?.month ?? '' }} · 여행자 뱃지 챌린지</span>
       </div>
       <div style="width: 40px" />
     </header>
 
     <div class="scroll-content">
+      <!-- 로드 실패: 가짜 진행을 그리지 않고 에러 + 재시도 -->
+      <div v-if="error" class="state-box">
+        <p class="state-text">{{ error }}</p>
+        <button class="retry-btn" @click="gamiStore.refresh()">다시 시도</button>
+      </div>
+
+      <!-- 로딩: 스켈레톤 -->
+      <div v-else-if="loading" class="state-box">
+        <div class="skeleton skel-icon" />
+        <div class="skeleton skel-title" />
+        <div class="skeleton skel-line" />
+        <div class="skeleton skel-bar" />
+      </div>
+
+      <!-- 정상: 로딩 아님 + 에러 없음 + 실제 데이터 있을 때만 -->
+      <template v-else-if="ready">
       <!-- Icon -->
       <div class="challenge-icon-wrap">
         <div class="challenge-icon">
@@ -26,22 +42,22 @@
 
       <!-- Title -->
       <div class="challenge-body">
-        <h1 class="challenge-title">6월에 10곳 방문하기</h1>
-        <p class="challenge-desc">이번 달 새로운 장소를 10곳 다녀오면 보상 뱃지를 드려요</p>
+        <h1 class="challenge-title">{{ ch?.title ?? '이달의 챌린지' }}</h1>
+        <p class="challenge-desc">여행 계획에 장소를 {{ ch?.goal ?? 10 }}곳 담으면 보상 뱃지를 드려요</p>
 
         <!-- Progress display -->
         <div class="progress-display">
-          <span class="progress-current">7</span>
+          <span class="progress-current">{{ ch?.current ?? 0 }}</span>
           <span class="progress-sep"> / </span>
-          <span class="progress-total">10곳</span>
+          <span class="progress-total">{{ ch?.goal ?? 10 }}곳</span>
         </div>
 
         <div class="progress-bar-wrap">
           <div class="progress-bar">
-            <div class="progress-fill" style="width: 70%" />
+            <div class="progress-fill" :style="{ width: (ch?.percent ?? 0) + '%' }" />
           </div>
         </div>
-        <p class="progress-hint">3곳 남았어요 · 6월 30일까지</p>
+        <p class="progress-hint">{{ ch?.hint ?? '' }}</p>
 
         <!-- 달성 조건 -->
         <div class="section">
@@ -52,8 +68,8 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
               </div>
               <div>
-                <div class="condition-label">새로운 장소 방문</div>
-                <div class="condition-sub">다녀온 곳에 체크인 시 1곳 인정</div>
+                <div class="condition-label">장소 담기</div>
+                <div class="condition-sub">계획에 장소를 담으면 1곳 인정 (누적)</div>
               </div>
             </div>
             <div class="condition-item">
@@ -62,7 +78,7 @@
               </div>
               <div>
                 <div class="condition-label">기간</div>
-                <div class="condition-sub">6월 1일 ~ 6월 30일</div>
+                <div class="condition-sub">상시 진행 · 담은 장소 누적</div>
               </div>
             </div>
             <div class="condition-item">
@@ -93,11 +109,24 @@
           </div>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup>
+import { computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useGamificationStore } from '@/stores/gamification.js'
+
+const gamiStore = useGamificationStore()
+// error/loading 을 구독해 로드 실패를 '0/10곳'의 가짜 진행으로 위장하지 않는다.
+const { loading, error } = storeToRefs(gamiStore)
+const ch = computed(() => gamiStore.summary?.challenge)
+// 정상 렌더는 로딩 아님 + 에러 없음 + 실제 challenge 데이터가 있을 때만.
+const ready = computed(() => !loading.value && !error.value && !!ch.value)
+
+onMounted(() => gamiStore.refresh())
 </script>
 
 <style scoped>
@@ -241,4 +270,42 @@
 }
 .reward-title { font-size: 14px; font-weight: 700; color: var(--color-ink); margin-bottom: 4px; }
 .reward-sub { font-size: 12.5px; color: var(--color-ink-secondary); line-height: 1.5; }
+
+/* 로드 실패 / 로딩 상태 */
+.state-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 56px 24px;
+  text-align: center;
+}
+.state-text {
+  font-size: 13.5px;
+  color: var(--color-ink-secondary);
+  line-height: 1.5;
+}
+.retry-btn {
+  padding: 10px 22px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-line-light) 25%, var(--color-surface) 50%, var(--color-line-light) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-md);
+  animation: skel-shine 1.2s ease-in-out infinite;
+}
+.skel-icon { width: 80px; height: 80px; border-radius: 50%; }
+.skel-title { width: 60%; height: 22px; }
+.skel-line { width: 80%; height: 14px; }
+.skel-bar { width: 100%; height: 8px; border-radius: 4px; }
+@keyframes skel-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 </style>

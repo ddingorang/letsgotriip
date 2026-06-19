@@ -1,0 +1,147 @@
+# Triip 전체 스택 — infra(mysql/mongo/redis/rabbitmq) + backend(Spring) + frontend(Vue/nginx)
+#
+# 시크릿은 루트 .env 로 주입 (.env.example 참고). 실제 .env 는 커밋 금지.
+# 실행:  docker compose up -d --build
+#
+# 호스트 포트 주의(Windows winnat 예약 회피):
+#   - MySQL  : 13306:3306  (3307 회피)
+#   - RabbitMQ AMQP(5672) : 호스트 매핑 안 함 (내부 네트워크만)
+#   - RabbitMQ STOMP/UI   : 61613, 15672 매핑
+
+services:
+
+  # ── 인프라 ──────────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: trip-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: trip_chat
+    ports:
+      - "13306:3306"   # winnat 예약(3307) 회피 — 내부는 3306
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mongodb:
+    image: mongo:7.0
+    container_name: trip-mongodb
+    volumes:
+      - mongo-data:/data/db
+
+  redis:
+    image: redis:7.2
+    container_name: trip-redis
+    volumes:
+      - redis-data:/data
+
+  # RAG 벡터 저장소 (RediSearch 포함) — 캐시용 redis와 별도
+  redis-vector:
+    image: redis/redis-stack:latest
+    container_name: trip-redis-vector
+    ports:
+      - "6380:6379"   # 호스트 디버그용 (내부는 redis-vector:6379)
+    volumes:
+      - redis-vector-data:/data
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: trip-rabbitmq
+    command: sh -c "rabbitmq-plugins enable rabbitmq_stomp && rabbitmq-server"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      # AMQP(5672)는 호스트 매핑 금지 — 내부 네트워크에서만 backend가 사용
+      - "15672:15672"   # Management UI
+      - "61613:61613"   # STOMP
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── 백엔드 (Spring Boot) ────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./BE
+    container_name: trip-backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_started
+      redis-vector:
+        condition: service_started
+    ports:
+      - "9090:9090"
+    environment:
+      # MySQL (내부 네트워크 호스트명)
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: password
+      # RabbitMQ
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_STOMP_PORT: 61613
+      RABBITMQ_USERNAME: guest
+      RABBITMQ_PASSWORD: guest
+      # Redis / MongoDB
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/trip_chat
+      # RAG 벡터 저장소(redis-stack)
+      VECTOR_REDIS_HOST: redis-vector
+      VECTOR_REDIS_PORT: 6379
+      # 시크릿 (루트 .env에서 치환)
+      JWT_SECRET: ${JWT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      TOUR_API_KEY: ${TOUR_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      # 동작 토글
+      COOKIE_SECURE: "false"
+      CHAT_ENABLED: "true"
+      SEED_ENABLED: "true"
+      UPLOAD_BASE_DIR: /app/uploads
+      # 프론트엔드 연동 (CORS / OAuth 리다이렉트)
+      FE_ALLOWED_ORIGINS: http://localhost:5173
+      FE_LOGIN_URL: http://localhost:5173/login
+      FE_OAUTH_CALLBACK_URL: http://localhost:5173/oauth/callback
+    volumes:
+      - uploads-data:/app/uploads   # 업로드 문서/이미지 영속(재생성 시 소실 방지)
+
+  # ── 프론트엔드 (Vue 빌드 → nginx) ───────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_KAKAO_MAP_KEY: ${VITE_KAKAO_MAP_KEY}
+        # 데모 로그인 프리필(기본 demo 계정). 빈칸 원하면 .env 에 VITE_DEMO_EMAIL= (빈값) 지정.
+        VITE_DEMO_EMAIL: ${VITE_DEMO_EMAIL-demo@triip.com}
+        VITE_DEMO_PASSWORD: ${VITE_DEMO_PASSWORD-demo1234}
+    container_name: trip-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  mysql-data:
+  mongo-data:
+  redis-data:
+  redis-vector-data:
+  rabbitmq-data:
+  uploads-data:

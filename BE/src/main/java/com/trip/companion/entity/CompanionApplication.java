@@ -34,6 +34,10 @@ public class CompanionApplication extends BaseEntity {
     @Builder.Default
     private ApplicationStatus status = ApplicationStatus.PENDING;
 
+    /** 신청자가 방장에게 남기는 신청 메시지 (선택) */
+    @Column(length = 500)
+    private String message;
+
     public boolean isPending() {
         return this.status == ApplicationStatus.PENDING;
     }

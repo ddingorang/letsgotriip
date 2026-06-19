@@ -18,4 +18,8 @@
 
   /* Motion */
   --duration-fast: 150ms;
+  --ease-default: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Elevation — extra-large step (used by overlays/modals) */
+  --shadow-xl: 0 24px 64px rgba(28, 25, 23, 0.18);
 }

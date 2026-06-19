@@ -5,11 +5,11 @@
       <!-- Top icons -->
       <div class="top-bar">
         <div style="flex:1" />
-        <button class="icon-btn bell-wrap">
+        <button class="icon-btn bell-wrap" @click="$router.push('/notifications')">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          <span class="notif-dot" />
+          <span v-if="notifStore.hasUnread" class="notif-dot" />
         </button>
         <button class="icon-btn" @click="$router.push('/mypage/edit')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -34,24 +34,24 @@
         </div>
         <div class="profile-info">
           <h2 class="profile-name">{{ authStore.user?.nickname ?? '프로필' }}</h2>
-          <p class="profile-bio">{{ authStore.user?.email ?? '' }}</p>
+          <p class="profile-bio">{{ authStore.user?.bio || authStore.user?.email || '' }}</p>
         </div>
       </div>
 
       <!-- Stats -->
       <div class="stats-row">
         <div class="stat">
-          <span class="stat-num">5</span>
+          <span class="stat-num">{{ gami?.stats?.plans ?? planCount }}</span>
           <span class="stat-label">여행 계획</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">38</span>
-          <span class="stat-label">다녀온 곳</span>
+          <span class="stat-num">{{ gami?.stats?.completedPlans ?? completedCount }}</span>
+          <span class="stat-label">다녀온 여행</span>
         </div>
         <div class="stat-divider" />
         <div class="stat">
-          <span class="stat-num">2</span>
+          <span class="stat-num">{{ gami?.stats?.badges ?? unlockedBadgeCount }}</span>
           <span class="stat-label">뱃지</span>
         </div>
       </div>
@@ -63,21 +63,21 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--color-peach)" stroke="none">
               <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" />
             </svg>
-            <span class="challenge-title">이달의 챌린지 · 6월</span>
+            <span class="challenge-title">이달의 챌린지 · {{ gami?.challenge?.month ?? '' }}</span>
           </div>
-          <span class="challenge-phase">준비 중 · Phase 2</span>
+          <span class="challenge-phase">{{ gami?.challenge?.current ?? 0 }} / {{ gami?.challenge?.goal ?? 10 }}곳</span>
         </div>
         <div class="challenge-bar">
-          <div class="challenge-fill" style="width: 70%" />
+          <div class="challenge-fill" :style="{ width: (gami?.challenge?.percent ?? 0) + '%' }" />
         </div>
-        <p class="challenge-hint">3곳 더 방문하면 여행자 뱃지 획득!</p>
+        <p class="challenge-hint">{{ gami?.challenge?.hint ?? '계획을 만들어 챌린지를 시작해보세요!' }}</p>
       </div>
 
       <!-- Main tabs -->
       <div class="main-tab-bar">
         <button
           v-for="(tab, i) in mainTabs"
-          :key="tab"
+          :key="i"
           :class="['main-tab', { active: activeMain === i }]"
           @click="activeMain = i"
         >
@@ -115,7 +115,7 @@
               </div>
               <div class="plan-meta">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
-                {{ plan.dateRange }} · {{ plan.spotCount }}곳
+                {{ plan.dateRange }}
               </div>
               <button v-if="plan.status === '완료'" class="album-link" @click.stop="$router.push(`/mypage/album/${plan.id}`)">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
@@ -155,13 +155,20 @@
           <span class="phase2-label">Phase 2</span>
           <h3 class="phase2-title">앨범은 곧 만나요</h3>
           <p class="phase2-sub">여행이 끝나면 사진이 자동으로<br />앨범에 정리될 예정이에요.</p>
+          <!-- 앨범이 0개여도 직접 만들 수 있게 CTA 노출 -->
+          <button class="create-plan-btn phase2-create" :disabled="albumCreating" @click="createAlbum">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            {{ albumCreating ? '만드는 중…' : '앨범 만들기' }}
+          </button>
         </div>
 
         <!-- Albums grid -->
         <div v-else>
           <div class="album-section-header">
             <span class="album-count">앨범 {{ albums.length }}</span>
-            <button class="make-album-btn">+ 앨범 만들기</button>
+            <button class="make-album-btn" :disabled="albumCreating" @click="createAlbum">
+              {{ albumCreating ? '만드는 중…' : '+ 앨범 만들기' }}
+            </button>
           </div>
           <div class="albums-grid">
             <div
@@ -171,6 +178,8 @@
               @click="$router.push(`/mypage/album/${album.id}`)"
             >
               <div class="album-thumb">
+                <!-- 썸네일 실데이터: 있으면 그라데이션 위에 덮고, 없으면 폴백 유지 -->
+                <img v-if="album.thumbnailUrl" :src="album.thumbnailUrl" :alt="album.title" class="album-thumb-img" />
                 <div class="album-photo-count">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
                   {{ album.photoCount }}
@@ -188,17 +197,211 @@
 
       <!-- ③ 뱃지 -->
       <div v-show="activeMain === 2" class="tab-content">
-        <div class="badge-header">획득한 뱃지 <strong>2</strong> / 6</div>
+        <div class="badge-header">획득한 뱃지 <strong>{{ gami?.stats?.badges ?? 0 }}</strong> / {{ badgeList.length }}</div>
         <div class="badges-grid">
-          <div v-for="badge in badges" :key="badge.key" class="badge-item">
+          <div v-for="badge in badgeList" :key="badge.key" class="badge-item">
             <div :class="['badge-circle', badge.unlocked ? 'unlocked' : 'locked']">
-              <span v-if="badge.unlocked" v-html="badge.icon" />
+              <svg v-if="badge.unlocked" width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z"/></svg>
               <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
             </div>
             <span class="badge-name">{{ badge.name }}</span>
-            <span v-if="!badge.unlocked" class="badge-progress">{{ badge.progress }}</span>
+            <span v-if="!badge.unlocked && badge.progressText" class="badge-progress">{{ badge.progressText }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- ④ 내 여행 스토리 (인라인 목록/카운트) -->
+      <div v-show="activeMain === 3" class="tab-content">
+        <div class="story-tab-header">
+          <span class="story-tab-count">스토리 {{ stories.length }}</span>
+          <button class="story-tab-more" @click="$router.push('/stories')">전체 보기</button>
+        </div>
+
+        <p v-if="storyLoading" class="story-state">불러오는 중…</p>
+        <p v-else-if="storyError" class="story-state">{{ storyError }}</p>
+
+        <template v-else-if="stories.length > 0">
+          <div
+            v-for="story in stories"
+            :key="story.id"
+            class="story-row"
+            @click="$router.push('/stories')"
+          >
+            <div class="story-row-top">
+              <span class="story-row-title">{{ story.title }}</span>
+              <div class="story-row-stars" aria-label="별점">
+                <svg
+                  v-for="n in 5"
+                  :key="n"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  :fill="n <= (story.rating ?? 0) ? 'var(--color-peach)' : 'none'"
+                  stroke="var(--color-peach)"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+            </div>
+            <p v-if="story.beforeNote || story.afterNote" class="story-row-note">
+              {{ story.afterNote || story.beforeNote }}
+            </p>
+          </div>
+        </template>
+
+        <div v-else class="empty-plans">
+          <div class="empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+            </svg>
+          </div>
+          <h3 class="empty-title">아직 작성한 스토리가 없어요</h3>
+          <p class="empty-sub">여행 전 기대와 다녀온 뒤 회고를<br />기록으로 남겨보세요.</p>
+          <button class="create-plan-btn" @click="$router.push('/stories')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            스토리 작성하기
+          </button>
+        </div>
+      </div>
+
+      <!-- 내 활동 메뉴 -->
+      <div class="menu-section">
+        <p class="menu-section-title">내 활동</p>
+
+        <!-- 찜 목록 -->
+        <button class="menu-row" @click="openFavorites">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+            </svg>
+          </span>
+          <span class="menu-label">찜 목록</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 내 리뷰 -->
+        <button class="menu-row" @click="openReviews">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" />
+            </svg>
+          </span>
+          <span class="menu-label">내 리뷰</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 내 여행 스토리 -->
+        <button class="menu-row" @click="$router.push('/stories')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" /><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+            </svg>
+          </span>
+          <span class="menu-label">내 여행 스토리</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 내 그룹 -->
+        <button class="menu-row" @click="$router.push('/groups')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+            </svg>
+          </span>
+          <span class="menu-label">내 그룹</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 팔로잉 -->
+        <button class="menu-row" @click="openFollowing">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+            </svg>
+          </span>
+          <span class="menu-label">팔로잉</span>
+          <span v-if="followingCount > 0" class="menu-count">{{ followingCount }}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 체크리스트 -->
+        <button class="menu-row" @click="$router.push('/checklist')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+            </svg>
+          </span>
+          <span class="menu-label">체크리스트</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 뱃지 -->
+        <button class="menu-row" @click="$router.push('/badges')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="8" r="6" /><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11" />
+            </svg>
+          </span>
+          <span class="menu-label">뱃지</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      </div>
+
+      <!-- AI & 데이터 메뉴 -->
+      <div class="menu-section">
+        <p class="menu-section-title">AI · 데이터</p>
+
+        <!-- AI 어시스턴트 -->
+        <button class="menu-row" @click="$router.push('/assistant')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+          </span>
+          <span class="menu-label">AI 어시스턴트</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 데이터 분석·업로드 -->
+        <button class="menu-row" @click="$router.push('/analysis')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </span>
+          <span class="menu-label">데이터 분석·업로드</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <!-- 문서 관리 -->
+        <button class="menu-row" @click="$router.push('/documents')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+            </svg>
+          </span>
+          <span class="menu-label">문서 관리</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+      </div>
+
+      <!-- 운영 관리 (관리자 전용) -->
+      <div v-if="isAdmin" class="menu-section">
+        <p class="menu-section-title">운영</p>
+
+        <button class="menu-row" @click="$router.push('/admin')">
+          <span class="menu-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" />
+            </svg>
+          </span>
+          <span class="menu-label">운영 관리</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
       </div>
 
       <!-- Logout -->
@@ -214,62 +417,408 @@
       <div class="bottom-spacer" />
     </div>
 
+    <!-- 찜 목록 시트 -->
+    <div v-if="favSheetOpen" class="sheet-backdrop" @click.self="favSheetOpen = false">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h3 class="sheet-title">찜 목록</h3>
+          <button class="sheet-close" @click="favSheetOpen = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <p v-if="favLoading" class="sheet-hint">불러오는 중…</p>
+          <p v-else-if="favError" class="sheet-hint">{{ favError }}</p>
+          <template v-else-if="favorites.length > 0">
+            <div v-for="fav in favorites" :key="fav.id" class="fav-item">
+              <button class="fav-main" @click="goFavorite(fav)">
+                <span :class="['fav-type', favTypeClass(fav.targetType)]">{{ favTypeLabel(fav.targetType) }}</span>
+                <span class="fav-id">#{{ fav.targetId }}</span>
+              </button>
+              <button class="fav-remove" @click="removeFavorite(fav)" aria-label="찜 해제">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+          </template>
+          <div v-else class="sheet-empty">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" /></svg>
+            <p class="sheet-hint">아직 찜한 곳이 없어요.<br />관광지·핫플·게시글에서 하트를 눌러보세요.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 내 리뷰 시트 -->
+    <div v-if="reviewSheetOpen" class="sheet-backdrop" @click.self="reviewSheetOpen = false">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h3 class="sheet-title">내 리뷰</h3>
+          <button class="sheet-close" @click="reviewSheetOpen = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <p v-if="reviewLoading" class="sheet-hint">불러오는 중…</p>
+          <p v-else-if="reviewError" class="sheet-hint">{{ reviewError }}</p>
+          <template v-else-if="myReviews.length > 0">
+            <button
+              v-for="rv in myReviews"
+              :key="rv.id"
+              class="review-item"
+              @click="goReviewPlace(rv)"
+            >
+              <div class="review-head">
+                <span class="review-place">{{ reviewPlaceLabel(rv) }}</span>
+                <span class="review-date">{{ fmtReviewDate(rv.createdAt) }}</span>
+              </div>
+              <div class="review-stars" aria-label="별점">
+                <svg
+                  v-for="n in 5"
+                  :key="n"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  :fill="n <= (rv.rating ?? 0) ? 'var(--color-peach)' : 'none'"
+                  stroke="var(--color-peach)"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+              <p v-if="rv.content" class="review-content">{{ rv.content }}</p>
+            </button>
+          </template>
+          <div v-else class="sheet-empty">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z" /></svg>
+            <p class="sheet-hint">아직 작성한 리뷰가 없어요.<br />관광지 상세 화면에서 별점과 리뷰를 남겨보세요.</p>
+            <button class="sheet-cta" @click="reviewSheetOpen = false; $router.push('/explore')">
+              관광지 둘러보기
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 팔로잉 시트 (GET /api/follows/me/following) -->
+    <div v-if="followSheetOpen" class="sheet-backdrop" @click.self="followSheetOpen = false">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h3 class="sheet-title">팔로잉 {{ followingCount > 0 ? followingCount : '' }}</h3>
+          <button class="sheet-close" @click="followSheetOpen = false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <p v-if="followLoading" class="sheet-hint">불러오는 중…</p>
+          <p v-else-if="followError" class="sheet-hint">{{ followError }}</p>
+          <template v-else-if="following.length > 0">
+            <div v-for="f in following" :key="f.userId" class="follow-item">
+              <div class="follow-avatar">
+                <img v-if="f.profileImageUrl" :src="f.profileImageUrl" :alt="f.nickname" class="follow-avatar-img" />
+                <span v-else class="follow-avatar-text">{{ (f.nickname || '?').charAt(0) }}</span>
+              </div>
+              <div class="follow-info">
+                <span class="follow-name">{{ f.nickname }}</span>
+                <span v-if="f.bio" class="follow-bio">{{ f.bio }}</span>
+              </div>
+            </div>
+          </template>
+          <div v-else class="sheet-empty">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>
+            <p class="sheet-hint">아직 팔로우한 사람이 없어요.<br />커뮤니티에서 마음에 드는 여행자를 팔로우해보세요.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { useNotificationStore } from '@/stores/notification.js'
+import { useGamificationStore } from '@/stores/gamification.js'
+import { http } from '@/api/http.js'
+import { favoriteApi, followApi, reviewApi, storyApi } from '@/api/index.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const notifStore = useNotificationStore()
+const gamiStore = useGamificationStore()
+
+const gami = computed(() => gamiStore.summary)
+
+// 관리자 여부 — /users/me 응답의 userRole 기준
+const isAdmin = computed(() => authStore.user?.userRole === 'ADMIN')
 
 async function handleLogout() {
   await authStore.logout()
   router.push('/login')
 }
 
-const mainTabs = ['내 계획', '앨범 ·', '뱃지 ·']
 const activeMain = ref(0)
 
-// 내 계획
+// ── 내 계획 (GET /api/plans) ────────────────────────────────────────────────
 const planFilters = ['전체', '예정', '완료']
 const planFilter = ref('전체')
-const allPlans = ref([
-  { id: 1, title: '제주 3박 4일', status: '예정', dateRange: '6.12-6.15', spotCount: 12, thumbLabel: '제주\n일정' },
-  { id: 2, title: '부산 주말 여행', status: '완료', dateRange: '5.3-5.4', spotCount: 7, thumbLabel: '부산\n일정' },
-  { id: 3, title: '경주 역사 한바퀴', status: '완료', dateRange: '4.18-4.19', spotCount: 9, thumbLabel: '경주\n일정' },
-])
+const allPlans = ref([])
+
+// 날짜 포맷 'M.D' (예: 6.12)
+function fmtDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getMonth() + 1}.${d.getDate()}`
+}
+
+// 종료일이 오늘보다 과거면 '완료', 아니면 '예정'
+function deriveStatus(endDate) {
+  if (!endDate) return '예정'
+  const end = new Date(endDate)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return end < today ? '완료' : '예정'
+}
+
+function mapPlan(p) {
+  const dateRange = p.startDate && p.endDate
+    ? `${fmtDate(p.startDate)}-${fmtDate(p.endDate)}`
+    : fmtDate(p.startDate) || fmtDate(p.endDate)
+  return {
+    id: p.id,
+    title: p.title,
+    status: deriveStatus(p.endDate),
+    dateRange,
+    // 썸네일은 일정 제목 앞부분을 사용 (이미지 미보유)
+    thumbLabel: (p.title || '여행') + '\n일정',
+  }
+}
+
+async function loadPlans() {
+  try {
+    const { data } = await http.get('/api/plans', { params: { page: 0, size: 50 } })
+    // Page 응답: { content: [...] } 또는 배열 모두 허용
+    const list = Array.isArray(data) ? data : (data?.content ?? [])
+    allPlans.value = list.map(mapPlan)
+  } catch {
+    allPlans.value = []
+  }
+}
+
 const filteredPlans = computed(() => {
   if (planFilter.value === '전체') return allPlans.value
   return allPlans.value.filter((p) => p.status === planFilter.value)
 })
 
-// 앨범
-const albumPhase2 = ref(false)
-const albums = ref([
-  { id: 1, title: '제주 3박 4일', location: '제주 앨범', photoCount: 48 },
-  { id: 2, title: '부산 주말 여행', location: '부산 앨범', photoCount: 23 },
-  { id: 3, title: '경주 한바퀴', location: '경주 앨범', photoCount: 31 },
-  { id: 4, title: '봄 벚꽃 모음', location: '벚꽃 앨범', photoCount: 12 },
+const planCount = computed(() => allPlans.value.length)
+const completedCount = computed(
+  () => allPlans.value.filter((p) => p.status === '완료').length,
+)
+
+// ── 앨범 (GET /users/me/albums) ─────────────────────────────────────────────
+const albums = ref([])
+// 앨범이 0개면 Phase 2 안내 플레이스홀더를 보여준다.
+const albumPhase2 = computed(() => albums.value.length === 0)
+
+async function loadAlbums() {
+  try {
+    const { data } = await http.get('/users/me/albums')
+    const list = Array.isArray(data) ? data : (data?.content ?? [])
+    albums.value = list.map((a) => ({
+      id: a.id,
+      title: a.name,
+      location: a.name,
+      photoCount: a.photoCount ?? 0,
+      thumbnailUrl: a.thumbnailUrl ?? null,
+    }))
+  } catch {
+    albums.value = []
+  }
+}
+
+// '+ 앨범 만들기' — 이름 입력 후 생성(POST /users/me/albums)하고 목록 갱신.
+const albumCreating = ref(false)
+async function createAlbum() {
+  if (albumCreating.value) return
+  const name = (window.prompt('새 앨범 이름을 입력하세요') ?? '').trim()
+  if (!name) return
+  albumCreating.value = true
+  try {
+    await http.post('/users/me/albums', { name, imageUrls: [] })
+    await loadAlbums()
+  } catch (e) {
+    window.alert(e.response?.data?.message ?? e.message ?? '앨범을 만들지 못했어요.')
+  } finally {
+    albumCreating.value = false
+  }
+}
+
+// ── 뱃지 ────────────────────────────────────────────────────────────────────
+// 게임화 API(GET /api/gamification/summary)의 실데이터 뱃지 목록.
+// 미로그인/로딩 시 빈 배열 → 화면은 빈 상태로 정직하게 표시.
+const badgeList = computed(() => gami.value?.badges ?? [])
+const unlockedBadgeCount = computed(
+  () => badgeList.value.filter((b) => b.unlocked).length,
+)
+
+// ── 내 여행 스토리 탭 (GET /api/stories) ─────────────────────────────────────
+// 메뉴 → 외부 라우트(/stories)뿐이던 스토리를 마이페이지 본문 탭에 인라인 노출.
+// 작성/수정은 기존 스토리 화면에서 처리하고, 여기서는 목록/카운트만 보여준다.
+const stories = ref([])
+const storyLoading = ref(false)
+const storyError = ref('')
+
+async function loadStories() {
+  storyLoading.value = true
+  storyError.value = ''
+  try {
+    const { data } = await storyApi.list()
+    stories.value = Array.isArray(data) ? data : (data?.content ?? data?.stories ?? [])
+  } catch (e) {
+    storyError.value = e.response?.data?.message ?? e.message ?? '스토리를 불러오지 못했어요.'
+    stories.value = []
+  } finally {
+    storyLoading.value = false
+  }
+}
+
+// 탭 라벨에 실제 개수를 표시
+const mainTabs = computed(() => [
+  '내 계획',
+  `앨범 ${albums.value.length}`,
+  `뱃지 ${gami.value?.stats?.badges ?? unlockedBadgeCount.value}`,
+  `스토리 ${stories.value.length}`,
 ])
 
-// 뱃지
-const badges = ref([
-  {
-    key: 'first', name: '첫 여행', unlocked: true,
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17 5.8 21.3l2.4-7.4L2 9.4h7.6L12 2z"/></svg>`,
-  },
-  {
-    key: 'foodie', name: '미식가', unlocked: true,
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
-  },
-  { key: 'explorer', name: '탐험가', unlocked: false, progress: '3/5' },
-  { key: 'spots10', name: '10곳 달성', unlocked: false, progress: '7/10' },
-  { key: 'companion', name: '동행 에이커', unlocked: false, progress: '1/3' },
-  { key: 'photo', name: '사진가', unlocked: false, progress: '0/50' },
-])
+// ── 찜 목록 시트 (GET /api/favorites) ───────────────────────────────────────
+const favSheetOpen = ref(false)
+const favorites = ref([])
+const favLoading = ref(false)
+const favError = ref('')
+
+const FAV_TYPE_LABEL = { ATTRACTION: '관광지', HOTPLACE: '핫플', POST: '게시글' }
+function favTypeLabel(t) {
+  return FAV_TYPE_LABEL[t] ?? t
+}
+function favTypeClass(t) {
+  return `fav-type-${(t || '').toLowerCase()}`
+}
+
+async function openFavorites() {
+  favSheetOpen.value = true
+  favLoading.value = true
+  favError.value = ''
+  try {
+    const { data } = await favoriteApi.list()
+    favorites.value = Array.isArray(data) ? data : (data?.content ?? [])
+  } catch (e) {
+    favError.value = e.response?.data?.message ?? e.message ?? '찜 목록을 불러오지 못했어요.'
+    favorites.value = []
+  } finally {
+    favLoading.value = false
+  }
+}
+
+function goFavorite(fav) {
+  const id = fav.targetId
+  favSheetOpen.value = false
+  if (fav.targetType === 'ATTRACTION') router.push(`/place/${id}`)
+  else if (fav.targetType === 'HOTPLACE') router.push(`/hotplace/${id}`)
+  else if (fav.targetType === 'POST') router.push(`/community/${id}`)
+}
+
+async function removeFavorite(fav) {
+  try {
+    await favoriteApi.remove(fav.targetType, fav.targetId)
+    favorites.value = favorites.value.filter((f) => f.id !== fav.id)
+  } catch (e) {
+    favError.value = e.response?.data?.message ?? e.message ?? '찜 해제에 실패했어요.'
+  }
+}
+
+// ── 내 리뷰 시트 (GET /api/reviews/me) ──────────────────────────────────────
+// 내가 작성한 관광지 리뷰 전체를 로드해 별점·내용·관광지·작성일로 렌더한다.
+const reviewSheetOpen = ref(false)
+const myReviews = ref([])
+const reviewLoading = ref(false)
+const reviewError = ref('')
+
+// 작성일 'YYYY.MM.DD' 포맷
+function fmtReviewDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}.${mm}.${dd}`
+}
+
+// 관광지명: 응답에 이름이 있으면 사용, 없으면 contentId로 식별 라벨 표시
+function reviewPlaceLabel(r) {
+  return r.attractionName ?? r.title ?? r.placeName ?? (r.contentId ? `관광지 #${r.contentId}` : '관광지')
+}
+
+async function openReviews() {
+  reviewSheetOpen.value = true
+  reviewLoading.value = true
+  reviewError.value = ''
+  try {
+    const { data } = await reviewApi.myReviews()
+    myReviews.value = Array.isArray(data) ? data : (data?.content ?? data?.reviews ?? [])
+  } catch (e) {
+    reviewError.value = e.response?.data?.message ?? e.message ?? '내 리뷰를 불러오지 못했어요.'
+    myReviews.value = []
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+// 항목 클릭 → 해당 관광지 상세로 이동(가능할 때만)
+function goReviewPlace(r) {
+  if (!r.contentId) return
+  reviewSheetOpen.value = false
+  router.push(`/place/${r.contentId}`)
+}
+
+// ── 팔로잉 시트 (GET /api/follows/me/following) ──────────────────────────────
+const followSheetOpen = ref(false)
+const following = ref([])
+const followLoading = ref(false)
+const followError = ref('')
+const followingCount = computed(() => following.value.length)
+
+// 마운트 시 카운트 표시용으로 미리 1회 로드(실패는 0개로 정직하게 표시).
+async function loadFollowing() {
+  followLoading.value = true
+  followError.value = ''
+  try {
+    const { data } = await followApi.following()
+    following.value = Array.isArray(data) ? data : (data?.content ?? [])
+  } catch (e) {
+    followError.value = e.response?.data?.message ?? e.message ?? '팔로잉 목록을 불러오지 못했어요.'
+    following.value = []
+  } finally {
+    followLoading.value = false
+  }
+}
+
+function openFollowing() {
+  followSheetOpen.value = true
+  loadFollowing()
+}
+
+onMounted(() => {
+  notifStore.load()
+  gamiStore.load()
+  loadPlans()
+  loadAlbums()
+  loadFollowing()
+  loadStories()
+})
 </script>
 
 <style scoped>
@@ -672,6 +1221,8 @@ const badges = ref([
   color: var(--color-ink-muted);
   line-height: 1.6;
 }
+.phase2-create { margin-top: 20px; }
+.phase2-create:disabled { opacity: 0.5; }
 
 /* Albums grid */
 .album-section-header {
@@ -690,6 +1241,7 @@ const badges = ref([
   font-weight: 600;
   color: var(--color-peach);
 }
+.make-album-btn:disabled { opacity: 0.5; }
 .albums-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -709,7 +1261,17 @@ const badges = ref([
   justify-content: space-between;
   padding: 8px;
 }
+/* 썸네일 이미지: 카드 전체를 덮어 그라데이션 위에 표시(배지/라벨은 z-index 로 위에) */
+.album-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .album-photo-count {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -722,6 +1284,8 @@ const badges = ref([
   align-self: flex-start;
 }
 .album-place-label {
+  position: relative;
+  z-index: 1;
   font-size: 11px;
   color: white;
   background: rgba(0,0,0,0.35);
@@ -786,6 +1350,45 @@ const badges = ref([
   color: var(--color-ink-muted);
 }
 
+/* 내 활동 / AI·데이터 메뉴 */
+.menu-section {
+  padding: 4px 0;
+  border-top: 1px solid var(--color-line-light);
+}
+.menu-section-title {
+  padding: 14px 20px 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.2px;
+}
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 20px;
+  text-align: left;
+}
+.menu-row:active { background: var(--color-surface); }
+.menu-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--color-peach-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.menu-label {
+  flex: 1;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+
 .logout-section {
   padding: 8px 20px 4px;
   border-top: 1px solid var(--color-line-light);
@@ -802,6 +1405,289 @@ const badges = ref([
   letter-spacing: -0.2px;
 }
 .logout-btn:active { opacity: 0.6; }
+
+/* 바텀 시트 (찜 목록 / 내 리뷰) */
+.sheet-backdrop {
+  position: fixed;          /* .page(overflow:hidden)에 갇히지 않게 뷰포트 기준 */
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  z-index: 1000;            /* BottomNav(z-index:100) 위로 — 시트 하단이 가려지지 않게 */
+}
+.sheet {
+  width: 100%;
+  max-height: 72%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-white);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  overflow: hidden;
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.sheet-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.4px;
+}
+.sheet-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+}
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 20px;
+}
+.sheet-hint {
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  line-height: 1.6;
+  text-align: center;
+  padding: 4px 20px;
+}
+.sheet-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 24px 24px;
+  text-align: center;
+}
+.sheet-cta {
+  margin-top: 4px;
+  padding: 12px 24px;
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: var(--radius-xl);
+  letter-spacing: -0.3px;
+}
+.fav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.fav-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  min-width: 0;
+}
+.fav-type {
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.fav-type-attraction { background: var(--color-peach-light); color: var(--color-peach-pressed); }
+.fav-id {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fav-remove {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.fav-remove:active { opacity: 0.6; }
+
+/* 내 리뷰 시트 아이템 */
+.review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.review-item:active { background: var(--color-surface); }
+.review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.review-place {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.review-date {
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.review-stars {
+  display: flex;
+  gap: 1px;
+}
+.review-content {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  line-height: 1.55;
+  letter-spacing: -0.2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 스토리 탭 */
+.story-tab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 10px;
+}
+.story-tab-count {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+.story-tab-more {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach);
+}
+.story-state {
+  padding: 28px 20px;
+  font-size: 13.5px;
+  color: var(--color-ink-muted);
+  text-align: center;
+}
+.story-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+  cursor: pointer;
+}
+.story-row:active { background: var(--color-surface); }
+.story-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.story-row-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.story-row-stars {
+  display: flex;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.story-row-note {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+  line-height: 1.55;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 메뉴 행 우측 카운트 배지 (팔로잉 등) */
+.menu-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* 팔로잉 시트 아이템 */
+.follow-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.follow-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #efe6e4, #e0d4cc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.follow-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.follow-avatar-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+}
+.follow-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.follow-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+}
+.follow-bio {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .bottom-spacer { height: 24px; }
 </style>

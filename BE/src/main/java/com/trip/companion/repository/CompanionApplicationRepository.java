@@ -14,6 +14,10 @@ public interface CompanionApplicationRepository extends JpaRepository<CompanionA
 
     boolean existsByCompanionPostAndApplicantAndStatusNot(CompanionPost post, User applicant, ApplicationStatus status);
 
+    boolean existsByCompanionPostAndApplicant_IdAndStatusNot(CompanionPost post, Long applicantId, ApplicationStatus status);
+
+    Optional<CompanionApplication> findFirstByCompanionPostAndApplicant_IdAndStatusNot(CompanionPost post, Long applicantId, ApplicationStatus status);
+
     Optional<CompanionApplication> findByIdAndCompanionPost(Long id, CompanionPost post);
 
     List<CompanionApplication> findAllByCompanionPost(CompanionPost post);

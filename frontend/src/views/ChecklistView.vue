@@ -8,30 +8,15 @@
         </svg>
       </button>
       <h1 class="nav-title">여행 체크리스트</h1>
-      <button class="icon-btn">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="5" r="1" fill="currentColor" />
-          <circle cx="12" cy="12" r="1" fill="currentColor" />
-          <circle cx="12" cy="19" r="1" fill="currentColor" />
+      <button class="icon-btn" @click="reload" :disabled="loading">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
         </svg>
       </button>
     </header>
 
     <div class="scroll-content">
-      <!-- Trip banner -->
-      <div class="trip-banner">
-        <div class="trip-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-          </svg>
-        </div>
-        <div class="trip-text">
-          <p class="trip-name">부산 2박 3일 여행</p>
-          <p class="trip-date">06월 15일(토) ~ 06월 17일(월)</p>
-        </div>
-        <div class="trip-dday">D-3</div>
-      </div>
-
       <!-- Progress -->
       <div class="progress-section">
         <div class="progress-header">
@@ -48,102 +33,96 @@
           <div class="progress-sub-item">
             <div class="progress-dot" style="background:var(--color-line)" />미완료 {{ totalItems - doneItems }}개
           </div>
-          <div class="progress-sub-item">
-            <div class="progress-dot" style="background:var(--color-error)" />긴급 2개
-          </div>
         </div>
       </div>
 
-      <!-- Quick add chips -->
+      <!-- Template apply chips -->
       <div class="template-section">
-        <p class="template-label">빠른 추가</p>
+        <p class="template-label">템플릿으로 시작</p>
         <div class="template-chips">
-          <div v-for="label in quickItems" :key="label" class="template-chip">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <div
+            v-for="tpl in templates"
+            :key="tpl.key"
+            class="template-chip"
+            :class="{ disabled: applyingKey }"
+            @click="applyTemplate(tpl)"
+          >
+            <svg v-if="applyingKey === tpl.key" class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            {{ label }}
+            {{ tpl.name }}
           </div>
+          <div v-if="!templates.length && !loading" class="template-empty">템플릿이 없습니다</div>
         </div>
+      </div>
+
+      <!-- Error / loading banners -->
+      <div v-if="error" class="state-banner error">
+        {{ error }}
+        <button class="state-retry" @click="reload">다시 시도</button>
+      </div>
+      <div v-if="loading" class="state-banner">불러오는 중…</div>
+
+      <!-- Empty state -->
+      <div v-if="!loading && !error && !items.length" class="empty-state">
+        <p class="empty-title">아직 체크리스트가 비어 있어요</p>
+        <p class="empty-sub">위 템플릿을 적용하거나 항목을 직접 추가해 보세요.</p>
       </div>
 
       <!-- Checklist groups -->
-      <div class="checklist">
-        <!-- 교통/예약 -->
-        <div class="checklist-group">
-          <div class="group-header" @click="transportExpanded = !transportExpanded">
-            <div class="group-icon" style="background:var(--color-peach-light)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach-pressed)" stroke-width="2">
-                <rect x="1" y="3" width="15" height="13" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                <circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
+      <div v-if="!loading && groups.length" class="checklist">
+        <div v-for="group in groups" :key="group.category" class="checklist-group">
+          <div class="group-header" @click="toggleGroup(group.category)">
+            <div class="group-icon" :style="`background:${group.bg}`">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" :stroke="group.fg" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 11 12 14 22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
               </svg>
             </div>
-            <span class="group-title">교통 / 예약</span>
-            <span class="group-count">{{ transportDone }}/{{ transportItems.length }} 완료</span>
-            <svg class="group-chevron" :class="{ collapsed: !transportExpanded }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <span class="group-title">{{ group.category }}</span>
+            <span class="group-count">{{ group.done }}/{{ group.items.length }} 완료</span>
+            <svg class="group-chevron" :class="{ collapsed: collapsed[group.category] }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </div>
-          <template v-if="transportExpanded">
+          <template v-if="!collapsed[group.category]">
             <div
-              v-for="item in transportItems"
+              v-for="item in group.items"
               :key="item.id"
               class="check-item"
-              @click="toggleItem(transportItems, item.id)"
+              :class="{ busy: pendingIds.has(item.id) }"
             >
-              <div class="checkbox" :class="{ checked: item.checked }">
+              <div class="checkbox" :class="{ checked: item.checked }" @click="toggleItem(item)">
                 <svg v-if="item.checked" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </div>
-              <span class="check-text" :class="{ done: item.checked }">{{ item.text }}</span>
-              <span v-if="item.link" class="check-link">{{ item.link }}</span>
+              <span class="check-text" :class="{ done: item.checked }" @click="toggleItem(item)">{{ item.title }}</span>
+              <button class="item-delete" @click.stop="removeItem(item)" aria-label="삭제">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
-          </template>
-        </div>
 
-        <!-- 필수 지참물 -->
-        <div class="checklist-group">
-          <div class="group-header" @click="essentialExpanded = !essentialExpanded">
-            <div class="group-icon" style="background:#FFF3E0">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E65100" stroke-width="2">
-                <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg>
+            <!-- Inline add row for this group -->
+            <div v-if="addingCategory === group.category" class="add-item-row">
+              <input
+                ref="addInputRef"
+                v-model="newTitle"
+                class="add-input"
+                placeholder="항목 입력 후 Enter"
+                @keydown.enter.prevent="confirmAdd(group.category)"
+                @keydown.esc="cancelAdd"
+              />
+              <button class="add-confirm" :disabled="!newTitle.trim() || creating" @click="confirmAdd(group.category)">
+                {{ creating ? '추가 중…' : '추가' }}
+              </button>
+              <button class="add-cancel" @click="cancelAdd">취소</button>
             </div>
-            <span class="group-title">필수 지참물</span>
-            <span class="group-count">{{ essentialDone }}/{{ essentialItems.length }} 완료</span>
-            <svg class="group-chevron" :class="{ collapsed: !essentialExpanded }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </div>
-          <template v-if="essentialExpanded">
-            <div
-              v-for="item in essentialItems"
-              :key="item.id"
-              class="check-item"
-              @click="toggleItem(essentialItems, item.id)"
-            >
-              <div class="checkbox" :class="{ checked: item.checked }">
-                <svg v-if="item.checked" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
-              <span
-                class="check-text"
-                :class="{ done: item.checked }"
-                :style="item.urgent && !item.checked ? 'color:var(--color-error);font-weight:600' : ''"
-              >{{ item.text }}</span>
-              <span v-if="item.link" class="check-link">{{ item.link }}</span>
-              <svg
-                v-else-if="item.alarm"
-                class="check-alarm"
-                :class="{ set: item.alarmSet }"
-                width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              >
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-            </div>
-            <div class="add-item-btn">
+            <div v-else class="add-item-btn" @click="startAdd(group.category)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>
@@ -151,36 +130,14 @@
             </div>
           </template>
         </div>
-
-        <!-- 여행 당일 -->
-        <div class="checklist-group">
-          <div class="group-header" @click="dayExpanded = !dayExpanded">
-            <div class="group-icon" style="background:var(--color-surface)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-secondary)" stroke-width="2">
-                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-              </svg>
-            </div>
-            <span class="group-title">여행 당일 (D-3)</span>
-            <span class="group-count">0/4 완료</span>
-            <svg class="group-chevron" :class="{ collapsed: !dayExpanded }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </div>
-        </div>
       </div>
 
       <div class="bottom-spacer" />
     </div>
 
-    <!-- Bottom action bar (note: BottomNav is provided by the shell; this is the page's own action bar above it) -->
+    <!-- Bottom action bar -->
     <div class="bottom-action-bar">
-      <button class="btn-outline">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
-        알림 설정
-      </button>
-      <button class="btn-add">
+      <button class="btn-add" @click="startAdd(defaultCategory)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
         </svg>
@@ -191,37 +148,197 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { checklistApi } from '@/api/index.js'
 
-const transportExpanded = ref(true)
-const essentialExpanded = ref(true)
-const dayExpanded = ref(false)
+const route = useRoute()
+// /checklist?planId=12 형태로 들어오면 해당 plan 기준으로 동작
+const planId = computed(() => {
+  const raw = route.query.planId
+  if (raw == null || raw === '') return undefined
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : undefined
+})
 
-const quickItems = ['신분증', '보조배터리', '상비약', '선크림', '우산']
+const items = ref([])
+const templates = ref([])
+const loading = ref(false)
+const error = ref('')
+const applyingKey = ref('')
+const creating = ref(false)
+const pendingIds = ref(new Set())
 
-const transportItems = ref([
-  { id: 1, text: 'KTX 예약 (서울→부산)', checked: true,  link: '예약 확인', alarm: false, alarmSet: false, urgent: false },
-  { id: 2, text: '숙소 예약 (해운대 오션뷰)', checked: true, link: '예약 확인', alarm: false, alarmSet: false, urgent: false },
-  { id: 3, text: '귀환 KTX 예약', checked: true, link: '예약 확인', alarm: false, alarmSet: false, urgent: false },
-])
+const collapsed = reactive({})
 
-const essentialItems = ref([
-  { id: 4, text: '신분증', checked: true,  link: '', alarm: true,  alarmSet: true,  urgent: false },
-  { id: 5, text: '충전기 + 보조배터리', checked: true, link: '', alarm: true, alarmSet: false, urgent: false },
-  { id: 6, text: '여행자 보험 가입 ⚠️', checked: false, link: '가입하기', alarm: false, alarmSet: false, urgent: true },
-  { id: 7, text: '상비약 챙기기', checked: false, link: '', alarm: true, alarmSet: false, urgent: false },
-])
+// 카테고리별 그룹 아이콘 색상(라운드로빈)
+const PALETTE = [
+  { bg: 'var(--color-peach-light)', fg: 'var(--color-peach-pressed)' },
+  { bg: '#FFF3E0', fg: '#E65100' },
+  { bg: 'var(--color-surface)', fg: 'var(--color-ink-secondary)' },
+  { bg: '#E8F5E9', fg: '#2E7D32' },
+  { bg: '#E3F2FD', fg: '#1565C0' },
+]
+const FALLBACK_CATEGORY = '기타'
 
-function toggleItem(list, id) {
-  const item = list.find((i) => i.id === id)
-  if (item) item.checked = !item.checked
+const groups = computed(() => {
+  const map = new Map()
+  for (const it of items.value) {
+    const cat = it.category && it.category.trim() ? it.category : FALLBACK_CATEGORY
+    if (!map.has(cat)) map.set(cat, [])
+    map.get(cat).push(it)
+  }
+  let i = 0
+  return [...map.entries()].map(([category, list]) => {
+    const palette = PALETTE[i++ % PALETTE.length]
+    return {
+      category,
+      items: list,
+      done: list.filter((x) => x.checked).length,
+      bg: palette.bg,
+      fg: palette.fg,
+    }
+  })
+})
+
+const defaultCategory = computed(() => groups.value[0]?.category || FALLBACK_CATEGORY)
+
+const totalItems = computed(() => items.value.length)
+const doneItems = computed(() => items.value.filter((i) => i.checked).length)
+const progressPct = computed(() => (totalItems.value ? Math.round((doneItems.value / totalItems.value) * 100) : 0))
+
+function toggleGroup(category) {
+  collapsed[category] = !collapsed[category]
 }
 
-const totalItems = computed(() => transportItems.value.length + essentialItems.value.length)
-const doneItems = computed(() => [...transportItems.value, ...essentialItems.value].filter((i) => i.checked).length)
-const progressPct = computed(() => totalItems.value ? Math.round((doneItems.value / totalItems.value) * 100) : 0)
-const transportDone = computed(() => transportItems.value.filter((i) => i.checked).length)
-const essentialDone = computed(() => essentialItems.value.filter((i) => i.checked).length)
+async function load() {
+  loading.value = true
+  error.value = ''
+  try {
+    const params = planId.value != null ? { planId: planId.value } : {}
+    const [listRes, tplRes] = await Promise.all([
+      checklistApi.list(params),
+      templates.value.length ? Promise.resolve({ data: templates.value }) : checklistApi.templates(),
+    ])
+    items.value = listRes.data ?? []
+    templates.value = tplRes.data ?? []
+  } catch (e) {
+    error.value = '체크리스트를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'
+  } finally {
+    loading.value = false
+  }
+}
+
+function reload() {
+  if (loading.value) return
+  load()
+}
+
+async function refreshItems() {
+  const params = planId.value != null ? { planId: planId.value } : {}
+  const { data } = await checklistApi.list(params)
+  items.value = data ?? []
+}
+
+async function toggleItem(item) {
+  if (pendingIds.value.has(item.id)) return
+  const next = new Set(pendingIds.value)
+  next.add(item.id)
+  pendingIds.value = next
+  const prev = item.checked
+  item.checked = !prev // 낙관적 업데이트
+  try {
+    const { data } = await checklistApi.toggle(item.id)
+    if (data && typeof data.checked === 'boolean') item.checked = data.checked
+  } catch (e) {
+    item.checked = prev // 롤백
+    error.value = '변경에 실패했어요. 다시 시도해 주세요.'
+  } finally {
+    const after = new Set(pendingIds.value)
+    after.delete(item.id)
+    pendingIds.value = after
+  }
+}
+
+async function removeItem(item) {
+  if (pendingIds.value.has(item.id)) return
+  const next = new Set(pendingIds.value)
+  next.add(item.id)
+  pendingIds.value = next
+  try {
+    await checklistApi.remove(item.id)
+    items.value = items.value.filter((x) => x.id !== item.id)
+  } catch (e) {
+    error.value = '삭제에 실패했어요. 다시 시도해 주세요.'
+  } finally {
+    const after = new Set(pendingIds.value)
+    after.delete(item.id)
+    pendingIds.value = after
+  }
+}
+
+// ── 인라인 추가 ───────────────────────────────────────────────────────────────
+const addingCategory = ref('')
+const newTitle = ref('')
+const addInputRef = ref(null)
+
+async function startAdd(category) {
+  addingCategory.value = category
+  newTitle.value = ''
+  if (collapsed[category]) collapsed[category] = false
+  await nextTick()
+  const el = Array.isArray(addInputRef.value) ? addInputRef.value[0] : addInputRef.value
+  el?.focus?.()
+}
+
+function cancelAdd() {
+  addingCategory.value = ''
+  newTitle.value = ''
+}
+
+async function confirmAdd(category) {
+  const title = newTitle.value.trim()
+  if (!title || creating.value) return
+  creating.value = true
+  error.value = ''
+  try {
+    const payload = {
+      title,
+      category: category === FALLBACK_CATEGORY ? null : category,
+    }
+    if (planId.value != null) payload.planId = planId.value
+    const { data } = await checklistApi.create(payload)
+    if (data) items.value = [...items.value, data]
+    newTitle.value = ''
+    // 연속 추가 편의를 위해 입력 행 유지
+    await nextTick()
+    const el = Array.isArray(addInputRef.value) ? addInputRef.value[0] : addInputRef.value
+    el?.focus?.()
+  } catch (e) {
+    error.value = '항목 추가에 실패했어요. 다시 시도해 주세요.'
+  } finally {
+    creating.value = false
+  }
+}
+
+// ── 템플릿 적용 ───────────────────────────────────────────────────────────────
+async function applyTemplate(tpl) {
+  if (applyingKey.value) return
+  applyingKey.value = tpl.key
+  error.value = ''
+  try {
+    const params = { templateKey: tpl.key }
+    if (planId.value != null) params.planId = planId.value
+    await checklistApi.applyTemplate(params)
+    await refreshItems()
+  } catch (e) {
+    error.value = '템플릿 적용에 실패했어요. 다시 시도해 주세요.'
+  } finally {
+    applyingKey.value = ''
+  }
+}
+
+onMounted(load)
 </script>
 
 <style scoped>
@@ -253,6 +370,9 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
   border-radius: 50%;
   flex-shrink: 0;
 }
+.icon-btn:disabled {
+  opacity: 0.4;
+}
 .nav-title {
   flex: 1;
   text-align: center;
@@ -266,49 +386,6 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
 .scroll-content {
   flex: 1;
   overflow-y: auto;
-}
-
-/* Trip banner */
-.trip-banner {
-  background: var(--color-peach);
-  padding: 14px 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.trip-icon {
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.trip-text {
-  flex: 1;
-}
-.trip-name {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: white;
-  letter-spacing: -0.3px;
-  margin-bottom: 3px;
-}
-.trip-date {
-  font-size: 11.5px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
-}
-.trip-dday {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-full);
-  padding: 5px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  color: white;
-  flex-shrink: 0;
 }
 
 /* Progress */
@@ -400,8 +477,67 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
   cursor: pointer;
   white-space: nowrap;
 }
+.template-chip.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
 .template-chip svg {
   color: var(--color-peach-pressed);
+}
+.template-empty {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  padding: 7px 2px;
+}
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* State banners */
+.state-banner {
+  margin: 12px 20px 0;
+  padding: 12px 14px;
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.state-banner.error {
+  color: var(--color-error);
+  background: #FDECEC;
+}
+.state-retry {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+}
+
+/* Empty */
+.empty-state {
+  margin: 40px 20px;
+  text-align: center;
+}
+.empty-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--color-ink);
+  margin-bottom: 6px;
+  letter-spacing: -0.3px;
+}
+.empty-sub {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  line-height: 1.5;
 }
 
 /* Checklist groups */
@@ -459,10 +595,13 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
   gap: 12px;
   padding: 13px 16px;
   border-bottom: 1px solid var(--color-line-light);
-  cursor: pointer;
 }
 .check-item:last-child {
   border-bottom: none;
+}
+.check-item.busy {
+  opacity: 0.55;
+  pointer-events: none;
 }
 .checkbox {
   width: 22px;
@@ -474,6 +613,7 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.15s;
+  cursor: pointer;
 }
 .checkbox.checked {
   background: var(--color-peach);
@@ -485,24 +625,27 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
   font-weight: 500;
   color: var(--color-ink);
   letter-spacing: -0.2px;
+  cursor: pointer;
 }
 .check-text.done {
   text-decoration: line-through;
   color: var(--color-ink-muted);
 }
-.check-link {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-peach-pressed);
+.item-delete {
   flex-shrink: 0;
-}
-.check-alarm {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-ink-muted);
-  flex-shrink: 0;
+  border-radius: 50%;
 }
-.check-alarm.set {
-  color: var(--color-peach-pressed);
+.item-delete:active {
+  background: var(--color-surface);
+  color: var(--color-error);
 }
+
 .add-item-btn {
   display: flex;
   align-items: center;
@@ -513,6 +656,47 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
   font-weight: 600;
   cursor: pointer;
   letter-spacing: -0.2px;
+}
+.add-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+}
+.add-input {
+  flex: 1;
+  height: 38px;
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  font-size: 13.5px;
+  color: var(--color-ink);
+  background: var(--color-white);
+}
+.add-input:focus {
+  border-color: var(--color-peach);
+  outline: none;
+}
+.add-confirm {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 14px;
+  background: var(--color-peach);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 700;
+}
+.add-confirm:disabled {
+  opacity: 0.5;
+}
+.add-cancel {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 10px;
+  color: var(--color-ink-muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .bottom-spacer {
@@ -549,19 +733,5 @@ const essentialDone = computed(() => essentialItems.value.filter((i) => i.checke
 }
 .btn-add:active {
   background: var(--color-peach-pressed);
-}
-.btn-outline {
-  height: 50px;
-  padding: 0 16px;
-  background: transparent;
-  color: var(--color-ink-secondary);
-  border: 1.5px solid var(--color-line);
-  border-radius: var(--radius-lg);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 </style>

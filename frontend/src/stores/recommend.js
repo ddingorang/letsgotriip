@@ -8,6 +8,9 @@ export const useRecommendStore = defineStore('recommend', () => {
   const generating = ref(false)
   const error = ref(null)
 
+  // 생성 요청 취소용 — handleGenerate 중 사용자가 취소하면 abort()
+  let abortController = null
+
   // ── helpers ──────────────────────────────────────────────────────────────────
 
   function errorMessage(e) {
@@ -26,16 +29,33 @@ export const useRecommendStore = defineStore('recommend', () => {
   async function generate(payload) {
     generating.value = true
     error.value = null
+    abortController = new AbortController()
     try {
-      const { data } = await http.post('/api/recommendations', payload, { timeout: 40_000 })
+      const { data } = await http.post('/api/recommendations', payload, {
+        timeout: 40_000,
+        signal: abortController.signal,
+      })
       current.value = data
       return data
     } catch (e) {
+      // 사용자가 취소한 경우 — 에러 메시지 없이 조용히 중단
+      if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') {
+        error.value = null
+        const canceled = new Error('canceled')
+        canceled.canceled = true
+        throw canceled
+      }
       error.value = errorMessage(e)
       throw e
     } finally {
       generating.value = false
+      abortController = null
     }
+  }
+
+  /** 진행 중인 생성 요청을 취소 */
+  function cancelGenerate() {
+    abortController?.abort()
   }
 
   /** GET /api/recommendations?page=0&size=10 — Spring Page wrapper */
@@ -84,6 +104,7 @@ export const useRecommendStore = defineStore('recommend', () => {
     generating,
     error,
     generate,
+    cancelGenerate,
     loadHistory,
     load,
     savePlan,

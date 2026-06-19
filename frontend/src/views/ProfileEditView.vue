@@ -14,18 +14,27 @@
     <div class="scroll-content">
       <!-- Avatar -->
       <div class="avatar-section">
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/*"
+          class="file-input-hidden"
+          @change="onFileChange"
+        />
         <div class="avatar-wrap">
-          <div class="avatar-circle">
-            <img v-if="form.profileImageUrl" :src="form.profileImageUrl" alt="프로필 사진" class="avatar-img" />
+          <div class="avatar-circle" role="button" @click="pickPhoto">
+            <img v-if="previewUrl" :src="previewUrl" alt="프로필 사진" class="avatar-img" />
             <span v-else class="avatar-text">프로필</span>
           </div>
-          <button class="camera-btn">
+          <button class="camera-btn" :disabled="uploading" @click="pickPhoto">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
             </svg>
           </button>
         </div>
-        <button class="change-photo-btn">사진 변경</button>
+        <button class="change-photo-btn" :disabled="uploading" @click="pickPhoto">
+          {{ uploading ? '업로드 중...' : '사진 변경' }}
+        </button>
       </div>
 
       <div class="form-body">
@@ -65,9 +74,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { userApi } from '@/api/index.js'
 import { http } from '@/api/http.js'
 
 const router = useRouter()
@@ -76,11 +86,43 @@ const authStore = useAuthStore()
 const form = ref({
   nickname: authStore.user?.nickname ?? '',
   profileImageUrl: authStore.user?.profileImageUrl ?? '',
-  bio: '',
+  bio: authStore.user?.bio ?? '',
 })
 
 const saving = ref(false)
+const uploading = ref(false)
 const error = ref(null)
+const fileInput = ref(null)
+
+// BE 기본값(/images/default-profile.png)은 실제 파일이 없어 깨지므로 placeholder 처리(HomeView 패턴)
+const previewUrl = computed(() => {
+  const u = form.value.profileImageUrl
+  return u && !u.includes('default-profile') ? u : null
+})
+
+function pickPhoto() {
+  if (uploading.value) return
+  fileInput.value?.click()
+}
+
+async function onFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  uploading.value = true
+  error.value = null
+  try {
+    // 응답은 전체 UserProfileResponseDto → profileImageUrl 로 미리보기/스토어 갱신
+    const { data } = await userApi.uploadProfileImage(file)
+    form.value.profileImageUrl = data?.profileImageUrl ?? form.value.profileImageUrl
+    authStore.setUser({ profileImageUrl: data?.profileImageUrl })
+  } catch (err) {
+    error.value = err?.response?.data?.message ?? '사진 업로드에 실패했어요. 다시 시도해주세요.'
+  } finally {
+    uploading.value = false
+    // 같은 파일 재선택 시에도 change 이벤트가 발생하도록 초기화
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
 
 async function save() {
   if (saving.value) return
@@ -90,6 +132,7 @@ async function save() {
     await http.patch('/users/me', {
       nickname: form.value.nickname,
       profileImageUrl: form.value.profileImageUrl || undefined,
+      bio: form.value.bio ?? '',
     })
     await authStore.fetchMe()
     router.back()
@@ -154,6 +197,7 @@ function logout() {
   padding: 32px 20px 20px;
   gap: 10px;
 }
+.file-input-hidden { display: none; }
 .avatar-wrap { position: relative; }
 .avatar-circle {
   width: 88px;
@@ -163,6 +207,7 @@ function logout() {
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
 }
 .avatar-text { font-size: 12px; font-weight: 500; color: var(--color-ink-muted); }
 .avatar-img {
@@ -188,6 +233,11 @@ function logout() {
   font-size: 13.5px;
   font-weight: 600;
   color: var(--color-peach);
+}
+.camera-btn:disabled,
+.change-photo-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .form-body { padding: 8px 20px; }

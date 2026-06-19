@@ -46,9 +46,14 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
 import { useCompanionStore } from '@/stores/companion.js'
 
 const companionStore = useCompanionStore()
+
+onMounted(() => {
+  companionStore.fetchMyRooms()
+})
 </script>
 
 <style scoped>

@@ -3,14 +3,14 @@ package com.trip.chat.controller;
 import com.trip.chat.dto.MessageSendRequestDto;
 import com.trip.chat.service.ChatService;
 import com.trip.global.security.UserPrincipal;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.security.Principal;
 
 @Slf4j
 @RestController
@@ -31,11 +31,13 @@ public class ChatStompController {
      */
     @MessageMapping("chat.message.{roomId}")
     public void publishMessage(
-            @DestinationVariable String roomId,
-            MessageSendRequestDto messageSendRequestDto,
+            @DestinationVariable Long roomId,
+            @Payload @Valid MessageSendRequestDto messageSendRequestDto,
             UserPrincipal principal) {
 
         Long senderId = principal.userId(); // WebSocket 연결 시점에 JWT에서 추출한 사용자 ID
-        chatService.sendMessage(messageSendRequestDto, senderId);
+        // STOMP 경로(@DestinationVariable)의 roomId만 권위 있는 목적지로 신뢰한다.
+        // 페이로드의 chatRoomId는 스푸핑 가능하므로 서비스 계층에서 무시한다(IDOR 방지).
+        chatService.sendMessage(messageSendRequestDto, senderId, roomId);
     }
 }

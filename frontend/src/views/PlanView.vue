@@ -2,17 +2,63 @@
   <div class="page">
     <header class="plan-header">
       <h1 class="header-title">내 여행 계획</h1>
-      <button class="add-btn" @click="goNewTrip" title="새 여행 만들기">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
+      <div class="header-actions">
+        <button
+          v-if="plans.length >= 2"
+          class="compare-toggle"
+          :class="{ active: compareMode }"
+          @click="toggleCompareMode"
+          title="두 계획 비교"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+        </button>
+        <button class="add-btn" @click="goNewTrip" title="새 여행 만들기">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
     </header>
 
+    <!-- 비교 모드 안내 배너 -->
+    <div v-if="compareMode" class="compare-banner">
+      <span class="compare-banner-text">
+        비교할 계획 두 개를 선택하세요 ({{ compareSelection.length }}/2)
+      </span>
+      <button class="compare-banner-cancel" @click="toggleCompareMode">취소</button>
+    </div>
+
     <div class="scroll-content">
+      <!-- ── Loading state ────────────────────────────────────────────── -->
+      <div v-if="listLoading && plans.length === 0" class="state-block">
+        <div class="skeleton-card" />
+        <div class="skeleton-card" />
+        <div class="skeleton-card" />
+      </div>
+
+      <!-- ── Error state (목록 로드 실패) ─────────────────────────────── -->
+      <div v-else-if="listError" class="state-block error-state">
+        <div class="empty-icon">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+        </div>
+        <p class="empty-title">계획을 불러오지 못했어요</p>
+        <p class="empty-sub">{{ listError }}</p>
+        <button class="create-ai-btn" :disabled="listLoading" @click="reloadPlans">
+          {{ listLoading ? '불러오는 중...' : '다시 시도' }}
+        </button>
+      </div>
+
       <!-- ── Empty state ──────────────────────────────────────────────── -->
-      <div v-if="plans.length === 0" class="empty-state">
+      <div v-else-if="plans.length === 0" class="empty-state">
         <div class="empty-icon">
           <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -36,23 +82,36 @@
           v-for="plan in plans"
           :key="plan.id"
           class="plan-card"
-          :class="{ expanded: selectedPlanId === plan.id }"
+          :class="{ expanded: selectedPlanId === plan.id, selectable: compareMode, selected: isCompareSelected(plan.id) }"
         >
-          <!-- Card header — always visible, click to expand/collapse -->
-          <div class="plan-thumb" @click="togglePlan(plan)">
+          <!-- Card header — click to expand/collapse (or select in compare mode) -->
+          <div class="plan-thumb" @click="onCardTap(plan)">
             <div class="thumb-gradient" />
+            <div v-if="compareMode" class="compare-check" :class="{ on: isCompareSelected(plan.id) }">
+              <svg v-if="isCompareSelected(plan.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            </div>
             <div class="plan-dates">
               <span class="date-label">{{ formatDate(plan.startDate) }}</span>
               <span class="date-sep">–</span>
               <span class="date-label">{{ formatDate(plan.endDate) }}</span>
             </div>
           </div>
-          <div class="plan-info" @click="togglePlan(plan)">
-            <h3 class="plan-name">{{ plan.title }}</h3>
-            <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
-            <div class="plan-spots">
-              <span v-for="spot in plan.spots?.slice(0, 3)" :key="spot" class="spot-chip">{{ spot }}</span>
+          <div class="plan-info">
+            <div class="plan-info-main" @click="onCardTap(plan)">
+              <h3 class="plan-name">{{ plan.title }}</h3>
+              <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
+              <div class="plan-spots">
+                <span v-for="spot in plan.spots?.slice(0, 3)" :key="spot" class="spot-chip">{{ spot }}</span>
+              </div>
             </div>
+            <button v-if="!compareMode" class="plan-delete-btn" title="여행 계획 삭제" @click.stop="confirmDeletePlan(plan)">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </button>
           </div>
 
           <!-- Expanded detail panel -->
@@ -81,6 +140,40 @@
                       <span class="detail-place-num">{{ idx + 1 }}</span>
                       <span class="detail-place-name">{{ place.attraction?.title ?? place.title ?? '장소' }}</span>
                       <span v-if="place.visitTime" class="detail-place-time">{{ place.visitTime }}</span>
+                      <!-- 인라인 편집: 위/아래 이동, 삭제 -->
+                      <div class="place-edit-actions">
+                        <button
+                          class="place-edit-btn"
+                          title="위로 이동"
+                          :disabled="idx === 0 || planStore.loading"
+                          @click="movePlace(plan.id, day, idx, -1)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="18 15 12 9 6 15" />
+                          </svg>
+                        </button>
+                        <button
+                          class="place-edit-btn"
+                          title="아래로 이동"
+                          :disabled="idx === (day.places.length - 1) || planStore.loading"
+                          @click="movePlace(plan.id, day, idx, 1)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+                        <button
+                          class="place-edit-btn danger"
+                          title="장소 삭제"
+                          :disabled="planStore.loading"
+                          @click="removePlace(plan.id, day.dayNo, place)"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     <div v-if="!(day.places?.length)" class="detail-empty">일정이 없어요</div>
                   </div>
@@ -90,6 +183,49 @@
                 </div>
               </template>
               <div v-else class="detail-loading">상세 정보를 불러오는 중...</div>
+
+              <!-- 일정 지도 — 좌표가 있는 장소가 하나라도 있을 때만 표시(가짜 핀 금지) -->
+              <div v-if="currentPlanPlaces.length" class="plan-map-section">
+                <div class="plan-map-wrap">
+                  <TripMap :places="currentPlanPlaces" :numbered="true" />
+                </div>
+              </div>
+
+              <!-- 예산 패널 -->
+              <div v-if="budget && budget.planId === plan.id" class="budget-panel">
+                <div class="budget-head">
+                  <span class="budget-title">예상 예산</span>
+                  <span class="budget-total">{{ formatWon(budget.totalEstimated) }}</span>
+                </div>
+                <div class="budget-days">
+                  <div v-for="d in budget.dayBudgets" :key="d.dayNo" class="budget-day-row">
+                    <span class="budget-day-label">{{ d.dayNo }}일차</span>
+                    <span class="budget-day-cost">{{ formatWon(d.estimatedCost) }}</span>
+                  </div>
+                </div>
+                <div v-if="budget.plannedBudget != null" class="budget-planned-row">
+                  <span>설정 예산 {{ formatWon(budget.plannedBudget) }}</span>
+                  <span
+                    v-if="budget.difference != null"
+                    class="budget-diff"
+                    :class="{ over: budget.difference < 0 }"
+                  >
+                    {{ budget.difference >= 0 ? '여유 ' : '초과 ' }}{{ formatWon(Math.abs(budget.difference)) }}
+                  </span>
+                </div>
+                <p v-if="budget.note" class="budget-note">{{ budget.note }}</p>
+              </div>
+
+              <!-- 공유 링크 -->
+              <div v-if="shareInfo && shareInfo.planId === plan.id" class="share-panel">
+                <span class="share-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                </span>
+                <code class="share-url">{{ shareInfo.url }}</code>
+                <button class="share-copy-btn" @click="copyShareUrl">{{ shareCopied ? '복사됨' : '복사' }}</button>
+              </div>
 
               <!-- Action buttons -->
               <div class="detail-actions">
@@ -101,6 +237,35 @@
                   AI 동선 최적화
                 </button>
               </div>
+              <!-- 평가 받기 / 챗봇으로 수정 -->
+              <div class="detail-actions secondary">
+                <button class="detail-sub-btn" @click="goReport(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+                  </svg>
+                  평가 받기
+                </button>
+                <button class="detail-sub-btn" @click="goAssistant(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  </svg>
+                  챗봇으로 수정
+                </button>
+              </div>
+              <div class="detail-actions secondary">
+                <button class="detail-sub-btn" :disabled="budgetLoading" @click="loadBudget(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                  </svg>
+                  {{ budgetLoading ? '계산 중...' : '예산 보기' }}
+                </button>
+                <button class="detail-sub-btn" :disabled="shareLoading" @click="sharePlan(plan.id)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                  </svg>
+                  {{ shareLoading ? '생성 중...' : '공유하기' }}
+                </button>
+              </div>
             </div>
           </Transition>
         </div>
@@ -110,56 +275,139 @@
       <div class="companion-section">
         <div class="section-header">
           <h2 class="section-title">동행 구하기</h2>
-          <button class="see-all">전체보기</button>
+          <button class="see-all" @click="router.push({ path: '/community', query: { tab: 'companion' } })">전체보기</button>
         </div>
-        <div class="companion-list">
-          <div v-for="comp in companions" :key="comp.id" class="companion-card">
+        <div v-if="companions.length" class="companion-list">
+          <div
+            v-for="comp in companions.slice(0, 3)"
+            :key="comp.id"
+            class="companion-card"
+            @click="router.push(`/companion/${comp.id}`)"
+          >
             <div class="comp-header">
-              <span class="comp-badge">{{ comp.category }}</span>
-              <span class="comp-dday" :class="{ urgent: comp.dday <= 3 }">D-{{ comp.dday }}</span>
+              <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
+              <span
+                v-if="companionDday(comp.dateRange) != null"
+                class="comp-dday"
+                :class="{ urgent: companionDday(comp.dateRange) <= 3 }"
+              >
+                D-{{ companionDday(comp.dateRange) }}
+              </span>
             </div>
             <h4 class="comp-title">{{ comp.title }}</h4>
-            <p class="comp-sub">{{ comp.destination }} · {{ comp.dates }}</p>
+            <p class="comp-sub">{{ comp.location }}<span v-if="comp.dateRange"> · {{ comp.dateRange }}</span></p>
             <div class="comp-footer">
               <div class="comp-members">
-                <div v-for="i in comp.currentCount" :key="i" class="member-dot" />
+                <div v-for="i in Math.min(comp.currentCount, 6)" :key="i" class="member-dot" />
                 <span class="member-text">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
               </div>
-              <button class="join-btn">참여하기</button>
+              <button class="join-btn" @click.stop="router.push(`/companion/${comp.id}`)">참여하기</button>
             </div>
           </div>
+        </div>
+        <!-- 동행 목록 비어있음(미로그인/없음/로드 실패) — 가짜 목업 대신 빈상태 노출 -->
+        <div v-else class="companion-empty">
+          <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
+          <button class="companion-empty-btn" @click="router.push({ path: '/community', query: { tab: 'companion' } })">
+            동행 둘러보기
+          </button>
         </div>
       </div>
 
       <div class="bottom-spacer" />
     </div>
+
+    <!-- 비교 결과 모달 -->
+    <Transition name="fade">
+      <div v-if="compareResult" class="compare-overlay" @click.self="closeCompare">
+        <div class="compare-sheet">
+          <div class="compare-sheet-head">
+            <h3 class="compare-sheet-title">계획 비교</h3>
+            <button class="compare-sheet-close" @click="closeCompare">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+          <div class="compare-grid">
+            <div class="compare-col">
+              <div class="compare-plan-name">{{ compareResult.a.title }}</div>
+            </div>
+            <div class="compare-col-label" />
+            <div class="compare-col">
+              <div class="compare-plan-name">{{ compareResult.b.title }}</div>
+            </div>
+
+            <template v-for="row in compareRows" :key="row.key">
+              <div class="compare-val" :class="row.aClass">{{ row.a }}</div>
+              <div class="compare-metric">{{ row.label }}</div>
+              <div class="compare-val" :class="row.bClass">{{ row.b }}</div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
+import { useCompanionStore } from '@/stores/companion.js'
+import { planApi } from '@/api/index.js'
+import TripMap from '@/components/common/TripMap.vue'
 
 const router = useRouter()
 const planStore = usePlanStore()
-const plans = planStore.plans
+const companionStore = useCompanionStore()
+// storeToRefs로 반응성 유지 — 비반응적 destructure 시 loadPlans() 후 목록이 갱신되지 않음
+const { plans } = storeToRefs(planStore)
+// 동행 목록도 store 기준으로 반응성 유지(하드코딩 목업 제거 → 실 API 연동)
+const { companions } = storeToRefs(companionStore)
 
 const selectedPlanId = ref(null)
 
-const companions = ref([
-  { id: 1, category: '관광', title: '제주 동부 일주 같이 해요!', destination: '제주도', dates: '12월 28-30일', currentCount: 2, maxCount: 4, dday: 5 },
-  { id: 2, category: '맛집', title: '부산 로컬 맛집 투어 동행 구해요', destination: '부산', dates: '1월 4-5일', currentCount: 1, maxCount: 3, dday: 12 },
-  { id: 3, category: '액티비티', title: '한라산 백록담 등반 파티 모집', destination: '제주도', dates: '1월 10일', currentCount: 3, maxCount: 6, dday: 2 },
-])
+// ── 계획 목록 로드 상태 ───────────────────────────────────────────────────────
+// planStore.loading은 상세/편집 등에서도 켜지므로, 목록 로드 전용 상태를 따로 둔다.
+// 실패를 "계획 없어요" 빈상태로 위장하지 않고 에러/로딩/빈상태를 분리해 노출한다.
+const listLoading = ref(false)
+const listError = ref(null)
 
-onMounted(async () => {
+// ── 예산 보기 ────────────────────────────────────────────────────────────────
+const budget = ref(null)        // { planId, dayBudgets, totalEstimated, plannedBudget, difference, note }
+const budgetLoading = ref(false)
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+const shareInfo = ref(null)     // { planId, url }
+const shareLoading = ref(false)
+const shareCopied = ref(false)
+
+// ── 비교 ─────────────────────────────────────────────────────────────────────
+const compareMode = ref(false)
+const compareSelection = ref([])   // 선택된 planId 최대 2개
+const compareResult = ref(null)    // { a: PlanStat, b: PlanStat }
+
+onMounted(() => {
+  reloadPlans()
+  // 실제 동행 목록 로드(하드코딩 목업 제거). 실패 시 store가 조용히 빈 배열 유지 → 빈상태 노출.
+  companionStore.fetchCompanions()
+})
+
+/** 계획 목록 로드 — 로딩/에러를 분리 추적해 빈상태 위장을 막는다 */
+async function reloadPlans() {
+  if (listLoading.value) return
+  listLoading.value = true
+  listError.value = null
   try {
     await planStore.loadPlans()
-  } catch {
-    // not logged in or BE unavailable — plans stays empty, user sees empty state
+    // store가 에러를 삼키고 plans를 []로 두는 경우(로그인 만료/서버 오류)를 에러로 노출
+    if (planStore.error) listError.value = planStore.error
+  } catch (e) {
+    listError.value = planStore.error ?? e?.message ?? '계획을 불러오지 못했어요.'
+  } finally {
+    listLoading.value = false
   }
-})
+}
 
 function formatDate(str) {
   if (!str) return ''
@@ -172,9 +420,58 @@ function dayCount(start, end) {
   return Math.round((new Date(end) - new Date(start)) / 86400000)
 }
 
+// ── 펼친 계획의 지도 마커 ─────────────────────────────────────────────────────
+// planStore.current(상세)의 days[].places[].attraction(latitude/longitude)에서 좌표를 모은다.
+// TripMap props 형태({ id, name, lat, lng })로 변환하고, 좌표 없는 항목은 제외한다.
+// dayNo를 함께 담아 day별 구분(향후 색/라벨)에 활용한다.
+const currentPlanPlaces = computed(() => {
+  const cur = planStore.current
+  if (!cur || cur.id !== selectedPlanId.value) return []
+  const out = []
+  for (const day of cur.days ?? []) {
+    for (const place of day.places ?? []) {
+      const a = place.attraction
+      const lat = Number(a?.latitude)
+      const lng = Number(a?.longitude)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+      out.push({
+        id: place.id ?? a?.contentId ?? `${day.dayNo}-${out.length}`,
+        name: a?.title ?? place.title ?? '장소',
+        lat,
+        lng,
+        dayNo: day.dayNo,
+      })
+    }
+  }
+  return out
+})
+
+// ── 동행 카드용 D-day 계산 ─────────────────────────────────────────────────────
+// store companion의 dateRange(=travelDate, 'YYYY-MM-DD')에서 남은 일수를 구한다.
+// 날짜 파싱 불가/과거면 null → 배지 미표시.
+function companionDday(dateStr) {
+  if (!dateStr) return null
+  const target = new Date(dateStr)
+  if (Number.isNaN(target.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target - today) / 86400000)
+  return diff >= 0 ? diff : null
+}
+
 /** Navigate to /ai/plan (new AI trip flow) */
 function goNewTrip() {
   router.push('/ai/plan')
+}
+
+/** 카드 탭 — 비교 모드면 선택, 아니면 펼치기/접기 */
+function onCardTap(plan) {
+  if (compareMode.value) {
+    toggleCompareSelect(plan.id)
+    return
+  }
+  togglePlan(plan)
 }
 
 /** Expand/collapse a plan card and load its detail */
@@ -184,6 +481,9 @@ async function togglePlan(plan) {
     return
   }
   selectedPlanId.value = plan.id
+  // 다른 계획을 펼치면 이전 계획의 예산/공유 패널은 감춘다
+  if (budget.value && budget.value.planId !== plan.id) budget.value = null
+  if (shareInfo.value && shareInfo.value.planId !== plan.id) shareInfo.value = null
   // Load plan detail if not already loaded or stale
   if (planStore.current?.id !== plan.id) {
     try {
@@ -194,9 +494,188 @@ async function togglePlan(plan) {
   }
 }
 
-/** Navigate to the 동선 리포트 screen */
+/** Navigate to the 동선 리포트(평가) screen */
 function goReport(planId) {
   router.push(`/plan/${planId}/report`)
+}
+
+/** 챗봇으로 수정 — AssistantView로 planId 쿼리와 함께 이동 */
+function goAssistant(planId) {
+  router.push({ path: '/assistant', query: { planId } })
+}
+
+/** 원(₩) 포맷 */
+function formatWon(n) {
+  if (n == null) return '-'
+  return `${Number(n).toLocaleString('ko-KR')}원`
+}
+
+// ── 예산 보기 ────────────────────────────────────────────────────────────────
+async function loadBudget(planId) {
+  if (budgetLoading.value) return
+  // 토글: 이미 같은 계획 예산이 열려있으면 닫는다
+  if (budget.value && budget.value.planId === planId) {
+    budget.value = null
+    return
+  }
+  budgetLoading.value = true
+  try {
+    const { data } = await planApi.getBudget(planId)
+    budget.value = data
+  } catch {
+    budget.value = null
+  } finally {
+    budgetLoading.value = false
+  }
+}
+
+// ── 공유 ─────────────────────────────────────────────────────────────────────
+async function sharePlan(planId) {
+  if (shareLoading.value) return
+  // 토글: 이미 같은 계획 공유링크가 열려있으면 닫는다
+  if (shareInfo.value && shareInfo.value.planId === planId) {
+    shareInfo.value = null
+    return
+  }
+  shareLoading.value = true
+  shareCopied.value = false
+  try {
+    const { data } = await planApi.share(planId)
+    // BE는 상대경로(/plan/shared/{token})를 주므로 절대 URL로 변환
+    const path = data?.shareUrl ?? `/plan/shared/${data?.shareToken}`
+    const url = `${window.location.origin}${path}`
+    shareInfo.value = { planId, url }
+    // 생성 직후 클립보드에 자동 복사 시도
+    await copyToClipboard(url)
+  } catch {
+    shareInfo.value = null
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+async function copyShareUrl() {
+  if (!shareInfo.value) return
+  await copyToClipboard(shareInfo.value.url)
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    shareCopied.value = true
+    setTimeout(() => { shareCopied.value = false }, 1500)
+  } catch {
+    // 클립보드 접근 불가 — 사용자가 링크를 직접 복사하면 됨
+  }
+}
+
+// ── 비교 ─────────────────────────────────────────────────────────────────────
+function toggleCompareMode() {
+  compareMode.value = !compareMode.value
+  compareSelection.value = []
+  compareResult.value = null
+  if (compareMode.value) {
+    // 비교 모드 진입 시 펼친 카드/패널 정리
+    selectedPlanId.value = null
+    budget.value = null
+    shareInfo.value = null
+  }
+}
+
+function isCompareSelected(planId) {
+  return compareSelection.value.includes(planId)
+}
+
+async function toggleCompareSelect(planId) {
+  const idx = compareSelection.value.indexOf(planId)
+  if (idx >= 0) {
+    compareSelection.value.splice(idx, 1)
+    return
+  }
+  if (compareSelection.value.length >= 2) return  // 최대 2개
+  compareSelection.value.push(planId)
+  if (compareSelection.value.length === 2) {
+    await runCompare()
+  }
+}
+
+async function runCompare() {
+  const [aId, bId] = compareSelection.value
+  try {
+    const { data } = await planApi.compare(aId, bId)
+    compareResult.value = data
+  } catch {
+    compareResult.value = null
+  }
+}
+
+function closeCompare() {
+  compareResult.value = null
+  // 모달만 닫고 비교 모드는 유지 — 선택은 초기화해 다시 고를 수 있게
+  compareSelection.value = []
+}
+
+/** 비교 표 행 — 값이 더 좋은 쪽을 강조 (낮을수록 좋은 항목은 작은 값 강조) */
+const compareRows = computed(() => {
+  const r = compareResult.value
+  if (!r) return []
+  const a = r.a
+  const b = r.b
+  const dur = (m) => {
+    const h = Math.floor(m / 60)
+    const min = m % 60
+    return h > 0 ? `${h}시간${min > 0 ? ' ' + min + '분' : ''}` : `${min}분`
+  }
+  const rows = [
+    { key: 'days', label: '일정', a: `${a.totalDays}일`, b: `${b.totalDays}일`, aBetter: null, bBetter: null },
+    { key: 'places', label: '장소 수', a: `${a.totalPlaces}곳`, b: `${b.totalPlaces}곳`, aBetter: a.totalPlaces > b.totalPlaces, bBetter: b.totalPlaces > a.totalPlaces },
+    { key: 'dist', label: '총 이동거리', a: `${a.totalDistanceKm}km`, b: `${b.totalDistanceKm}km`, aBetter: a.totalDistanceKm < b.totalDistanceKm, bBetter: b.totalDistanceKm < a.totalDistanceKm },
+    { key: 'dur', label: '예상 소요', a: dur(a.totalDurationMin), b: dur(b.totalDurationMin), aBetter: a.totalDurationMin < b.totalDurationMin, bBetter: b.totalDurationMin < a.totalDurationMin },
+    { key: 'budget', label: '예산', a: a.budget != null ? formatWon(a.budget) : '-', b: b.budget != null ? formatWon(b.budget) : '-', aBetter: null, bBetter: null },
+  ]
+  return rows.map((row) => ({
+    ...row,
+    aClass: row.aBetter ? 'better' : '',
+    bClass: row.bBetter ? 'better' : '',
+  }))
+})
+
+/** 여행 계획 삭제 — 확인 후 deletePlan 호출 */
+async function confirmDeletePlan(plan) {
+  if (!window.confirm(`'${plan.title}' 여행 계획을 삭제할까요?`)) return
+  try {
+    await planStore.deletePlan(plan.id)
+    if (selectedPlanId.value === plan.id) selectedPlanId.value = null
+  } catch {
+    // 오류는 planStore.error에 반영됨
+  }
+}
+
+/**
+ * 같은 날 안에서 장소 순서를 위/아래로 한 칸 이동.
+ * dir: -1(위) | +1(아래). 재정렬한 배열을 replacePlaces로 저장한다.
+ */
+async function movePlace(planId, day, idx, dir) {
+  const places = [...(day.places ?? [])]
+  const target = idx + dir
+  if (target < 0 || target >= places.length) return
+  // swap
+  ;[places[idx], places[target]] = [places[target], places[idx]]
+  try {
+    await planStore.replacePlaces(planId, day.dayNo, places)
+  } catch {
+    // 오류는 planStore.error에 반영됨
+  }
+}
+
+/** 장소 한 개 삭제 */
+async function removePlace(planId, dayNo, place) {
+  if (place.id == null) return
+  try {
+    await planStore.removePlace(planId, dayNo, place.id)
+  } catch {
+    // 오류는 planStore.error에 반영됨
+  }
 }
 </script>
 
@@ -223,6 +702,29 @@ function goReport(planId) {
   letter-spacing: -0.5px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compare-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-ink-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.compare-toggle.active {
+  background: var(--color-peach);
+  color: white;
+}
+
 .add-btn {
   width: 40px;
   height: 40px;
@@ -234,10 +736,88 @@ function goReport(planId) {
   justify-content: center;
 }
 
+/* ── Compare mode ─────────────────────────────────────────────────────────── */
+.compare-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--color-peach-light);
+  border-bottom: 1px solid rgba(247, 143, 87, 0.15);
+}
+
+.compare-banner-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+}
+
+.compare-banner-cancel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.plan-card.selectable {
+  outline: 2px solid transparent;
+  transition: outline-color 0.15s;
+}
+
+.plan-card.selected {
+  outline-color: var(--color-peach);
+}
+
+.compare-check {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-peach);
+  z-index: 2;
+}
+
+.compare-check.on {
+  background: white;
+  border-color: white;
+}
+
 .scroll-content {
   flex: 1;
   overflow-y: auto;
   padding: 0 20px;
+}
+
+/* ── Loading / error state ──────────────────────────────────────────────── */
+.state-block {
+  padding: 16px 0 40px;
+}
+
+.skeleton-card {
+  height: 96px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  margin-bottom: 12px;
+  animation: plan-shimmer 1.2s infinite;
+}
+
+@keyframes plan-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 0 40px;
+  gap: 8px;
 }
 
 /* ── Empty state ─────────────────────────────────────────────────────────── */
@@ -278,6 +858,12 @@ function goReport(planId) {
   align-items: center;
   gap: 8px;
   box-shadow: 0 4px 14px rgba(247, 143, 87, 0.3);
+}
+
+.create-ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* ── Plan list ────────────────────────────────────────────────────────────── */
@@ -331,6 +917,31 @@ function goReport(planId) {
 .plan-info {
   padding: 14px 16px 16px;
   background: var(--color-white);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.plan-info-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-delete-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.plan-delete-btn:hover {
+  background: var(--color-peach-light);
+  color: var(--color-error);
 }
 
 .plan-name {
@@ -455,6 +1066,38 @@ function goReport(planId) {
   white-space: nowrap;
 }
 
+.place-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.place-edit-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.place-edit-btn:hover:not(:disabled) {
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+}
+
+.place-edit-btn.danger:hover:not(:disabled) {
+  color: var(--color-error);
+}
+
+.place-edit-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .detail-empty {
   font-size: 12.5px;
   color: var(--color-ink-muted);
@@ -492,6 +1135,263 @@ function goReport(planId) {
   background: linear-gradient(90deg, var(--color-peach) 0%, #f9a96a 100%);
   color: #fff;
   box-shadow: 0 3px 10px rgba(247, 143, 87, 0.3);
+}
+
+.detail-actions.secondary {
+  margin-top: 8px;
+}
+
+.detail-sub-btn {
+  flex: 1;
+  height: 38px;
+  border-radius: var(--radius-xl);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  background: var(--color-white);
+  color: var(--color-ink-secondary);
+  border: 1px solid var(--color-line-light);
+}
+
+.detail-sub-btn:hover:not(:disabled) {
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  border-color: var(--color-peach-light);
+}
+
+.detail-sub-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Plan map (일정 지도) ─────────────────────────────────────────────────── */
+.plan-map-section {
+  margin-top: 14px;
+}
+
+.plan-map-wrap {
+  width: 100%;
+  height: 200px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-line-light);
+  background: var(--color-surface);
+}
+
+/* ── Budget panel ─────────────────────────────────────────────────────────── */
+.budget-panel {
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-top: 14px;
+  box-shadow: var(--shadow-card);
+}
+
+.budget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.budget-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.budget-total {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-peach-pressed);
+  letter-spacing: -0.3px;
+}
+
+.budget-days {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.budget-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.budget-day-label {
+  color: var(--color-ink-muted);
+}
+
+.budget-day-cost {
+  color: var(--color-ink-secondary);
+  font-weight: 600;
+}
+
+.budget-planned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-line-light);
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+}
+
+.budget-diff {
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+}
+
+.budget-diff.over {
+  color: var(--color-error);
+}
+
+.budget-note {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  margin-top: 8px;
+}
+
+/* ── Share panel ──────────────────────────────────────────────────────────── */
+.share-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-peach-light);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+
+.share-icon {
+  flex-shrink: 0;
+  color: var(--color-peach-pressed);
+  display: flex;
+}
+
+.share-url {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--color-ink-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-copy-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  padding: 4px 8px;
+}
+
+/* ── Compare modal ────────────────────────────────────────────────────────── */
+.compare-overlay {
+  position: fixed;          /* .page(overflow:hidden)에 갇히지 않게 뷰포트 기준 */
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;            /* BottomNav(z-index:100) 위로 — 시트 하단이 가려지지 않게 */
+}
+
+.compare-sheet {
+  width: 100%;
+  background: var(--color-white);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 18px 20px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  max-height: 80%;
+  overflow-y: auto;
+}
+
+.compare-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.compare-sheet-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.4px;
+}
+
+.compare-sheet-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-muted);
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px 8px;
+  align-items: center;
+}
+
+.compare-col {
+  text-align: center;
+}
+
+.compare-plan-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-ink);
+  line-height: 1.35;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--color-peach-light);
+}
+
+.compare-col-label {
+  border-bottom: 2px solid transparent;
+}
+
+.compare-metric {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  text-align: center;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.compare-val {
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+}
+
+.compare-val.better {
+  color: var(--color-peach-pressed);
+  font-weight: 800;
+}
+
+/* fade transition for overlay */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 /* expand/collapse transition */
@@ -541,6 +1441,7 @@ function goReport(planId) {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   padding: 16px;
+  cursor: pointer;
 }
 
 .comp-header {
@@ -557,6 +1458,38 @@ function goReport(planId) {
   font-weight: 600;
   padding: 3px 10px;
   border-radius: var(--radius-full);
+}
+
+.comp-badge.urgent {
+  background: #fff0e8;
+  color: #d04010;
+}
+
+/* ── Companion empty state ────────────────────────────────────────────────── */
+.companion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+
+.companion-empty-text {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+
+.companion-empty-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+  background: var(--color-white);
+  border: 1px solid var(--color-line-light);
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
 }
 
 .comp-dday {

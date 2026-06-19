@@ -20,6 +20,13 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompSessionInterceptor stompSessionInterceptor;
 
+    /**
+     * 허용 Origin 목록 — REST CORS 화이트리스트(WebConfig)와 동일 프로퍼티를 사용해 일치시킨다.
+     * 미설정 시 개발 기본값(localhost/127.0.0.1:5173)으로 좁게 제한한다.
+     */
+    @Value("${app.frontend.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}")
+    private String[] allowedOrigins;
+
     @Value("${spring.rabbitmq.host}")
     private String rabbitmqHost; // RabbitMQ 서버 주소
 
@@ -46,11 +53,15 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
 
-        // 웹 소켓 통신이 /ws으로 도착할 때, 해당 통신이 웹 소켓 통신 중 stomp 통신인 것을 확인하고, 이를 연결.
-        // 클라이언트가 웹소켓 연결을 시도할 기본 엔드포인트 설정
-        // /ws 경로로 연결을 수락하며, 모든 오리진(*: CORS 허용)을 허용
+        // /ws : 브라우저 native WebSocket(SockJS 미사용) 클라이언트가 직접 붙는 raw STOMP 엔드포인트.
+        //       Origin은 REST CORS 화이트리스트와 동일하게 좁게 제한한다(개발: localhost/127.0.0.1:5173).
         registry.addEndpoint("/ws")
-                .setAllowedOrigins("*"); // FIXME: CORS 정책 허용 (필요 시 보안 강화를 위해 특정 Origin 설정 가능)
+                .setAllowedOrigins(allowedOrigins);
+
+        // /ws-sockjs : SockJS 폴백이 필요한 클라이언트용 엔드포인트(병행 등록).
+        registry.addEndpoint("/ws-sockjs")
+                .setAllowedOrigins(allowedOrigins)
+                .withSockJS();
     }
 
     /**

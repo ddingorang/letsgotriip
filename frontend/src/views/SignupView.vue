@@ -151,10 +151,6 @@ const passwordConfirmError = computed(() => {
   return ''
 })
 
-function profileImageUrl(nick) {
-  return `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(nick)}`
-}
-
 async function handleSignup() {
   errorMsg.value = ''
 
@@ -169,11 +165,11 @@ async function handleSignup() {
 
   loading.value = true
   try {
+    // profileImageUrl 미전송 → BE가 기본 아바타(/images/default-profile.png)로 채움(외부 dicebear 제거)
     await authApi.signup({
       email: email.value,
       password: password.value,
       nickname: nickname.value,
-      profileImageUrl: profileImageUrl(nickname.value),
     })
     // Auto-login after signup
     await auth.login(email.value, password.value)

@@ -20,6 +20,8 @@ import com.trip.recommend.dto.RecommendationResponseDto;
 import com.trip.recommend.entity.Recommendation;
 import com.trip.recommend.entity.RecommendStatus;
 import com.trip.recommend.repository.RecommendationRepository;
+import com.trip.user.entity.User;
+import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -68,6 +70,25 @@ public class RecommendService {
     private static final int    MAX_PAGE_SIZE     = 50;
     private static final String MODEL_NAME        = "gpt-4o-mini";
 
+    // FE(AiPlanInputView.vue themes[].key)에서 보내는 테마 영문 키 → LLM 프롬프트용 한글 의미 매핑.
+    // FE 키가 추가/변경되면 이 표를 함께 갱신해야 한다(매핑 테이블은 BE 단일 소스).
+    private static final Map<String, String> THEME_LABELS = Map.of(
+            "sea",      "바다·해변",
+            "mountain", "산·자연",
+            "food",     "맛집·미식 투어",
+            "history",  "역사·문화 유적",
+            "activity", "액티비티·체험",
+            "shopping", "쇼핑"
+    );
+
+    // 동행 코드(CompanionsType / FE apiVal) → 한글 의미
+    private static final Map<String, String> COMPANION_LABELS = Map.of(
+            "SOLO",    "혼자(솔로 여행)",
+            "COUPLE",  "커플(2명)",
+            "FAMILY",  "가족(아이 동반 가능)",
+            "FRIENDS", "친구(3명 이상)"
+    );
+
     // Lua compare-and-delete: 값이 일치할 때만 삭제 (원자적 해제)
     private static final String LUA_COMPARE_AND_DELETE =
             "if redis.call('get', KEYS[1]) == ARGV[1] then " +
@@ -84,6 +105,7 @@ public class RecommendService {
     private final StringRedisTemplate      stringRedisTemplate;
     private final ChatClient               chatClient;
     private final ObjectMapper             objectMapper;
+    private final UserRepository           userRepository;
 
     // ─────────────────────────────────────────────────────────────
     // 추천 생성
@@ -141,7 +163,10 @@ public class RecommendService {
                     .collect(Collectors.toSet());
 
             // 4. LLM 호출
-            ItineraryDraft draft = callLlm(req, candidates);
+            // 요청 테마가 비어 있으면 저장된 온보딩 취향(preferredInterests)을 프롬프트 테마로 사용한다.
+            // 캐시 해시(serializeRequest)는 req.themes() 원본만 사용하므로 영향 없음.
+            List<String> effectiveThemes = resolveThemes(userId, req.themes());
+            ItineraryDraft draft = callLlm(req, candidates, effectiveThemes);
 
             // 5. 검증
             ItineraryDraft validated = validate(draft, candidateIds, candidates, req.totalDays());
@@ -237,6 +262,14 @@ public class RecommendService {
             return planService.getDetail(userId, rec.getSavedPlanId());
         }
 
+        // 상태 가드: SUCCESS가 아닌(PARTIAL/FAILED) 추천은 저장을 거부한다.
+        // 부분 추천을 사용자 확인 없이 plan으로 굳히지 않도록 방어(어시스턴트 도구도 동일 가드를 둠).
+        if (rec.getStatus() != RecommendStatus.SUCCESS) {
+            log.info("savePlan 거부 — 부분/실패 추천: userId={}, recommendationId={}, status={}",
+                    userId, recommendationId, rec.getStatus());
+            throw new RecommendHandler(ResponseCode.RECO_EMPTY_RESULT);
+        }
+
         if (rec.getResultJson() == null) {
             throw new RecommendHandler(ResponseCode.RECO_EMPTY_RESULT);
         }
@@ -316,7 +349,7 @@ public class RecommendService {
     // 내부: LLM 호출
     // ─────────────────────────────────────────────────────────────
 
-    private ItineraryDraft callLlm(RecommendRequestDto req, List<AttractionItem> candidates) {
+    private ItineraryDraft callLlm(RecommendRequestDto req, List<AttractionItem> candidates, List<String> themes) {
         BeanOutputConverter<ItineraryDraft> converter = new BeanOutputConverter<>(ItineraryDraft.class);
 
         String catalog = candidates.stream()
@@ -328,7 +361,7 @@ public class RecommendService {
                         nvl(i.addr1())))
                 .collect(Collectors.joining("\n"));
 
-        String userPrompt = buildPrompt(req, catalog, converter.getFormat());
+        String userPrompt = buildPrompt(req, catalog, converter.getFormat(), themes);
 
         String raw = chatClient.prompt()
                 .user(userPrompt)
@@ -338,16 +371,20 @@ public class RecommendService {
         return converter.convert(raw);
     }
 
-    private String buildPrompt(RecommendRequestDto req, String catalog, String format) {
+    private String buildPrompt(RecommendRequestDto req, String catalog, String format, List<String> themes) {
         return String.format("""
                 당신은 여행 일정 전문가입니다. 아래 후보 장소 목록에서만 선택하여 %d일 여행 일정을 작성해주세요.
+                여행자의 동행·예산·테마 성향을 분석해 그에 맞는 장소를 우선 배치하고, reason에 선정 이유를 한국어로 적어주세요.
 
                 [여행 조건]
                 - 지역코드: %s
                 - 기간: %s ~ %s (%d일)
                 - 동행: %s
                 - 예산: %s
-                - 테마: %s
+                - 선호 테마: %s
+
+                [테마 반영 지침]
+                위 선호 테마에 부합하는 장소를 우선 선택하고, 동행 유형과 예산 수준에 어울리는 동선으로 구성하세요.
 
                 [후보 장소 목록] (contentId|contentTypeId|title|addr)
                 %s
@@ -364,13 +401,52 @@ public class RecommendService {
                 req.totalDays(),
                 req.areaCode(),
                 req.startDate(), req.endDate(), req.totalDays(),
-                nvl(req.companions()),
-                req.budget() != null ? req.budget() + "원" : "미지정",
-                req.themes() != null ? String.join(", ", req.themes()) : "미지정",
+                describeCompanions(req.companions()),
+                describeBudget(req.budget()),
+                describeThemes(themes),
                 catalog,
                 req.totalDays(),
                 format
         );
+    }
+
+    // 요청 테마가 비어 있으면 저장된 온보딩 취향(User.preferredInterests, 콤마 구분 문자열)을 테마로 사용한다.
+    // 둘 다 비어 있으면 빈 리스트를 반환해 describeThemes가 "미지정"으로 처리하게 한다.
+    private List<String> resolveThemes(Long userId, List<String> requestThemes) {
+        if (requestThemes != null && !requestThemes.isEmpty()) {
+            return requestThemes;
+        }
+        return userRepository.findById(userId)
+                .map(User::getPreferredInterests)
+                .filter(s -> s != null && !s.isBlank())
+                .map(s -> Arrays.stream(s.split(","))
+                        .map(String::trim)
+                        .filter(t -> !t.isEmpty())
+                        .collect(Collectors.toList()))
+                .orElseGet(List::of);
+    }
+
+    // 테마 영문 키 목록을 한글 자연어로 변환 (매핑 없는 키는 원문 유지)
+    private String describeThemes(List<String> themes) {
+        if (themes == null || themes.isEmpty()) {
+            return "미지정";
+        }
+        return themes.stream()
+                .map(t -> THEME_LABELS.getOrDefault(t, t))
+                .collect(Collectors.joining(", "));
+    }
+
+    // 동행 코드를 한글 의미로 변환 (대소문자 무시, 매핑 없으면 원문)
+    private String describeCompanions(String companions) {
+        if (companions == null || companions.isBlank()) {
+            return "미지정";
+        }
+        return COMPANION_LABELS.getOrDefault(companions.toUpperCase(), companions);
+    }
+
+    // 예산을 한글 자연어로 변환
+    private String describeBudget(Integer budget) {
+        return budget != null ? String.format("약 %,d원", budget) : "미지정";
     }
 
     // ─────────────────────────────────────────────────────────────

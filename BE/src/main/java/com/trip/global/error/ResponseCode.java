@@ -73,6 +73,12 @@ public enum ResponseCode {
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMENT404", "존재하지 않는 댓글입니다."),
     HOTPLACE_NOT_FOUND(HttpStatus.NOT_FOUND, "HOTPLACE404", "존재하지 않는 핫플입니다."),
 
+    // Notice Error
+    NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTICE404", "존재하지 않는 공지입니다."),
+
+    // Notification Error
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTI404", "존재하지 않는 알림입니다."),
+
     // File Error
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "FILE500", "파일 업로드에 실패했습니다."),
 
@@ -86,7 +92,10 @@ public enum ResponseCode {
     COMPANION_POST_CLOSED(HttpStatus.BAD_REQUEST, "COMPANION400", "모집이 마감된 동행입니다."),
     COMPANION_SELF_APPLY(HttpStatus.BAD_REQUEST, "COMPANION4001", "본인 게시글에는 신청할 수 없습니다."),
     COMPANION_ALREADY_PROCESSED(HttpStatus.CONFLICT, "COMPANION4092", "이미 처리된 신청입니다."),
-    COMPANION_FULL(HttpStatus.CONFLICT, "COMPANION4093", "정원이 마감되어 더 이상 승인할 수 없습니다.");
+    COMPANION_FULL(HttpStatus.CONFLICT, "COMPANION4093", "정원이 마감되어 더 이상 승인할 수 없습니다."),
+    COMPANION_APPROVED_CANCEL(HttpStatus.CONFLICT, "COMPANION4094", "이미 승인된 신청은 취소할 수 없어요."),
+    COMPANION_DUPLICATE_APPLY(HttpStatus.CONFLICT, "COMPANION4095", "이미 신청이 접수되었어요. 잠시 후 다시 확인해주세요."),
+    COMPANION_CAPACITY_REDUCED_BELOW_CURRENT(HttpStatus.CONFLICT, "COMPANION4096", "현재 참여 인원보다 적은 인원으로는 정원을 줄일 수 없어요.");
 
     private final HttpStatus httpStatus;
     private final String code; // 클라이언트 식별용 코드 (예: "USER404"

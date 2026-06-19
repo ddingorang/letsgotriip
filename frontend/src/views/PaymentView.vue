@@ -39,6 +39,16 @@
     </div>
 
     <div class="scroll-content">
+      <!-- 데모 안내: 실제 PG/예약 BE 연동 없음. 화면 시연용 목업입니다. -->
+      <div class="demo-banner">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <span>데모 화면 — 실제 결제가 이루어지지 않습니다. 표시된 정보는 예시(목업)입니다.</span>
+      </div>
+
       <!-- Booking Info -->
       <div class="section-card">
         <p class="section-title">예약 정보</p>
@@ -114,20 +124,24 @@
     </div>
 
     <!-- Bottom CTA -->
+    <!-- 데모: 실제 결제 API 호출 없이 완료 화면(/confirmation)으로 라우팅만 한다. -->
     <div class="bottom-bar">
       <button class="pay-btn" :disabled="!agreed" @click="$router.push('/confirmation')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
           <line x1="1" y1="10" x2="23" y2="10" />
         </svg>
-        ₩358,000 결제하기
+        ₩358,000 결제(데모)
       </button>
-      <p class="pay-note">SSL 보안 결제 · 개인정보는 안전하게 보호됩니다</p>
+      <p class="pay-note">데모 화면입니다 · 실제 결제·청구가 발생하지 않습니다</p>
     </div>
   </div>
 </template>
 
 <script setup>
+// ⚠️ 데모/목업 화면 — 실제 PG(결제대행) 연동도, 예약 저장 BE 도 없다.
+// 아래 예약 정보·예약자·금액·결제수단은 전부 하드코딩된 시연용 더미 데이터이며,
+// '결제(데모)' 버튼은 결제 API 를 호출하지 않고 /confirmation 으로 이동만 한다.
 import { ref } from 'vue'
 
 const selectedPayment = ref('card')
@@ -291,6 +305,24 @@ const paymentOptions = [
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* 데모 안내 배너 */
+.demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.2px;
+}
+.demo-banner svg {
+  flex-shrink: 0;
 }
 
 /* Section card */

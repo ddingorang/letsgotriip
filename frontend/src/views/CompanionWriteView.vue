@@ -13,6 +13,30 @@
 
     <div class="scroll-content">
       <div class="form-body">
+        <!-- 연결할 계획 (선택) -->
+        <div class="field">
+          <label class="field-label">여행 계획 연결 <span class="optional">(선택)</span></label>
+          <div v-if="plansLoading" class="plan-loading">계획을 불러오는 중…</div>
+          <template v-else>
+            <div v-if="myPlans.length" class="plan-select-list">
+              <button
+                v-for="plan in myPlans"
+                :key="plan.id"
+                :class="['plan-option', { active: form.planId === plan.id }]"
+                @click="selectPlan(plan)"
+              >
+                <div class="plan-option-main">
+                  <span class="plan-option-title">{{ plan.title || '제목 없는 계획' }}</span>
+                  <span v-if="plan.startDate" class="plan-option-date">{{ planDateLabel(plan) }}</span>
+                </div>
+                <svg v-if="form.planId === plan.id" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+            </div>
+            <p v-else class="plan-empty">저장된 여행 계획이 없어요. 계획 없이도 모집할 수 있어요.</p>
+            <button v-if="form.planId" class="plan-clear" @click="clearPlan">연결 해제</button>
+          </template>
+        </div>
+
         <!-- 제목 -->
         <div class="field">
           <label class="field-label">제목 <span class="req">*</span></label>
@@ -32,9 +56,9 @@
         <div class="field">
           <label class="field-label">여행 날짜 <span class="req">*</span></label>
           <div class="date-range-row">
-            <input v-model="form.startDate" type="date" class="field-input date-input" />
+            <input v-model="form.startDate" type="date" class="field-input date-input" :min="todayStr" :max="maxDateStr" />
             <span class="date-sep">~</span>
-            <input v-model="form.endDate" type="date" class="field-input date-input" :min="form.startDate" />
+            <input v-model="form.endDate" type="date" class="field-input date-input" :min="form.startDate || todayStr" :max="maxDateStr" />
           </div>
           <p v-if="computedDuration" class="duration-hint">{{ computedDuration }}</p>
         </div>
@@ -51,6 +75,23 @@
             >
               {{ n }}
             </button>
+          </div>
+        </div>
+
+        <!-- 예상 비용 -->
+        <div class="field">
+          <label class="field-label">예상 비용 (1인)</label>
+          <div class="input-icon-wrap">
+            <input
+              v-model.number="form.estimatedCost"
+              type="number"
+              min="0"
+              step="10000"
+              inputmode="numeric"
+              class="field-input"
+              placeholder="예) 300000"
+            />
+            <span class="cost-unit">원</span>
           </div>
         </div>
 
@@ -96,11 +137,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { planApi } from '@/api/index.js'
 
+const route = useRoute()
 const router = useRouter()
 const companionStore = useCompanionStore()
 const authStore = useAuthStore()
@@ -116,7 +159,52 @@ const form = ref({
   endDate: '',
   maxCount: null,
   description: '',
+  estimatedCost: null,
   tags: [],
+  planId: null,   // 연결할 여행 계획 ID (선택). null이면 미연결
+})
+
+// ── 내 여행 계획 (연결용) ───────────────────────────────────────────────────
+const myPlans = ref([])
+const plansLoading = ref(false)
+
+function planDateLabel(plan) {
+  if (!plan.startDate) return ''
+  return plan.endDate && plan.endDate !== plan.startDate
+    ? `${plan.startDate} ~ ${plan.endDate}`
+    : plan.startDate
+}
+
+// 계획 선택 시 비어 있는 폼 필드를 계획 정보로 채워준다(사용자 입력은 덮어쓰지 않음)
+function selectPlan(plan) {
+  form.value.planId = plan.id
+  if (!form.value.title && plan.title) form.value.title = plan.title
+  if (!form.value.startDate && plan.startDate) form.value.startDate = plan.startDate
+  if (!form.value.endDate && plan.endDate) form.value.endDate = plan.endDate
+}
+
+function clearPlan() {
+  form.value.planId = null
+}
+
+onMounted(async () => {
+  plansLoading.value = true
+  try {
+    const { data } = await planApi.getMyPlans()
+    const items = Array.isArray(data) ? data : (data?.content ?? [])
+    myPlans.value = items
+    // AiResultView 등에서 query.planId 로 넘어온 계획을 자동 선택
+    const presetId = route.query.planId != null ? Number(route.query.planId) : null
+    if (presetId != null && !Number.isNaN(presetId)) {
+      const preset = items.find(p => Number(p.id) === presetId)
+      if (preset) selectPlan(preset)
+      else form.value.planId = presetId // 목록에 없어도 연결 의도는 보존(BE가 소유 검증)
+    }
+  } catch {
+    myPlans.value = []
+  } finally {
+    plansLoading.value = false
+  }
 })
 
 const computedDuration = computed(() => {
@@ -137,6 +225,8 @@ watch(() => form.value.startDate, (newStart) => {
 })
 
 const submitError = ref('')
+const todayStr = new Date().toISOString().slice(0, 10)
+const maxDateStr = new Date(Date.now() + 1000 * 60 * 60 * 24 * 730).toISOString().slice(0, 10) // 오늘+약 2년
 const isValid = computed(() =>
   form.value.title &&
   form.value.location &&
@@ -158,17 +248,37 @@ function parseMax(val) {
   return isNaN(n) ? 4 : n
 }
 
+// 날짜 검증 — 5자리 연도 등 잘못된 값으로 BE LocalDate 파싱(500)이 깨지는 것 방지
+function isSaneDate(s) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+  const d = new Date(s + 'T00:00:00')
+  return !isNaN(d.getTime()) && d.getFullYear() >= 2020 && d.getFullYear() <= 2100
+}
+
 async function submit() {
   if (!isValid.value) return
   submitError.value = ''
+  if (!isSaneDate(form.value.startDate) || !isSaneDate(form.value.endDate)) {
+    submitError.value = '여행 날짜를 올바르게 선택해 주세요 (예: 2026-07-01).'
+    return
+  }
+  if (form.value.endDate < form.value.startDate) {
+    submitError.value = '종료일이 시작일보다 빠를 수 없어요.'
+    return
+  }
   const payload = {
     title: form.value.title,
     region: form.value.location,
     travelDate: form.value.startDate,
     duration: computedDuration.value || '미정',
     maxMembers: parseMax(form.value.maxCount),
-    estimatedCost: 0,
+    estimatedCost: Number.isFinite(form.value.estimatedCost) && form.value.estimatedCost > 0
+      ? Math.trunc(form.value.estimatedCost)
+      : 0,
     description: form.value.description,
+    tags: form.value.tags,
+    // 연결된 계획이 있으면 함께 전송. null이면 BE는 미연결로 처리(하위호환).
+    planId: form.value.planId ?? null,
   }
   try {
     const created = await companionStore.create(payload)
@@ -244,6 +354,13 @@ async function submit() {
   right: 12px;
   pointer-events: none;
 }
+.cost-unit {
+  position: absolute;
+  right: 14px;
+  font-size: 14px;
+  color: var(--color-ink-muted);
+  pointer-events: none;
+}
 
 .field-input {
   width: 100%;
@@ -310,6 +427,53 @@ async function submit() {
   border-color: var(--color-peach);
 }
 .tag-chip { font-size: 13px; }
+
+.optional { color: var(--color-ink-muted); font-weight: 500; font-size: 12px; }
+
+.plan-loading,
+.plan-empty {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  padding: 4px 2px;
+  line-height: 1.5;
+}
+
+.plan-select-list { display: flex; flex-direction: column; gap: 8px; }
+.plan-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.plan-option.active {
+  border-color: var(--color-peach);
+  background: var(--color-peach-light);
+}
+.plan-option-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.plan-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-option-date { font-size: 12px; color: var(--color-ink-muted); }
+.plan-clear {
+  align-self: flex-start;
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+}
 
 .info-banner {
   display: flex;

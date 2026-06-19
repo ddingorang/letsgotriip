@@ -27,14 +27,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             String token = authorizationHeader.substring(7);
 
-            if (jwtUtil.validateToken(token)) {
+            // 서명/만료 검증 + 세션(familyId) 생존 대조.
+            // 재사용 탐지/로그아웃으로 패밀리가 폐기되면 Redis 세션이 삭제되므로,
+            // 이미 발급된 access token이라도 여기서 걸러져 인증되지 않는다(만료 전 무력화).
+            if (jwtUtil.validateToken(token) && jwtUtil.isSessionAlive(token)) {
                 CustomUserInfoDto userInfo = jwtUtil.getUserInfo(token);
                 UserPrincipal userPrincipal = new UserPrincipal(userInfo.userId());
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         userPrincipal,
                         null,
-                        Collections.singletonList(new SimpleGrantedAuthority(userInfo.userRole().name()))
+                        // ROLE_ 접두어 부여 → 향후 hasRole(...) 정합. JWT 클레임(userRole)은 enum name 그대로 유지된다.
+                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + userInfo.userRole().name()))
                 );
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);

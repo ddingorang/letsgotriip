@@ -33,8 +33,12 @@ public class HotPlaceController {
     }
 
     @GetMapping("/{hotPlaceId}")
-    public ResponseEntity<HotPlaceResponse> getHotPlace(@PathVariable Long hotPlaceId) {
-        return ResponseEntity.ok(hotPlaceService.getHotPlace(hotPlaceId));
+    public ResponseEntity<HotPlaceResponse> getHotPlace(
+            @PathVariable Long hotPlaceId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        Long userId = principal != null ? principal.userId() : null;
+        return ResponseEntity.ok(hotPlaceService.getHotPlace(hotPlaceId, userId));
     }
 
     // ─── 등록 신청 (회원) ─────────────────────────────────────
@@ -73,6 +77,11 @@ public class HotPlaceController {
             @AuthenticationPrincipal UserPrincipal principal,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable
     ) {
+        // 보안 매처(hasRole ADMIN)로 인증이 강제되어 principal 은 non-null 이지만,
+        // 안전하게 null 가드를 두어 NPE 대신 401 로 응답한다.
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
         return ResponseEntity.ok(hotPlaceService.getPendingHotPlaces(principal.userId(), pageable));
     }
 

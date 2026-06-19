@@ -45,6 +45,10 @@ dependencies {
 	/* Spring AI (SSAFY GMS — OpenAI 호환) */
 	implementation platform('org.springframework.ai:spring-ai-bom:1.1.2')
 	implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+	/* RAG: Redis(RediSearch) 벡터스토어 + 벡터스토어 어드바이저 + PDF 문서리더 */
+	implementation 'org.springframework.ai:spring-ai-starter-vector-store-redis'
+	implementation 'org.springframework.ai:spring-ai-advisors-vector-store'
+	implementation 'org.springframework.ai:spring-ai-pdf-document-reader'
 
 	/* Swagger (springdoc) */
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.13'

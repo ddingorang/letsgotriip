@@ -41,7 +41,9 @@
 
       <!-- Mini map -->
       <div class="mini-map">
-        <div class="mini-map-bg">
+        <!-- 실좌표 보유 시 카카오 지도, 미보유/로드 실패 시 데코레이션 핀으로 폴백 -->
+        <div v-show="hasCoords && !mapError" ref="mapEl" class="mini-map-el" />
+        <div v-if="!hasCoords || mapError" class="mini-map-bg">
           <div class="mini-map-pin">
             <svg width="24" height="30" viewBox="0 0 30 38" fill="#f78f57">
               <path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 23 15 23S30 25.5 30 15C30 6.716 23.284 0 15 0z" />
@@ -82,7 +84,7 @@
         </svg>
         내 일정에 추가
       </button>
-      <button class="cta-bookmark" :class="{ bookmarked }">
+      <button class="cta-bookmark" :class="{ bookmarked }" :disabled="bookmarkLoading" @click="toggleBookmark">
         <svg width="20" height="20" viewBox="0 0 24 24" :fill="bookmarked ? 'var(--color-peach)' : 'none'" :stroke="bookmarked ? 'var(--color-peach)' : 'var(--color-ink)'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
         </svg>
@@ -92,24 +94,76 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHotplaceStore } from '@/stores/hotplace.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { favoriteApi } from '@/api/index.js'
 
 const route = useRoute()
 const router = useRouter()
 const hotplaceStore = useHotplaceStore()
+const authStore = useAuthStore()
 
 const DEFAULT_HP = {
   id: null, name: '핫플레이스', category: '명소', location: '제주',
   address: '주소 정보 없음', rating: 0, ratingCount: 0,
   intro: '소개 정보가 없습니다.', registrant: '익명', registeredAt: '-',
-  imageUrl: null,
+  imageUrl: null, lat: null, lng: null,
 }
 
 const hp = ref({ ...DEFAULT_HP, id: route.params.id })
 const loading = ref(true)
 const bookmarked = ref(false)
+const bookmarkLoading = ref(false)
+
+// 미니맵용 실좌표 여부
+const mapEl = ref(null)
+const mapError = ref('')
+const hasCoords = computed(() =>
+  Number.isFinite(Number(hp.value.lat)) && Number.isFinite(Number(hp.value.lng)),
+)
+
+const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY
+let miniMap = null
+
+function loadKakao() {
+  if (window.kakao?.maps?.services) return Promise.resolve(window.kakao)
+  if (window.__kakaoMapLoading && !window.kakao?.maps?.services) {
+    window.__kakaoMapLoading = null
+  }
+  if (window.__kakaoMapLoading) return window.__kakaoMapLoading
+  window.__kakaoMapLoading = new Promise((resolve, reject) => {
+    if (!KAKAO_KEY) { reject(new Error('VITE_KAKAO_MAP_KEY 누락')); return }
+    const s = document.createElement('script')
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`
+    s.onload = () => window.kakao.maps.load(() => resolve(window.kakao))
+    s.onerror = () => reject(new Error('Kakao 지도 SDK 로드 실패'))
+    document.head.appendChild(s)
+  })
+  return window.__kakaoMapLoading
+}
+
+// 실좌표로 미니맵 렌더 (마커 표시, 상호작용 최소화)
+async function renderMiniMap() {
+  if (!hasCoords.value) return
+  try {
+    const kakao = await loadKakao()
+    await nextTick()
+    if (!mapEl.value) return
+    const pos = new kakao.maps.LatLng(Number(hp.value.lat), Number(hp.value.lng))
+    miniMap = new kakao.maps.Map(mapEl.value, { center: pos, level: 4 })
+    new kakao.maps.Marker({ position: pos, map: miniMap })
+    miniMap.setZoomable(false)
+    miniMap.setDraggable(false)
+    setTimeout(() => {
+      miniMap?.relayout()
+      miniMap?.setCenter(pos)
+    }, 150)
+  } catch (e) {
+    mapError.value = e.message || '지도를 불러올 수 없습니다.'
+  }
+}
 
 onMounted(async () => {
   try {
@@ -119,6 +173,13 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  await renderMiniMap()
+  // 상세 로드 후 hp.id가 확정되면 초기 찜 상태 수화 (로그인 시)
+  loadBookmark()
+})
+
+onBeforeUnmount(() => {
+  miniMap = null
 })
 
 function share() {
@@ -126,6 +187,40 @@ function share() {
 }
 function addToItinerary() {
   router.push('/plan')
+}
+
+// ── 찜(즐겨찾기) 토글 — 응답 favorited로 갱신, 실패 시 롤백 ────────────────────
+async function toggleBookmark() {
+  if (!authStore.isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  const targetId = hp.value.id
+  if (targetId == null) return
+  const prev = bookmarked.value
+  bookmarked.value = !prev          // 낙관적 갱신
+  bookmarkLoading.value = true
+  try {
+    const { data } = await favoriteApi.toggle('HOTPLACE', targetId)
+    bookmarked.value = !!data?.favorited
+  } catch {
+    bookmarked.value = prev         // 실패 롤백
+  } finally {
+    bookmarkLoading.value = false
+  }
+}
+
+// 초기 찜 상태 수화 — 내 즐겨찾기 목록에 이 핫플이 있으면 표시
+async function loadBookmark() {
+  if (!authStore.isAuthenticated) return
+  const targetId = String(hp.value.id)
+  try {
+    const { data } = await favoriteApi.list('HOTPLACE')
+    bookmarked.value = Array.isArray(data)
+      && data.some((f) => String(f.targetId) === targetId)
+  } catch {
+    bookmarked.value = false
+  }
 }
 </script>
 
@@ -237,6 +332,10 @@ function addToItinerary() {
   margin-bottom: 24px;
   position: relative;
   background: #edf2e8;
+}
+.mini-map-el {
+  width: 100%;
+  height: 100%;
 }
 .mini-map-bg {
   width: 100%;

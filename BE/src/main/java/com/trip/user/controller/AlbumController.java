@@ -74,4 +74,13 @@ public class AlbumController {
         albumService.deleteAlbum(albumId, principal.userId());
         return ResponseEntity.noContent().build();
     }
+
+    /** POST /users/me/albums/{albumId}/share — 공유 토큰 발급(소유자) (G12) */
+    @PostMapping("/{albumId}/share")
+    public ResponseEntity<AlbumShareResponse> shareAlbum(
+            @PathVariable Long albumId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(albumService.share(albumId, principal.userId()));
+    }
 }

@@ -16,7 +16,7 @@ public record SignupRequestDto(
         String email,
 
         @NotBlank
-        @Size(max = 60)
+        @Size(min = 8, max = 60, message = "비밀번호는 8자 이상이어야 합니다.")
         String password,
 
         String profileImageUrl

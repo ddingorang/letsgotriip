@@ -12,14 +12,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @Service
 public class FileStorageService {
 
-    private static final List<String> ALLOWED_TYPES = List.of("image/jpeg", "image/png", "image/webp", "image/gif");
     private static final long MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
     @Value("${app.upload.dir:uploads/community}")
@@ -29,10 +27,10 @@ public class FileStorageService {
     private String urlPrefix;
 
     public String store(MultipartFile file) {
-        validate(file);
+        ImageFileType detected = validate(file);
 
-        String ext = extractExtension(file.getOriginalFilename());
-        String filename = UUID.randomUUID() + "." + ext;
+        // 저장 확장자는 원본 확장자가 아니라 실제 매직바이트로 판별된 타입으로 강제한다.
+        String filename = UUID.randomUUID() + "." + detected.extension();
         Path targetPath = Paths.get(uploadDir).resolve(filename);
 
         try {
@@ -56,22 +54,19 @@ public class FileStorageService {
         }
     }
 
-    private void validate(MultipartFile file) {
+    private ImageFileType validate(MultipartFile file) {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("파일이 비어있습니다.");
         }
         if (file.getSize() > MAX_SIZE) {
             throw new IllegalArgumentException("파일 크기는 10MB를 초과할 수 없습니다.");
         }
-        if (!ALLOWED_TYPES.contains(file.getContentType())) {
+        // Content-Type(클라이언트 조작 가능)은 1차 필터로만 사용하고,
+        // 실제 허용 여부는 매직바이트 검사 결과로 결정한다.
+        ImageFileType detected = ImageFileType.detect(file);
+        if (detected == null) {
             throw new IllegalArgumentException("지원하지 않는 파일 형식입니다. (jpeg, png, webp, gif만 허용)");
         }
-    }
-
-    private String extractExtension(String originalFilename) {
-        if (originalFilename == null || !originalFilename.contains(".")) {
-            return "jpg";
-        }
-        return originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
+        return detected;
     }
 }

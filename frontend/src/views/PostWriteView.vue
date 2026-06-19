@@ -68,7 +68,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { communityApi } from '@/api/index.js'
 import { usePostsStore } from '@/stores/posts.js'
@@ -78,6 +78,9 @@ const router = useRouter()
 const postsStore = usePostsStore()
 const fileInput = ref(null)
 const previewUrl = ref(null)
+// URL.createObjectURL로 만든 미리보기 blob URL — 교체/언마운트 시 해제(revoke)한다.
+const objectUrl = ref(null)
+const uploading = ref(false)
 const tagInput = ref('')
 
 // edit mode: present when route has ?id=<postId>
@@ -110,21 +113,47 @@ const enumCategory = {
   RESTAURANT: '맛집',
 }
 
-const isValid = computed(() => form.value.title.trim() && form.value.content.trim())
+// 업로드 진행 중에는 등록/수정 비활성(미완 이미지로 제출 방지)
+const isValid = computed(() => form.value.title.trim() && form.value.content.trim() && !uploading.value)
 
 function triggerImageUpload() {
   fileInput.value?.click()
 }
 
-function onImageSelect(e) {
+// 이전 미리보기 blob URL 해제
+function revokeObjectUrl() {
+  if (objectUrl.value) {
+    URL.revokeObjectURL(objectUrl.value)
+    objectUrl.value = null
+  }
+}
+
+async function onImageSelect(e) {
   const file = e.target.files[0]
   if (!file) return
-  const reader = new FileReader()
-  reader.onload = (ev) => {
-    previewUrl.value = ev.target.result
-    form.value.imageUrl = ev.target.result
+  // 미리보기는 base64가 아니라 로컬 blob URL로(메모리 효율 + 짧은 본문)
+  revokeObjectUrl()
+  objectUrl.value = URL.createObjectURL(file)
+  previewUrl.value = objectUrl.value
+  // 실제 파일은 즉시 서버에 업로드해 짧은 경로(imageUrl)만 폼에 저장한다.
+  uploading.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await communityApi.uploadImage(fd)
+    form.value.imageUrl = res.data?.imageUrl ?? null
+    if (!form.value.imageUrl) throw new Error('이미지 응답에 imageUrl이 없습니다')
+  } catch {
+    // 업로드 실패를 가짜 성공으로 숨기지 않는다 — 미리보기/폼 이미지를 비우고 알린다.
+    form.value.imageUrl = null
+    revokeObjectUrl()
+    previewUrl.value = null
+    alert('이미지 업로드에 실패했어요. 다시 시도해주세요.')
+  } finally {
+    uploading.value = false
+    // 같은 파일 재선택 시에도 change가 발화하도록 input 값 초기화
+    if (fileInput.value) fileInput.value.value = ''
   }
-  reader.readAsDataURL(file)
 }
 
 function addTag() {
@@ -160,7 +189,8 @@ async function submitPost() {
       await communityApi.createPost(payload)
       router.push('/community')
     } catch {
-      router.push('/community')
+      // 등록 실패를 성공처럼 이동시키지 않고 실패로 노출한다.
+      alert('등록에 실패했어요. 다시 시도해주세요.')
     }
   }
 }
@@ -185,6 +215,11 @@ onMounted(async () => {
   } catch {
     // silently fall through; form stays blank and user can re-enter
   }
+})
+
+// 미리보기 blob URL 누수 방지 — 언마운트 시 해제
+onBeforeUnmount(() => {
+  revokeObjectUrl()
 })
 </script>
 

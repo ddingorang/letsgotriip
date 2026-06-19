@@ -12,4 +12,7 @@ public interface AlbumRepository extends JpaRepository<Album, Long> {
     List<Album> findAllByUserIdOrderByCreatedAtDesc(Long userId);
 
     Optional<Album> findByIdAndUserId(Long id, Long userId);
+
+    /** 공유 토큰으로 앨범 조회 (G12 — 공개 조회) */
+    Optional<Album> findByShareToken(String shareToken);
 }

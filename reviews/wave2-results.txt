@@ -1,0 +1,89 @@
+=== A — 계획/AI BE 검증·자동저장 [done]
+FILES: ['BE/src/main/java/com/trip/plan/dto/PlacesReplaceRequestDto.java', 'BE/src/main/java/com/trip/plan/dto/PlaceItemDto.java', 'BE/src/main/java/com/trip/assistant/AssistantService.java', 'BE/src/main/java/com/trip/recommend/service/RecommendService.java']
+SUMMARY: 스트림 A 두 항목 모두 구현 완료. 소유 4개 파일만 수정.
+
+[#1] replacePlaces 입력 재귀검증 (500→400)
+- PlacesReplaceRequestDto.places에 @Valid 추가 (jakarta.validation.Valid import 추가). 기존 @NotNull은 유지. 컨트롤러 PlanController.java:96이 이미 @Valid @RequestBody로 받으므로 재귀 검증이 실제로 발동함.
+- PlaceItemDto.seq에 @NotNull 추가 (jakarta.validation.constraints.NotNull import 추가). DB NOT NULL 컬럼이므로 null seq 입력이 DataIntegrityViolation 500 대신 검증 400으로 걸림. (PlaceAddRequestDto/PlanUpdateRequestDto의 @NotNull 스타일 그대로 따름.)
+
+[#2] PARTIAL/FAILED 추천 자동저장 방지 — 두 곳 모두에 가드(자연스러운 양쪽 적용)
+- AssistantService.createTravelPlan: process() 결과 reco.status()가 RecommendStatus.SUCCESS가 아니면 savePlan()을 호출하지 않고, "추천 일정이 일부만 구성됐어요... 임의로 저장하지 않았어요. 기간을 줄이거나 지역코드를 바꿔 다시 시도해 주세요." 안내 텍스트를 반환. RecommendStatus import 추가. SUCCESS면 기존대로 저장.
+- RecommendService.savePlan: 방어적 상태 가드 추가 — savedPlanId 멱등 체크 직후, rec.getStatus()가 SUCCESS가 아니면 RecommendHandler(RECO_EMPTY_RESULT)를 던져 저장 거부. RecommendStatus는 이미 import되어 있어 추가 불필요.
+
+참고: RecommendStatus enum은 SUCCESS/PARTIAL/FAILED 3개뿐(COMPLETE 없음)이라 `status != SUCCESS` 가드로 처리. process()는 FAILED면 예외를 던지므로 어시스턴트 도구에 도달하는 비-SUCCESS는 사
+NOTES: 컴파일은 정적 점검만 수행(이 워크트리에 gradle 빌드는 실행하지 않음 — 다른 에이전트가 병렬로 비소유 파일 수정 중이라 전체 빌드는 부정확). 소유 파일 4개의 import/타입/시그니처는 직접 확인 완료. FE는 PARTIAL일 때 더 이상 planId가 반환되지 않고 안내 문구를 받게 되므로, 챗봇 UX상 "다시 시도" 흐름과 자연스럽게 연결됨.
+
+=== B — 홈/탐색 FE [done]
+FILES: ['C:\\Users\\te\\Desktop\\next\\springaitrip\\.claude\\worktrees\\elated-leakey-81a1ee\\frontend\\src\\views\\ExploreView.vue', 'C:\\Users\\te\\Desktop\\next\\springaitrip\\.claude\\worktrees\\elated-leakey-81a1ee\\frontend\\src\\stores\\attraction.js']
+SUMMARY: 스트림 B의 3개 이슈를 소유 파일 2개만 수정해 처리했습니다.
+
+[#3] ExploreView.vue 무한스크롤 센티넬 v-if(약 139행)에서 `&& !searchQuery.trim()` 조건을 제거. 이제 검색 중에도 store.hasMore면 센티넬이 렌더되어 IntersectionObserver가 발화→store.loadMore()로 다음 페이지를 누적 로드합니다. 검색어 변경 시 store.list(forceLoading)이 page를 1로 리셋하므로 페이지네이션 상태도 정상.
+
+[#4] ExploreView.vue mapPlaces computed(약 265행)에서 distance 모드의 `.slice(0, 8)` 제한을 제거하고 항상 `displayedPlaces.value` 전체를 반환하도록 변경. 지도 핀과 하단 시트 목록이 동일 집합이 되어 시트 항목 클릭 시 대응 지도 마커가 항상 존재 → 클릭-지도 불일치 해소. (mapCenter는 그대로 userLoc 기준이라 거리순 줌은 유지)
+
+[#23] attraction.js list() catch 블록: 무조건 MOCK_ATTRACTIONS 폴백을 제거하고 `e.response?.status`로 분기. status가 undefined(네트워크/타임아웃/CORS 등 response 없음) 또는 >=500(5xx)일 때만 console.warn 로깅 후 MOCK 폴백, 그 외 4xx 클라이언트 오류는 빈 배열로 정직하게 표시. 정상 200+빈배열은 애초에 try 경로에서 applyRaw(raw)+hasMore=false로 처리되어 throw되지 않으므로 목업으로 위장되지 않습니다.
+NOTES: 컴파일/문법 점검 완료: 새 import 불필요(console은 전역, computed 기존 import 유지), 타입 불일치 없음, 제거한 mapPlaces 변수/조건에 대한 외부 참조 없음. axios 타임아웃은 e.response 미존재(status===undefined)이므로 의도대로 폴백 분기에 포함됩니다. 다른 에이전트 소유 파일은 건드리지 않았습니다.
+
+=== C — 핫플 모더레이션/검증/보안 [done]
+FILES: ['BE/src/main/java/com/trip/community/service/HotPlaceService.java', 'BE/src/main/java/com/trip/community/dto/HotPlaceCreateRequest.java', 'BE/src/main/java/com/trip/community/controller/HotPlaceController.java', 'BE/src/main/java/com/trip/global/config/SecurityConfig.java', 'frontend/src/views/HotplaceRegisterView.vue']
+SUMMARY: 스트림 C 4개 작업 모두 구현 완료. 소유 5개 파일만 수정.
+
+[#8] HotPlaceService.register(): status(APPROVED) → status(PENDING)로 변경. 신규 등록은 관리자 승인 전까지 PENDING이 되어 공개 목록/지도에 노출되지 않고, approve/reject/getPending 관리자 플로우가 실제로 동작. 주석도 "자동 승인" → "관리자 승인 대기" 정책으로 수정.
+
+[#9] HotPlaceCreateRequest: latitude에 @NotNull @DecimalMin("-90") @DecimalMax("90"), longitude에 @NotNull @DecimalMin("-180") @DecimalMax("180") 추가. jakarta.validation.constraints.DecimalMin/DecimalMax import 추가. 컨트롤러 register()는 이미 @Valid 적용되어 있어 검증이 발동됨.
+
+[#25 보안] SecurityConfig: GET "/community/hotplaces/pending" .hasRole("ADMIN")을 기존 GET "/community/hotplaces","/community/hotplaces/*" permitAll(81줄)보다 "먼저"(80줄) 선언. /community/hotplaces/* 와일드카드가 pending을 삼키지 않도록 순서 보장(/companion/posts/my 패턴과 동일). 추가로 HotPlaceController.getPendingHotPlaces에 principal==null 가드(401 반환) 추가 — ADMIN 매처로 non-null이 보장되지만 방어적으로 NPE 대신 401 노출.
+
+[#10] HotplaceRegisterView.vue: 항상 imageUrls:[]만 보내던 죽은 사진 UI 제거. 숨김 file input(multiple, accept=image/*) + 추가 버튼 + 미리보기 썸네일/삭제 버튼으로 교체. 선택 파일을 FormData로 communityApi.uploadImage()(POST /api/community/images) 업로드 후 받은 imageUrl을 photos
+NOTES: 컴파일은 정적 점검만 수행(빌드는 미실행 — 다른 에이전트가 병렬로 다른 파일 수정 중이라 전체 빌드 부적절). 신규 핫플이 PENDING이 되면서 등록 직후 공개 목록에 즉시 안 보이는 것은 의도된 모더레이션 동작임(관리자 승인 필요). 관리자 승인 UI/플로우 연동은 별도 작업.
+
+=== D — 동행 동시성/취소/네비/검증 [done]
+FILES: ['BE/src/main/java/com/trip/global/error/ResponseCode.java', 'BE/src/main/java/com/trip/companion/service/CompanionService.java', 'BE/src/main/java/com/trip/companion/entity/CompanionPost.java']
+SUMMARY: 스트림 D 4개 이슈를 점검·구현. #11/#12/#13은 이전 웨이브에서 이미 구현되어 있어 정확성만 검증했고, 미구현 상태였던 #14(정원 축소 방지)만 신규 구현했다.
+
+ResponseCode 경로는 com.trip.global.error.ResponseCode (지시문의 .code 패키지가 아님)였으며 해당 enum 파일만 수정했다.
+
+[#11 동시성 — 이미 구현됨, 검증만] CompanionService.approveApplication()은 이미 companionPostRepository.findByIdForUpdate(postId)(@Lock(PESSIMISTIC_WRITE), CompanionPostRepository에 존재)로 post 행을 비관적 잠금한 뒤 한 트랜잭션 내에서 정원 카운트(countByChatRoomId)→멤버십 저장→participationCount 증가→정원 도달 시 자동 마감을 수행한다. saveAndFlush의 unique 충돌도 DataIntegrityViolationException→COMPANION_FULL(409)로 방어. apply()도 동일하게 락으로 직렬화됨. 추가 변경 불필요.
+
+[#12 신청 취소 — 이미 구현됨, 검증만] companion.js에 cancel(postId, applicationId) 액션이 존재(http.delete(`/api/companion/posts/${postId}/applications/${applicationId}`))하며, CompanionDetailView.cancelApply()가 companionStore.cancel(comp.value.id, id)를 실제 호출하고 성공 시 appliedOverride=false 후 getDetail로 재동기화한다. 경로는 CompanionController의 @DeleteMapping("/{postId}/applications/{applicationId}")와 정확히 일치(다른 store 액션들과 동일한 /api 프리픽스). 참고: 액션명이 지시문의 cancelApplication이 아니라 cancel이지만 이미 뷰와 배선되어 동작하므로 변경하지 않음(불필요한 리네이밍 회피).
+
+[#13 채팅 버튼 하드코
+NOTES: 전체 Gradle 빌드는 병렬 작업 중인 다른 에이전트 파일과의 충돌 우려로 실행하지 않고, 변경 범위가 작아 import/타입/메서드 가시성을 수동 검증했다. #11~#13은 이전 수정 웨이브(커밋 1be283e 등)에서 이미 반영되어 있어 본 작업의 실질 변경은 #14에 한정된다. CompanionApplicationRepository/CompanionPostRepository 등 비소유 파일은 읽기만 하고 수정하지 않았다.
+
+=== E — 그룹 N+1 / 스토리 정리 [done]
+FILES: ['BE/src/main/java/com/trip/group/repository/GroupMemberRepository.java', 'BE/src/main/java/com/trip/group/service/GroupService.java', 'frontend/src/views/StoriesView.vue']
+SUMMARY: 스트림 E의 두 작업을 모두 완료했고, BE는 ./gradlew compileJava로 컴파일 성공을 확인했습니다(무관한 WhisperSTTManager의 기존 unchecked 경고만 존재).
+
+[#15 N+1 일괄화] GroupService.list(userId)
+- 기존: findByUserId 후 그룹마다 travelGroupRepository.findById + countByGroupId 호출 → 1+2N 쿼리.
+- 변경: (1) findByUserId로 내 멤버십 조회 후 groupId distinct 수집 → (2) TravelGroupRepository.findAllById(groupIds)로 그룹 본문 1쿼리 조회하여 Map<Long,TravelGroup> 매핑 → (3) GroupMemberRepository에 새로 추가한 집계 @Query countByGroupIdIn(groupIds)로 멤버수 1쿼리 조회하여 Map<Long,Integer> 매핑 → (4) 원래 groupId 순서를 유지하며 GroupResponse.from(group, count) 구성. 총 쿼리 1+2N → 3(findByUserId+findAllById+countByGroupIdIn).
+- 정확성 보존: groupIds.isEmpty() 시 IN () 쿼리를 피하려 즉시 List.of() 반환. 멤버 0인 그룹은 집계 결과에 안 나오므로 getOrDefault(...,0)로 0 처리(원래 동작과 동일하나 멤버십 기반 list 특성상 최소 본인 1명 존재). 삭제 등으로 그룹 본문이 없으면 Objects::nonNull로 건너뜀(기존 Optional.isPresent 필터와 동일 의미). 순서도 기존(내 그룹 ID 순)과 동일.
+- @Query 추가 위치: 멤버 수 집계이므로 GroupMemberRepository가 적합 → List<Object[]> countByGroupIdIn(Collection<Long>) ("select m.groupId, count(m) from GroupMember m where m.groupId in :groupIds group by m.groupId"). 그룹 본문 조회는 JpaRepository 기본 findA
+NOTES: 컴파일 검증: BE/ 에서 ./gradlew compileJava 성공. 무관 파일 WhisperSTTManager의 기존 unchecked note만 출력됨(내 변경과 무관). FE는 빌드 미실행이나 단순 식별자 치환이라 위험 없음. 소유 파일 4개 중 TravelGroupRepository.java는 변경 불필요로 미수정.
+
+=== F — 축제 배치/서비스 정합 [done]
+FILES: ['C:\\Users\\te\\Desktop\\next\\springaitrip\\BE\\src\\main\\java\\com\\trip\\festival\\service\\FestivalService.java', 'C:\\Users\\te\\Desktop\\next\\springaitrip\\BE\\src\\main\\java\\com\\trip\\festival\\batch\\FestivalItemProcessor.java']
+SUMMARY: 스트림 F의 3개 이슈를 소유 파일 2개만 수정해 처리했다.
+
+[#18] FestivalService.getFestivals — FestivalStatus.valueOf(...) 호출을 private parseStatus(String) 헬퍼로 추출하고 try-catch로 감쌌다. 정의되지 않은 status(예: ?status=foo)는 valueOf의 IllegalArgumentException을 잡아 GeneralException(ResponseCode._BAD_REQUEST, "유효하지 않은 행사 상태입니다: ...")로 던진다. GlobalExceptionHandler.handleGeneralException이 ResponseCode의 httpStatus(_BAD_REQUEST=400)로 응답하므로 기존 500이 아닌 400으로 처리된다(기존 GeneralException/Handler 패턴 준수). null/blank status는 기존 hasStatus 분기 그대로 전체 조회로 빠지므로 parseStatus는 값이 있을 때만 호출된다. import에 GeneralException, ResponseCode 추가.
+
+[#20] FestivalItemProcessor — @Slf4j(lombok) 추가. parseDate를 parseDate(contentId, field, s) 시그니처로 바꿔 DateTimeParseException 시 contentId·필드명·원본 문자열을 포함한 log.warn을 남긴다(더 이상 조용히 null 반환 안 함). status 결정 로직에 endDate 파싱 실패 분기를 추가: eventEndDate 원본이 blank가 아닌데 파싱 실패(endDateUnparseable)인 경우, ONGOING으로 위장하지 않는다. 시작일이 미래면 UPCOMING, 그 외 종료일 신뢰 불가 항목은 보수적으로 ENDED로 보류(만료 필터 end_date>=today에서 비노출)하며 log.warn으로 명시한다. FestivalStatus enum에는 UNKNOWN 값이 없고 해당 파일은 비소유라 enum 변경 없이 경고+보수적 보류로 처리(과한 구조 변경 회피).
+
+[#22] FestivalItemProcessor.
+NOTES: 전체 gradle compileJava는 다른 에이전트가 병렬 수정 중인 파일들 때문에 무관한 실패가 날 수 있어 실행하지 않고, 확인된 시그니처(GeneralException 2-arg, ResponseCode._BAD_REQUEST, @Slf4j log)에 대한 정적 점검으로 갈음함. 참고: FestivalStatus enum에 UNKNOWN/보류 상태값이 없어, endDate 파싱 실패 항목을 별도 상태로 구분하지 못하고 보수적으로 ENDED 보류 처리함. 향후 enum에 UNKNOWN 추가가 가능하면 더 정확한 분류가 가능하
+
+=== G — 관광지 캐시 정합 [done]
+FILES: ['C:\\Users\\te\\Desktop\\next\\springaitrip\\BE\\src\\main\\java\\com\\trip\\attraction\\service\\AttractionService.java']
+SUMMARY: 스트림 G 관광지 캐시 정합 완료: #19 빈결과 stale 비저장 + #21 TTL 정합(TTL_SEARCH 10→15분).
+NOTES: 컴파일 점검: 신규 import 불필요(List, log, 기존 직렬화 메서드만 사용). `items.isEmpty()`는 tourApiClient가 null을 반환하면 NPE이나 기존 `serializeItems(items)`도 동일 전제였고 그 NPE는 catch(Exception)에서 stale 폴백으로 흡수되므로 회귀 없음. CacheConfig는 읽기만 했고 수정하지 않음(소유 파일 아님). search() javadoc의 "15분" 표현이 이제 양쪽 캐시와 일치함.
+
+=== H — 공지 메서드/전처리 검증 [done]
+FILES: ['BE/src/main/java/com/trip/notice/controller/NoticeController.java', 'BE/src/main/java/com/trip/preprocessing/controller/PreprocessingController.java']
+SUMMARY: 두 컨트롤러 수정 완료.
+
+[#26] NoticeController 공지 수정 매핑: @PutMapping("/{noticeId}") → @PatchMapping("/{noticeId}")로 변경하여 FE AdminView의 PATCH 요청과 통일(기존 405 해소). 클래스 상단 javadoc 라우팅 표(PUT→PATCH)와 메서드 주석도 갱신. @PatchMapping은 기존 와일드카드 import(org.springframework.web.bind.annotation.*)로 이미 해결되어 추가 import 불필요.
+
+[#27] PreprocessingController.uploadKakaoTalk()/uploadVoiceCall() 진입부에 빈/누락 파일 가드 추가. DocumentController.validate 패턴을 따라 private validateFile(MultipartFile) 헬퍼를 추가하고, file==null||file.isEmpty()이면 GeneralException(ResponseCode._BAD_REQUEST, "업로드할 파일이 비어있습니다.")로 400 거부. 빈 파일에도 200+dataId를 내보내던 false success 제거. import에 com.trip.global.error.GeneralException, com.trip.global.error.ResponseCode 추가. PreprocessingService(소유 밖)는 미변경 — 컨트롤러 가드만 적용.
+
+컴파일 점검: ResponseCode._BAD_REQUEST(=400) 존재 확인, GeneralException(ResponseCode, String) 생성자 존재 확인, 신규 import 모두 실재 패키지. 타입/import 누락 없음.
+NOTES: 소유 파일 2개만 수정. 다른 파일 미변경. DocumentController.validate는 20MB 크기 검증도 하지만 #27 요구사항은 빈/누락 파일 거부에 한정되고 크기 정책은 PreprocessingService(소유 밖) 소관이므로 빈 파일 가드만 추가함.

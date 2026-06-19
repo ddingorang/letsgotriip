@@ -2,6 +2,8 @@ package com.trip.preprocessing.controller;
 
 import com.trip.preprocessing.entity.enums.AnalysisDataType;
 import com.trip.preprocessing.service.PreprocessingService;
+import com.trip.global.error.GeneralException;
+import com.trip.global.error.ResponseCode;
 import com.trip.global.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +28,7 @@ public class PreprocessingController {
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
+        validateFile(file);
         Long dataId = preprocessingService.uploadAndProcess(userPrincipal.userId(), AnalysisDataType.KAKAO_TALK, file);
         return ResponseEntity.ok(dataId);
     }
@@ -35,7 +38,15 @@ public class PreprocessingController {
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
+        validateFile(file);
         Long dataId = preprocessingService.uploadAndProcess(userPrincipal.userId(), AnalysisDataType.VOICE_CALL, file);
         return ResponseEntity.ok(dataId);
+    }
+
+    /** 빈/누락 파일 거부 — 빈 파일에도 200+dataId를 내보내던 false success 방지 */
+    private void validateFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new GeneralException(ResponseCode._BAD_REQUEST, "업로드할 파일이 비어있습니다.");
+        }
     }
 }

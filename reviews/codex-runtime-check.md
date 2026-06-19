@@ -1,0 +1,1 @@
+Ready in `C:\Users\te\Desktop\next\springaitrip\.claude\worktrees\elated-leakey-81a1ee`. Send the task you want handled.

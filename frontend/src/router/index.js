@@ -12,11 +12,15 @@ const router = createRouter({
     // ── Main tab views ────────────────────────────────────────────────────────
     { path: '/home', name: 'home', component: () => import('@/views/HomeView.vue') },
     { path: '/explore', name: 'explore', component: () => import('@/views/ExploreView.vue') },
+    // 통합 검색 — full-screen, no bottom nav
+    { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue'), meta: { tabBar: false } },
 
     // /plan tab — requiresAuth so unauthenticated users go to login first
     { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue'), meta: { requiresAuth: true } },
     // Plan 동선 리포트 — full-screen, no bottom nav
     { path: '/plan/:id/report', name: 'plan-report', component: () => import('@/views/PlanReportView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    // 공유 토큰으로 공개된 계획 상세 — 공개(인증 불필요), full-screen
+    { path: '/plan/shared/:token', name: 'plan-shared', component: () => import('@/views/PlanSharedView.vue'), meta: { tabBar: false } },
 
     // ── Community ─────────────────────────────────────────────────────────────
     { path: '/community', name: 'community', component: () => import('@/views/CommunityView.vue') },
@@ -29,24 +33,42 @@ const router = createRouter({
 
     // ── Companion ─────────────────────────────────────────────────────────────
     { path: '/companion/write', name: 'companion-write', component: () => import('@/views/CompanionWriteView.vue'), meta: { tabBar: false, requiresAuth: true } },
-    { path: '/companion/:id/applicants', name: 'companion-applicants', component: () => import('@/views/CompanionApplicantsView.vue'), meta: { tabBar: false } },
+    { path: '/companion/:id/applicants', name: 'companion-applicants', component: () => import('@/views/CompanionApplicantsView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/companion/:id', name: 'companion-detail', component: () => import('@/views/CompanionDetailView.vue'), meta: { tabBar: false } },
 
     // ── Chat ──────────────────────────────────────────────────────────────────
     { path: '/chat', name: 'chat-list', component: () => import('@/views/ChatRoomListView.vue'), meta: { tabBar: false } },
     { path: '/chat/:id', name: 'chat-room', component: () => import('@/views/ChatRoomView.vue'), meta: { tabBar: false } },
 
+    // ── Assistant (RAG 챗봇) + Documents ───────────────────────────────────────
+    { path: '/assistant', name: 'assistant', component: () => import('@/views/AssistantView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    { path: '/documents', name: 'documents', component: () => import('@/views/DocumentsView.vue'), meta: { tabBar: false, requiresAuth: true } },
+
+    // ── Stories (내 여행 스토리) ────────────────────────────────────────────────
+    { path: '/stories', name: 'stories', component: () => import('@/views/StoriesView.vue'), meta: { requiresAuth: true } },
+
+    // ── Groups (여행 그룹 / 단체할인) ───────────────────────────────────────────
+    { path: '/groups', name: 'groups', component: () => import('@/views/GroupsView.vue'), meta: { requiresAuth: true } },
+
+    // ── Analysis (카톡/음성 업로드 → 전처리) ────────────────────────────────────
+    { path: '/analysis', name: 'analysis', component: () => import('@/views/AnalysisUploadView.vue'), meta: { tabBar: false, requiresAuth: true } },
+
     // ── MyPage ────────────────────────────────────────────────────────────────
     { path: '/mypage', name: 'mypage', component: () => import('@/views/MyPageView.vue'), meta: { requiresAuth: true } },
+    { path: '/notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { tabBar: false, requiresAuth: true } },
     { path: '/mypage/edit', name: 'profile-edit', component: () => import('@/views/ProfileEditView.vue'), meta: { tabBar: false, requiresAuth: true } },
-    { path: '/mypage/challenge', name: 'challenge-detail', component: () => import('@/views/ChallengeDetailView.vue'), meta: { tabBar: false } },
-    { path: '/mypage/album/:id', name: 'album-detail', component: () => import('@/views/AlbumDetailView.vue'), meta: { tabBar: false } },
+    { path: '/mypage/challenge', name: 'challenge-detail', component: () => import('@/views/ChallengeDetailView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    { path: '/mypage/album/:id', name: 'album-detail', component: () => import('@/views/AlbumDetailView.vue'), meta: { tabBar: false, requiresAuth: true } },
+    // 공유 토큰으로 공개된 앨범 — 공개(인증 불필요), full-screen
+    { path: '/album/shared/:token', name: 'album-shared', component: () => import('@/views/AlbumSharedView.vue'), meta: { tabBar: false } },
     { path: '/place/:id', name: 'place-detail', component: () => import('@/views/PlaceDetailView.vue'), meta: { tabBar: false } },
 
     // ── Auth ──────────────────────────────────────────────────────────────────
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { tabBar: false } },
     { path: '/signup', name: 'signup', component: () => import('@/views/SignupView.vue'), meta: { tabBar: false } },
     { path: '/oauth/callback', name: 'oauth-callback', component: () => import('@/views/OAuthCallbackView.vue'), meta: { tabBar: false } },
+    // 비밀번호 재설정 — 공개, full-screen
+    { path: '/password-reset', name: 'password-reset', component: () => import('@/views/PasswordResetView.vue'), meta: { tabBar: false } },
 
     // ── Preference survey ─────────────────────────────────────────────────────
     { path: '/survey', name: 'survey', component: () => import('@/views/PreferenceSurveyView.vue'), meta: { tabBar: false } },
@@ -65,6 +87,9 @@ const router = createRouter({
     // ── Badges / Checklist ────────────────────────────────────────────────────
     { path: '/badges', name: 'badges', component: () => import('@/views/BadgesView.vue'), meta: { requiresAuth: true } },
     { path: '/checklist', name: 'checklist', component: () => import('@/views/ChecklistView.vue'), meta: { requiresAuth: true } },
+
+    // ── Admin (관리자 대시보드) ─────────────────────────────────────────────────
+    { path: '/admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { requiresAuth: true, requiresAdmin: true, tabBar: false } },
   ],
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition
@@ -82,6 +107,11 @@ router.beforeEach(async (to) => {
 
   if (!auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  // ADMIN 역할 게이팅 — 인증됐더라도 관리자만 진입
+  if (to.meta.requiresAdmin && auth.user?.userRole !== 'ADMIN') {
+    return { path: '/mypage' }
   }
   return true
 })

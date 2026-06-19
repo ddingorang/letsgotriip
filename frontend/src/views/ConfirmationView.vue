@@ -8,9 +8,10 @@
             <polyline points="20 6 9 17 4 12" />
           </svg>
         </div>
+        <span class="demo-pill">데모 · 실제 예약 아님</span>
         <h1 class="success-title">예약이 완료되었어요!</h1>
-        <p class="success-sub">예약 확인 이메일을 발송했습니다</p>
-        <div class="booking-no">예약번호 BK202406150023</div>
+        <p class="success-sub">데모 화면입니다 · 실제 예약·결제는 이루어지지 않았습니다</p>
+        <div class="booking-no">예약번호 BK202406150023 (예시)</div>
       </div>
 
       <!-- Ticket card -->
@@ -60,7 +61,7 @@
             </svg>
             홈으로
           </button>
-          <button class="btn-outline">
+          <button class="btn-outline" @click="shareBooking">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="18" cy="5" r="3" />
               <circle cx="6" cy="12" r="3" />
@@ -68,7 +69,7 @@
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
               <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
             </svg>
-            공유하기
+            {{ shareLabel }}
           </button>
         </div>
       </div>
@@ -94,6 +95,33 @@
 </template>
 
 <script setup>
+// ⚠️ 데모/목업 화면 — 실제 예약 저장·결제 BE 연동이 없다.
+// 예약번호/티켓 상세/안내사항은 모두 하드코딩된 시연용 더미 데이터이며,
+// PaymentView 의 '결제(데모)' 버튼이 이 화면으로 라우팅한 결과를 보여줄 뿐이다.
+// 아래 공유 기능도 하드코딩된 예시 텍스트를 공유할 뿐 실제 예약 데이터와 무관하다.
+import { ref } from 'vue'
+
+const shareLabel = ref('공유하기')
+
+async function shareBooking() {
+  const shareData = {
+    title: '관통여행 예약 확정',
+    text: '해운대 오션뷰 호텔 · 예약번호 BK202406150023 — 관통여행에서 예약했어요!',
+    url: window.location.origin,
+  }
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData)
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`)
+      shareLabel.value = '복사됨!'
+      setTimeout(() => (shareLabel.value = '공유하기'), 1500)
+    }
+  } catch {
+    // 사용자가 공유 시트를 취소한 경우 — 무시
+  }
+}
+
 const ticketDetails = [
   { label: '체크인',   value: '2026.06.15 (토)\n15:00 이후' },
   { label: '체크아웃', value: '2026.06.17 (월)\n11:00 이전' },
@@ -161,6 +189,18 @@ const notices = [
   font-size: 13px;
   font-weight: 600;
   color: white;
+}
+/* 데모 표시 배지 */
+.demo-pill {
+  align-self: center;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--radius-full);
+  padding: 4px 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: white;
+  letter-spacing: -0.1px;
 }
 
 /* Ticket */

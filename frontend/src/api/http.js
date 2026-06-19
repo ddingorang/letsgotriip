@@ -1,6 +1,16 @@
 /**
  * Shared axios instance for all backend calls.
- * baseURL '' → Vite dev proxy routes /api, /auth, /users etc. to :9090
+ *
+ * baseURL: import.meta.env.VITE_API_BASE_URL || ''
+ *   - dev: leave VITE_API_BASE_URL unset → baseURL '' → Vite dev proxy routes
+ *     /api, /auth, /users etc. to :9090 (see vite.config.js).
+ *   - prod: set VITE_API_BASE_URL to the BE origin (or a reverse-proxy origin),
+ *     e.g. https://api.example.com — otherwise the built bundle issues requests
+ *     against the static host and every API call 404s (there is no Vite proxy
+ *     in production). See frontend/.env.production.
+ *   NOTE: in prod the reverse proxy must mirror the dev prefix rewrites
+ *   (/api/community → /community, /api/companion → /companion).
+ *
  * withCredentials: true → refresh-token cookie is sent
  *
  * Auth store is accessed lazily (inside interceptors) so this module
@@ -17,7 +27,8 @@ function store() {
 }
 
 export const http = axios.create({
-  baseURL: '',
+  // dev: '' (Vite proxy) · prod: BE origin from .env.production
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   withCredentials: true,
 })
 

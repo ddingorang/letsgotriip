@@ -1,0 +1,22 @@
+# 빌드 컨텍스트에서 제외 — 이미지에 포함되면 안 되는 항목
+build/
+.gradle/
+
+# 시크릿(.env)은 절대 이미지에 넣지 말 것 — compose env로 주입
+.env
+.env.*
+
+# 로그
+*.log
+logs/
+
+# 로컬 업로드물
+uploads/
+
+# 별도 인프라 compose (이미지 빌드와 무관)
+trip-docker/
+
+# IDE / VCS
+.idea/
+.vscode/
+.git/

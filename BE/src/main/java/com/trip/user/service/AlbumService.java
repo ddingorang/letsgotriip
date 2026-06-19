@@ -96,6 +96,30 @@ public class AlbumService {
         return AlbumResponse.of(album, photos);
     }
 
+    /**
+     * 앨범 공유 토큰 발급(소유자 전용). 이미 발급된 경우 기존 토큰을 재사용(idempotent). (G12)
+     */
+    @Transactional
+    public AlbumShareResponse share(Long albumId, Long userId) {
+        Album album = findAlbum(albumId, userId);
+        if (album.getShareToken() == null) {
+            album.markShared(java.util.UUID.randomUUID().toString().replace("-", ""));
+        }
+        return AlbumShareResponse.of(album.getShareToken());
+    }
+
+    /**
+     * 공유 토큰으로 공개 조회(소유 검증 없음). 토큰이 없으면 ALBUM_NOT_FOUND. (G12)
+     */
+    public AlbumResponse getShared(String token) {
+        Album album = albumRepository.findByShareToken(token)
+                .orElseThrow(() -> new GeneralException(ResponseCode.ALBUM_NOT_FOUND));
+        List<AlbumPhotoResponse> photos = albumPhotoRepository
+                .findAllByAlbumIdOrderByDisplayOrderAsc(album.getId()).stream()
+                .map(AlbumPhotoResponse::from).toList();
+        return AlbumResponse.of(album, photos);
+    }
+
     @Transactional
     public void deleteAlbum(Long albumId, Long userId) {
         Album album = findAlbum(albumId, userId);

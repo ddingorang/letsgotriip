@@ -1,8 +1,15 @@
 package com.trip.user.dto;
 
-// TODO: 검증 로직 필요
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
 public record LoginRequestDto(
+
+        @NotBlank
+        @Email
         String email,
+
+        @NotBlank
         String password
 ) {
 }
