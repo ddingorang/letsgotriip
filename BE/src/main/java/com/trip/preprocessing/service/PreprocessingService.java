@@ -7,6 +7,7 @@ import com.trip.preprocessing.entity.UserAnalysisData;
 import com.trip.preprocessing.entity.enums.AnalysisDataType;
 import com.trip.preprocessing.repository.UserAnalysisDataRepository;
 import com.trip.rag.UserDataIndexer;
+import com.trip.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -30,6 +32,8 @@ public class PreprocessingService {
     private final UserAnalysisDataRepository userAnalysisDataRepository;
     private final STTManager sttManager;
     private final UserDataIndexer userDataIndexer;
+    private final TravelPreferenceExtractor travelPreferenceExtractor;
+    private final UserService userService;
 
     private final String uploadDir = "temp_uploads/";
 
@@ -95,6 +99,20 @@ public class PreprocessingService {
                 userDataIndexer.indexAnalysis(analysisData.getUserId(), analysisData.getId(), maskedText);
             } catch (Exception e) {
                 log.warn("분석데이터 RAG 색인 실패 — analysisId={}, error={}",
+                        analysisData.getId(), e.getMessage());
+            }
+
+            // rawText에서 여행 취향 테마 키를 추출해 사용자 preferredInterests에 합집합 병합한다.
+            // 추출/저장 실패가 업로드 트랜잭션을 깨지 않도록 전 과정을 방어적으로 감싼다.
+            try {
+                List<String> themeKeys = travelPreferenceExtractor.extractThemeKeys(maskedText);
+                if (!themeKeys.isEmpty()) {
+                    userService.mergePreferredInterests(analysisData.getUserId(), themeKeys);
+                    log.info("분석데이터에서 취향 자동 반영 — analysisId={}, keys={}",
+                            analysisData.getId(), themeKeys);
+                }
+            } catch (Exception e) {
+                log.warn("분석데이터 취향 추출/반영 실패 — analysisId={}, error={}",
                         analysisData.getId(), e.getMessage());
             }
         }

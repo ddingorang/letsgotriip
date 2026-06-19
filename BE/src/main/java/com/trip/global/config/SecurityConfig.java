@@ -52,9 +52,17 @@ public class SecurityConfig {
                         .requestMatchers("/preprocessing/**").authenticated()
                         // 인증된 사용자라면 수동 동기화 허용
                         .requestMatchers(HttpMethod.POST, "/api/festivals/sync").authenticated()
+                        // 관광지 리뷰 작성/수정/삭제는 인증 필수 (GET 목록은 아래 attractions GET permitAll로 공개)
+                        .requestMatchers(HttpMethod.POST, "/api/attractions/*/reviews").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/attractions/*/reviews/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/attractions/*/reviews/**").authenticated()
                         // 비회원 공개 조회 (탐색 도메인)
                         .requestMatchers(HttpMethod.GET, "/api/festivals/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/attractions/**").permitAll()
+                        // 통합검색 — 비회원 공개 탐색
+                        .requestMatchers(HttpMethod.GET, "/api/search").permitAll()
+                        // 찜(즐겨찾기) — 본인 리소스, 인증 필수
+                        .requestMatchers("/api/favorites/**").authenticated()
                         // 여행 맥락 정보(날씨/충전소/뉴스) — 전부 비회원 공개
                         .requestMatchers("/api/context/**").permitAll()
                         // 공유 토큰으로 계획 공개 조회 (소유 검증 없이 접근, 토큰만으로)

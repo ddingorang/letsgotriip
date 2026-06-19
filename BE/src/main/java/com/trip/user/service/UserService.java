@@ -13,12 +13,14 @@ import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -81,6 +83,43 @@ public class UserService {
                         .collect(Collectors.joining(","));
 
         user.updatePreferences(interests, request.companion());
+    }
+
+    /**
+     * 추출된 관심사 키를 기존 preferredInterests에 합집합으로 병합한다(덮어쓰기 아님).
+     * STT/카카오톡 분석에서 자동 추출된 취향을 온보딩 취향에 누적 반영하는 경로다.
+     * 기존 취향 저장 경로({@link User#updatePreferences})를 그대로 사용하며,
+     * 빈 입력이거나 추가할 새 키가 없으면 아무 변경도 하지 않는다.
+     *
+     * <p>REQUIRES_NEW: 호출자(예: 분석 업로드 트랜잭션) 안에서 호출돼도 별도 트랜잭션으로 격리한다.
+     * 이 메서드에서 예외가 나도 호출자 트랜잭션을 rollback-only로 오염시키지 않아,
+     * 취향 자동 반영 실패가 업로드/저장을 깨뜨리지 않는다.</p>
+     *
+     * @param userId      대상 사용자
+     * @param newInterests 병합할 관심사 키 목록(예: ["food", "sea"])
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void mergePreferredInterests(Long userId, List<String> newInterests) {
+        if (newInterests == null || newInterests.isEmpty()) {
+            return;
+        }
+        User user = findActiveUserById(userId);
+
+        // 기존 값 + 신규 값을 입력 순서 보존 합집합으로 결합(중복 제거)
+        LinkedHashSet<String> merged = new LinkedHashSet<>(splitInterests(user.getPreferredInterests()));
+        int before = merged.size();
+        newInterests.stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(String::trim)
+                .forEach(merged::add);
+
+        // 새로 추가된 키가 없으면 불필요한 갱신을 피한다.
+        if (merged.size() == before) {
+            return;
+        }
+
+        // companion은 null 전달 → 기존 값 유지(취향 저장 경로 재사용)
+        user.updatePreferences(String.join(",", merged), null);
     }
 
     /** 콤마 구분 관심사 문자열을 리스트로 역직렬화. null/빈 값이면 빈 리스트. */

@@ -20,7 +20,10 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
         "com.trip.document.repository",      // TripDocumentRepository (RAG 문서)
         "com.trip.checklist.repository",     // ChecklistItemRepository
         "com.trip.story.repository",         // TravelStoryRepository (여행 전후 스토리 D10)
-        "com.trip.group.repository"          // TravelGroupRepository, GroupMemberRepository (단체할인 D9)
+        "com.trip.group.repository",         // TravelGroupRepository, GroupMemberRepository (단체할인 D9)
+        "com.trip.favorite.repository",      // FavoriteRepository (찜)
+        "com.trip.review.repository",        // AttractionReviewRepository (관광지 리뷰)
+        "com.trip.gamification.repository"   // UserGameStatRepository, EarnedBadgeRepository, UserQuestProgressRepository
 })
 @EnableMongoRepositories(basePackages = {
         "com.trip.chat.repository.mongo"     // ChatMessageRepository
