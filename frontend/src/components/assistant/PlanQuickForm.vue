@@ -150,21 +150,40 @@ const areas = ref([])
 const areasLoading = ref(true)
 const selectedAreaCode = ref('')
 
+const AREA_SHORT = {
+  '1':'서울','2':'인천','3':'대전','4':'대구','5':'광주',
+  '6':'부산','7':'울산','8':'세종',
+  '31':'경기','32':'강원','33':'충북','34':'충남',
+  '35':'경북','36':'경남','37':'전북','38':'전남','39':'제주',
+}
+function shortName(area) {
+  return AREA_SHORT[String(area.code)] ?? area.name
+}
+
 onMounted(async () => {
   try {
     const { data } = await attractionApi.areas()
-    areas.value = (Array.isArray(data) ? data : []).slice(0, 8)
+    areas.value = (Array.isArray(data) ? data : []).map(a => ({ ...a, name: shortName(a) }))
     if (areas.value.length) selectedAreaCode.value = areas.value[0].code
   } catch {
     areas.value = [
-      { code: '1', name: '서울' },
-      { code: '6', name: '부산' },
-      { code: '4', name: '대구' },
-      { code: '2', name: '인천' },
-      { code: '5', name: '광주' },
-      { code: '3', name: '대전' },
-      { code: '7', name: '울산' },
-      { code: '39', name: '제주도' },
+      { code: '1',  name: '서울' },
+      { code: '2',  name: '인천' },
+      { code: '3',  name: '대전' },
+      { code: '4',  name: '대구' },
+      { code: '5',  name: '광주' },
+      { code: '6',  name: '부산' },
+      { code: '7',  name: '울산' },
+      { code: '8',  name: '세종' },
+      { code: '31', name: '경기' },
+      { code: '32', name: '강원' },
+      { code: '33', name: '충북' },
+      { code: '34', name: '충남' },
+      { code: '35', name: '경북' },
+      { code: '36', name: '경남' },
+      { code: '37', name: '전북' },
+      { code: '38', name: '전남' },
+      { code: '39', name: '제주' },
     ]
     selectedAreaCode.value = areas.value[0].code
   } finally {
@@ -370,7 +389,7 @@ function handleSubmit() {
 /* ── 지역 ─────────────────────────────────────────────────────────────────── */
 .region-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
 }
 

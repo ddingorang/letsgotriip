@@ -55,18 +55,12 @@
           언제 떠나세요?
         </div>
         <div class="date-row">
-          <div class="date-picker">
+          <div class="date-picker" :class="{ active: calOpen === 'start' }" @click="openCal('start')">
             <div class="date-picker-label">출발일</div>
-            <input
-              v-model="startDate"
-              type="date"
-              class="date-input"
-              :min="todayStr"
-            />
             <div class="date-picker-value">{{ formatDisplay(startDate) }}</div>
           </div>
           <div class="date-arrow">→</div>
-          <div class="date-picker">
+          <div class="date-picker" :class="{ active: calOpen === 'end' }" @click="openCal('end')">
             <div class="date-picker-label">도착일</div>
             <div class="date-picker-value">{{ formatDisplay(endDate) }}</div>
           </div>
@@ -174,6 +168,63 @@
       </button>
       <p class="ai-btn-sub">조건 확인 후 AI 일정을 생성할 수 있어요</p>
     </div>
+
+    <!-- ── 캘린더 팝업 ──────────────────────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="calOpen" class="cal-backdrop" @click.self="calOpen = null">
+        <div class="cal-popup">
+          <div class="cal-top">
+            <span class="cal-picking">{{ calOpen === 'start' ? '출발일' : '도착일' }} 선택</span>
+            <button class="cal-close" @click="calOpen = null">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="cal-nav">
+            <button class="cal-nav-btn" @click="shiftMonth(-1)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <span class="cal-month-label">{{ calYear }}년 {{ calMonth + 1 }}월</span>
+            <button class="cal-nav-btn" @click="shiftMonth(1)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div class="cal-weekdays">
+            <span v-for="d in ['일','월','화','수','목','금','토']" :key="d">{{ d }}</span>
+          </div>
+          <div class="cal-grid">
+            <button
+              v-for="(cell, i) in calCells"
+              :key="i"
+              class="cal-cell"
+              :class="{
+                empty: !cell,
+                today: cell && fmtDate(cell) === todayStr,
+                start: cell && fmtDate(cell) === startDate,
+                end:   cell && fmtDate(cell) === endDate,
+                inrange: cell && isInRange(cell),
+                disabled: cell && isPastOrInvalid(cell),
+              }"
+              :disabled="!cell || isPastOrInvalid(cell)"
+              @click="cell && pickDate(cell)"
+            >
+              <span v-if="cell">{{ cell.getDate() }}</span>
+            </button>
+          </div>
+          <div class="cal-selected-row">
+            <span class="cal-sel-item">
+              <span class="cal-sel-label">출발</span>
+              <span class="cal-sel-val">{{ formatDisplay(startDate) }}</span>
+            </span>
+            <span class="cal-sel-arrow">→</span>
+            <span class="cal-sel-item">
+              <span class="cal-sel-label">도착</span>
+              <span class="cal-sel-val">{{ formatDisplay(endDate) }}</span>
+            </span>
+            <span class="cal-sel-nights">{{ nights }}박</span>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -195,21 +246,40 @@ const areas = ref([])
 const areasLoading = ref(true)
 const selectedAreaCode = ref('')
 
+const AREA_SHORT = {
+  '1':'서울','2':'인천','3':'대전','4':'대구','5':'광주',
+  '6':'부산','7':'울산','8':'세종',
+  '31':'경기','32':'강원','33':'충북','34':'충남',
+  '35':'경북','36':'경남','37':'전북','38':'전남','39':'제주',
+}
+function shortName(area) {
+  return AREA_SHORT[String(area.code)] ?? area.name
+}
+
 onMounted(async () => {
   try {
     const { data } = await http.get('/api/attractions/areas')
-    areas.value = (Array.isArray(data) ? data : []).slice(0, 8)
+    areas.value = (Array.isArray(data) ? data : []).map(a => ({ ...a, name: shortName(a) }))
     if (areas.value.length) selectedAreaCode.value = areas.value[0].code
   } catch {
     areas.value = [
-      { code: '1', name: '서울' },
-      { code: '6', name: '부산' },
-      { code: '4', name: '대구' },
-      { code: '2', name: '인천' },
-      { code: '5', name: '광주' },
-      { code: '3', name: '대전' },
-      { code: '7', name: '울산' },
-      { code: '39', name: '제주도' },
+      { code: '1',  name: '서울' },
+      { code: '2',  name: '인천' },
+      { code: '3',  name: '대전' },
+      { code: '4',  name: '대구' },
+      { code: '5',  name: '광주' },
+      { code: '6',  name: '부산' },
+      { code: '7',  name: '울산' },
+      { code: '8',  name: '세종' },
+      { code: '31', name: '경기' },
+      { code: '32', name: '강원' },
+      { code: '33', name: '충북' },
+      { code: '34', name: '충남' },
+      { code: '35', name: '경북' },
+      { code: '36', name: '경남' },
+      { code: '37', name: '전북' },
+      { code: '38', name: '전남' },
+      { code: '39', name: '제주' },
     ]
     selectedAreaCode.value = areas.value[0].code
   } finally {
@@ -246,6 +316,62 @@ function formatDisplay(dateStr) {
   const weekdays = ['일', '월', '화', '수', '목', '금', '토']
   const wd = weekdays[d.getDay()]
   return `${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')} (${wd})`
+}
+
+// ── 캘린더 팝업 ───────────────────────────────────────────────────────────────
+const calOpen = ref(null)   // 'start' | 'end' | null
+const calYear = ref(0)
+const calMonth = ref(0)
+
+function openCal(which) {
+  const base = which === 'start' ? new Date(startDate.value) : new Date(endDate.value)
+  calYear.value  = base.getFullYear()
+  calMonth.value = base.getMonth()
+  calOpen.value  = which
+}
+
+function shiftMonth(delta) {
+  let m = calMonth.value + delta
+  let y = calYear.value
+  if (m < 0)  { m = 11; y-- }
+  if (m > 11) { m = 0;  y++ }
+  calMonth.value = m
+  calYear.value  = y
+}
+
+const calCells = computed(() => {
+  const y = calYear.value
+  const m = calMonth.value
+  const firstDow = new Date(y, m, 1).getDay()          // 0=일
+  const daysInMonth = new Date(y, m + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < firstDow; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(y, m, d))
+  return cells
+})
+
+function isPastOrInvalid(date) {
+  const str = fmtDate(date)
+  if (str < todayStr) return true
+  if (calOpen.value === 'end' && str <= startDate.value) return true
+  return false
+}
+
+function isInRange(date) {
+  const str = fmtDate(date)
+  return str > startDate.value && str < endDate.value
+}
+
+function pickDate(date) {
+  const str = fmtDate(date)
+  if (calOpen.value === 'start') {
+    startDate.value = str
+    if (endDate.value <= str) nights.value = 1
+  } else {
+    const diff = Math.round((date - new Date(startDate.value)) / 86400000)
+    if (diff >= 1) nights.value = diff
+  }
+  calOpen.value = null
 }
 
 // ── 동행인 ────────────────────────────────────────────────────────────────────
@@ -506,7 +632,7 @@ function handleNext() {
 
 .region-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
 }
 
@@ -545,6 +671,14 @@ function handleNext() {
   padding: 12px;
   border: 1.5px solid var(--color-line-light);
   position: relative;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.date-picker.active,
+.date-picker:active {
+  border-color: var(--color-peach);
+  background: var(--color-peach-light);
 }
 
 .date-picker-label {
@@ -794,5 +928,199 @@ function handleNext() {
   text-align: center;
   font-size: 12px;
   color: var(--color-ink-muted);
+}
+
+/* ── Calendar popup ──────────────────────────────────────────────────────── */
+.cal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 9999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cal-popup {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-white);
+  border-radius: 20px 20px 0 0;
+  padding: 0 16px 32px;
+  animation: slideUp 0.22s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.cal-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--color-line-light);
+  margin-bottom: 8px;
+}
+
+.cal-picking {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.cal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-ink-secondary);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.cal-nav-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-ink-secondary);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cal-nav-btn:active { background: var(--color-line); }
+
+.cal-month-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+
+.cal-weekdays span {
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  padding: 4px 0;
+}
+
+.cal-weekdays span:first-child { color: #e55; }
+.cal-weekdays span:last-child  { color: #36c; }
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cal-cell.empty {
+  pointer-events: none;
+}
+
+.cal-cell.today {
+  font-weight: 800;
+  color: var(--color-peach);
+}
+
+.cal-cell.start,
+.cal-cell.end {
+  background: var(--color-peach);
+  color: #fff;
+  font-weight: 700;
+}
+
+.cal-cell.inrange {
+  background: var(--color-peach-light);
+  border-radius: 0;
+  color: var(--color-peach-pressed);
+}
+
+.cal-cell.disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.cal-cell:not(.empty):not(.disabled):not(.start):not(.end):hover {
+  background: var(--color-surface);
+}
+
+.cal-selected-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.cal-sel-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.cal-sel-label {
+  font-size: 11px;
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+.cal-sel-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.cal-sel-arrow {
+  color: var(--color-ink-muted);
+  font-size: 14px;
+}
+
+.cal-sel-nights {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-peach);
+  background: var(--color-peach-light);
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  margin-left: 4px;
 }
 </style>

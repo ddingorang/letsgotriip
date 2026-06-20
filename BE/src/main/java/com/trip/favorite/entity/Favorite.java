@@ -40,10 +40,15 @@ public class Favorite extends BaseEntity {
     @Column(name = "target_id", nullable = false, length = 100)
     private String targetId;
 
+    /** 대상 이름 — 찜 등록 시점의 이름을 저장해 목록에서 바로 표시 */
+    @Column(name = "target_name", length = 255)
+    private String targetName;
+
     @Builder
-    public Favorite(Long userId, FavoriteTargetType targetType, String targetId) {
+    public Favorite(Long userId, FavoriteTargetType targetType, String targetId, String targetName) {
         this.userId = userId;
         this.targetType = targetType;
         this.targetId = targetId;
+        this.targetName = targetName;
     }
 }

@@ -201,7 +201,7 @@ async function toggleBookmark() {
   bookmarked.value = !prev          // 낙관적 갱신
   bookmarkLoading.value = true
   try {
-    const { data } = await favoriteApi.toggle('HOTPLACE', targetId)
+    const { data } = await favoriteApi.toggle('HOTPLACE', targetId, hp.value?.name)
     bookmarked.value = !!data?.favorited
   } catch {
     bookmarked.value = prev         // 실패 롤백

@@ -49,6 +49,13 @@ public class AttractionTourApiClient {
     // ──────────────────────────────────────────────
     public List<AttractionItem> fetchAreaBased(String areaCode, String sigunguCode,
                                                String contentTypeId, int pageNo, int numOfRows) {
+        return fetchAreaBased(areaCode, sigunguCode, contentTypeId, pageNo, numOfRows, "A");
+    }
+
+    // arrange: A=제목순, B=조회순(인기), C=수정일순, Q=랜덤(KorService2)
+    public List<AttractionItem> fetchAreaBased(String areaCode, String sigunguCode,
+                                               String contentTypeId, int pageNo, int numOfRows,
+                                               String arrange) {
         AttractionTourApiResponse resp = restClient.get()
                 .uri(uriBuilder -> {
                     var b = uriBuilder
@@ -59,7 +66,7 @@ public class AttractionTourApiClient {
                             .queryParam("MobileOS",      "ETC")
                             .queryParam("MobileApp",     "TripApp")
                             .queryParam("_type",         "json")
-                            .queryParam("arrange",       "A");  // 제목순
+                            .queryParam("arrange",       arrange);
                     if (areaCode    != null && !areaCode.isBlank())    b = b.queryParam("areaCode",    areaCode);
                     if (sigunguCode != null && !sigunguCode.isBlank())  b = b.queryParam("sigunguCode",  sigunguCode);
                     if (contentTypeId != null && !contentTypeId.isBlank()) b = b.queryParam("contentTypeId", contentTypeId);

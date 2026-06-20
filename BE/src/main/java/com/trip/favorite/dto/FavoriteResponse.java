@@ -12,6 +12,7 @@ public record FavoriteResponse(
         Long id,
         FavoriteTargetType targetType,
         String targetId,
+        String targetName,
         LocalDateTime createdAt
 ) {
     public static FavoriteResponse of(Favorite favorite) {
@@ -19,6 +20,7 @@ public record FavoriteResponse(
                 favorite.getId(),
                 favorite.getTargetType(),
                 favorite.getTargetId(),
+                favorite.getTargetName(),
                 favorite.getCreatedAt()
         );
     }

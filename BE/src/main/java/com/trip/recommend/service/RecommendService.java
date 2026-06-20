@@ -304,9 +304,10 @@ public class RecommendService {
         List<AttractionItem> result = new ArrayList<>();
 
         // contentTypeId 12(관광지), 14(문화시설), 39(음식점) × 각 15개
+        // arrange=B(조회순/인기순): 제목순(A) 사용 시 ㄱ으로 시작하는 장소만 후보로 잡히는 문제 방지
         for (String typeId : List.of("12", "14", "39")) {
             try {
-                List<AttractionItem> items = tourApiClient.fetchAreaBased(areaCode, null, typeId, 1, 15);
+                List<AttractionItem> items = tourApiClient.fetchAreaBased(areaCode, null, typeId, 1, 15, "B");
                 result.addAll(items);
             } catch (Exception e) {
                 log.warn("TourAPI fetchAreaBased 실패 — areaCode={}, typeId={}, error={}", areaCode, typeId, e.getMessage());

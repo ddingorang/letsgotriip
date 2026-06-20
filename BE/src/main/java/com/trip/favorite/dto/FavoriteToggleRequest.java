@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotNull;
  */
 public record FavoriteToggleRequest(
         @NotNull FavoriteTargetType targetType,
-        @NotBlank String targetId
+        @NotBlank String targetId,
+        String targetName   // 찜 목록에서 이름을 바로 표시하기 위해 저장 (선택)
 ) {
 }

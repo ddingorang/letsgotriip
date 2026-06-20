@@ -79,7 +79,7 @@ export const reviewApi = {
 // GET    /api/favorites?type=                        → 목록(type 선택 필터)
 // DELETE /api/favorites/{type}/{id}
 export const favoriteApi = {
-  toggle: (targetType, targetId) => http.post('/api/favorites', { targetType, targetId }),
+  toggle: (targetType, targetId, targetName) => http.post('/api/favorites', { targetType, targetId, targetName }),
   list: (type) => http.get('/api/favorites', { params: type ? { type } : undefined }),
   remove: (type, id) => http.delete(`/api/favorites/${type}/${id}`),
 }

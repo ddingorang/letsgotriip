@@ -33,7 +33,7 @@ public class FavoriteController {
             @Valid @RequestBody FavoriteToggleRequest request
     ) {
         boolean favorited = favoriteService.toggle(
-                principal.userId(), request.targetType(), request.targetId());
+                principal.userId(), request.targetType(), request.targetId(), request.targetName());
         return ResponseEntity.ok(new FavoriteToggleResponse(favorited));
     }
 

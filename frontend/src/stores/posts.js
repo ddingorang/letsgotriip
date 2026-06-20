@@ -162,10 +162,10 @@ export const usePostsStore = defineStore('posts', () => {
 
   // 게시글 북마크(찜) 토글 — BE POST /api/favorites { targetType:'POST', targetId } → { favorited: boolean }
   async function bookmarkPost(id) {
-    const res = await favoriteApi.toggle('POST', id)
+    const post = posts.value.find((p) => p.id === id) ?? (currentPost.value?.id === id ? currentPost.value : null)
+    const res = await favoriteApi.toggle('POST', id, post?.title)
     // 응답은 { favorited } 객체다. 객체를 boolean처럼 쓰면 항상 truthy가 되므로 언래핑한다.
     const isBookmarked = res.data.favorited
-    const post = posts.value.find((p) => p.id === id)
     if (post) post.bookmarked = isBookmarked
     if (currentPost.value?.id === id) currentPost.value.bookmarked = isBookmarked
     return isBookmarked

@@ -22,7 +22,7 @@ public class FavoriteService {
      * 즐겨찾기 토글 — 이미 있으면 해제(false), 없으면 추가(true).
      */
     @Transactional
-    public boolean toggle(Long userId, FavoriteTargetType targetType, String targetId) {
+    public boolean toggle(Long userId, FavoriteTargetType targetType, String targetId, String targetName) {
         return favoriteRepository
                 .findByUserIdAndTargetTypeAndTargetId(userId, targetType, targetId)
                 .map(existing -> {
@@ -38,6 +38,7 @@ public class FavoriteService {
                                 .userId(userId)
                                 .targetType(targetType)
                                 .targetId(targetId)
+                                .targetName(targetName)
                                 .build());
                     } catch (DataIntegrityViolationException e) {
                         return true;
