@@ -65,6 +65,14 @@
           </svg>
           <span>{{ place.tel }}</span>
         </div>
+        <div v-if="place?.homepage" class="meta-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+          </svg>
+          <a :href="place.homepage" target="_blank" rel="noopener noreferrer" class="meta-link">{{ place.homepage }}</a>
+        </div>
       </div>
 
       <!-- ── Tags ──────────────────────────────────────────────────────────── -->
@@ -115,6 +123,7 @@
             v-if="place?.lat && place?.lng"
             :places="[place]"
             :numbered="false"
+            :level="6"
           />
           <div v-else class="mini-map-bg" />
         </div>
@@ -599,6 +608,12 @@ onMounted(async () => {
 .hero-img {
   width: 100%;
   height: 100%;
+  overflow: hidden;
+}
+
+.img-wrapper {
+  width: 100%;
+  height: 100%;
 }
 
 .img-wrapper img {
@@ -740,13 +755,22 @@ onMounted(async () => {
   font-size: 13.5px;
   color: var(--color-ink-secondary);
 }
+.meta-link {
+  color: var(--color-peach);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+.meta-link:hover { text-decoration: underline; }
 
 /* ── Tags ─────────────────────────────────────────────────────────────────── */
 .tags-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 20px 16px;
+  padding: 12px 20px 16px;
 }
 
 .place-tag {
@@ -817,7 +841,7 @@ onMounted(async () => {
 }
 
 .mini-map {
-  height: 140px;
+  height: 168px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   position: relative;

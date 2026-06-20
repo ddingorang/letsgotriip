@@ -144,10 +144,11 @@ public class SearchService {
     }
 
     private List<FestivalHit> searchFestivals(String keyword, Pageable limit) {
-        // 미경과(end_date >= today) 행사만, 제목 부분일치로 DB 검색 + 상한
+        // 앞뒤 1개월 이내 시작 + 미경과(end_date >= today) 행사만, 제목 부분일치로 DB 검색 + 상한
+        LocalDate today = LocalDate.now();
         return festivalRepository
-                .findByTitleContainingIgnoreCaseAndEndDateGreaterThanEqualOrderByStartDateAsc(
-                        keyword, LocalDate.now(), limit)
+                .findByTitleContainingIgnoreCaseAndStartDateBetweenAndEndDateGreaterThanEqualOrderByStartDateAsc(
+                        keyword, today.minusMonths(1), today.plusMonths(1), today, limit)
                 .stream()
                 .map(this::toFestivalHit)
                 .toList();

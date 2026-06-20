@@ -14,9 +14,10 @@ const props = defineProps({
   center: { type: Array, default: () => [37.5665, 126.978] }, // 서울시청
   level: { type: Number, default: 9 }, // Kakao zoom level (작을수록 확대)
   numbered: { type: Boolean, default: true },
+  categoryColors: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['select', 'detail'])
+const emit = defineEmits(['select', 'detail', 'move'])
 
 const mapEl = ref(null)
 const error = ref('')
@@ -112,8 +113,10 @@ function renderMarkers(kakao) {
     const pos = new kakao.maps.LatLng(Number(p.lat), Number(p.lng))
     const selected = props.selectedId != null && keyOf(p) === String(props.selectedId)
     const label = props.numbered ? idx + 1 : '•'
+    const color = props.categoryColors[String(p.contentTypeId)] ?? '#F78F57'
     const el = document.createElement('div')
     el.className = 'trip-pin' + (selected ? ' selected' : '')
+    el.style.setProperty('--pin-color', color)
     el.innerHTML = `<span>${label}</span>`
     el.title = p.name || ''
     el.addEventListener('click', () => emit('select', p))
@@ -142,7 +145,7 @@ function renderMarkers(kakao) {
   if (needsFit) {
     if (pts.length === 1) {
       map.setCenter(new kakao.maps.LatLng(Number(pts[0].lat), Number(pts[0].lng)))
-      map.setLevel(4)
+      map.setLevel(props.level)
     } else if (pts.length > 1) {
       map.setBounds(bounds, 40, 40, 40, 40)
     }
@@ -179,6 +182,12 @@ onMounted(async () => {
       level: props.level,
     })
     renderMarkers(kakao)
+
+    kakao.maps.event.addListener(map, 'dragend', () => {
+      const c = map.getCenter()
+      emit('move', { lat: c.getLat(), lng: c.getLng() })
+    })
+
     // 탭 전환/폰트 로드 등으로 컨테이너 크기가 늦게 잡히는 경우 대비 — 재시도
     setTimeout(refresh, 60)
     setTimeout(refresh, 250)
@@ -268,7 +277,7 @@ onBeforeUnmount(() => {
   height: 28px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
-  background: var(--color-primary, #ff7043);
+  background: var(--pin-color, #F78F57);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
@@ -280,11 +289,12 @@ onBeforeUnmount(() => {
   transform: rotate(45deg);
 }
 .trip-pin.selected {
-  background: var(--color-peach-pressed, #e0743a);
+  background: var(--pin-color, #F78F57);
+  filter: brightness(0.85);
   width: 34px;
   height: 34px;
   font-size: 14px;
-  box-shadow: 0 3px 10px rgba(224, 116, 58, 0.5);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
 }
 
 /* 선택된 핀 위 상세보기 말풍선 */

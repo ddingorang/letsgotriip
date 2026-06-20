@@ -54,6 +54,7 @@ public record AttractionTourApiResponse(
             String mapy,   // 위도
             String firstimage,
             String tel,
+            String homepage,  // 웹사이트 — HTML(<a href=...>) 또는 URL 문자열
             String overview
     ) {}
 

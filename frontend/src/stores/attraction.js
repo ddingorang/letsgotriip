@@ -78,6 +78,14 @@ export const CONTENT_TYPE_MAP = {
   39: '음식점',
 }
 
+// TourAPI homepage 필드는 "<a href='...'>...</a>" HTML로 올 수 있으므로 URL만 추출한다.
+function extractUrl(raw) {
+  if (!raw) return ''
+  const match = raw.match(/href=["']([^"']+)["']/i)
+  if (match) return match[1].trim()
+  return raw.replace(/<[^>]*>/g, '').trim()
+}
+
 /**
  * Map a raw TourAPI / BE attraction item → shape PlaceCard + detail view expects.
  *   place.name, place.address, place.imageUrl, place.rating,
@@ -103,6 +111,7 @@ export function mapAttraction(item, rank = null) {
     lng: Number(item.mapx ?? item.lng) || null,
     // extra detail fields
     tel: item.tel ?? '',
+    homepage: extractUrl(item.homepage ?? ''),
     overview: item.overview ?? item.overview2 ?? '',
     category: CONTENT_TYPE_MAP[item.contentTypeId] ?? item.category ?? '관광지',
     contentTypeId: item.contentTypeId ?? null,

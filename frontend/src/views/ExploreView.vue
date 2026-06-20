@@ -31,6 +31,7 @@
         :key="cat.key"
         class="cat-pill"
         :class="{ active: selectedCategory === cat.key }"
+        :style="selectedCategory === cat.key ? { background: CATEGORY_COLORS[cat.key], borderColor: CATEGORY_COLORS[cat.key] } : {}"
         @click="selectCategory(cat.key)"
       >
         {{ cat.label }}
@@ -43,9 +44,14 @@
         :places="mapPlaces"
         :selected-id="selectedPlace?.contentId"
         :center="mapCenter"
+        :category-colors="pinColorMap"
         @select="selectPlace"
         @detail="goDetail"
+        @move="onMapMove"
       />
+      <button v-if="showMapSearchBtn" class="map-search-btn" @click="searchByMapCenter">
+        현 지도에서 검색
+      </button>
     </div>
 
     <!-- ── Bottom sheet ──────────────────────────────────────────────────── -->
@@ -53,7 +59,7 @@
       <div class="sheet-handle" @click="sheetExpanded = !sheetExpanded" />
       <div class="sheet-header">
         <h2 class="sheet-title">
-          {{ sortMode === 'distance' ? '내 주변 관광지' : '관광지' }}
+          {{ sheetTitle }}
           <span class="count">{{ displayedPlaces.length }}</span>
         </h2>
         <button class="sort-btn" :class="{ active: sortMode === 'distance' }" @click="toggleSort">
@@ -212,6 +218,23 @@ const CATEGORIES = [
   { key: '32',   label: '숙박',   contentTypeId: 32   },
 ]
 
+// 카테고리별 핀·칩 색상 (contentTypeId 기준)
+const CATEGORY_COLORS = {
+  all:  '#F78F57', // 브랜드 피치
+  '12': '#5B9BD5', // 관광지 — 스틸 블루
+  '15': '#D45B6A', // 축제 — 코랄 레드
+  '39': '#E8A020', // 음식점 — 웜 앰버
+  '32': '#5BA888', // 숙박 — 세이지 그린
+}
+
+// TripMap에 전달할 contentTypeId → color 맵
+const pinColorMap = {
+  '12': CATEGORY_COLORS['12'],
+  '15': CATEGORY_COLORS['15'],
+  '39': CATEGORY_COLORS['39'],
+  '32': CATEGORY_COLORS['32'],
+}
+
 const PAGE_SIZE = 30   // 거리순 정렬이 의미있도록 후보를 넉넉히 받음
 
 // ── 현재 위치 / 정렬 ─────────────────────────────────────────────────────────
@@ -261,6 +284,30 @@ const mapCenter = computed(() =>
   userLoc.value ? [userLoc.value.lat, userLoc.value.lng] : [37.5665, 126.978],
 )
 
+// 지도 드래그 → 현 지도에서 검색 버튼
+const mapDragCenter = ref(null)
+const showMapSearchBtn = ref(false)
+
+function onMapMove(center) {
+  mapDragCenter.value = center
+  showMapSearchBtn.value = true
+}
+
+function searchByMapCenter() {
+  if (!mapDragCenter.value) return
+  showMapSearchBtn.value = false
+  const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
+  const params = {
+    page: 1,
+    size: PAGE_SIZE,
+    mapX: String(mapDragCenter.value.lng),
+    mapY: String(mapDragCenter.value.lat),
+    radius: 20000,
+    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+  }
+  store.list(params, currentUi(), { forceLoading: true })
+}
+
 // 지도 마커는 항상 시트와 동일한 집합을 표시 — 클릭(목록 row)과 지도 핀 불일치 방지.
 // (거리순일 때도 8개로 자르지 않고 전체를 핀으로 노출)
 const mapPlaces = computed(() => displayedPlaces.value)
@@ -268,6 +315,13 @@ const mapPlaces = computed(() => displayedPlaces.value)
 const sortLabel = computed(() =>
   sortMode.value === 'distance' ? '거리순' : '기본순',
 )
+
+const CATEGORY_LABEL = { all: '플레이스', '12': '관광지', '15': '축제', '39': '음식점', '32': '숙박' }
+
+const sheetTitle = computed(() => {
+  const label = CATEGORY_LABEL[selectedCategory.value] ?? '플레이스'
+  return sortMode.value === 'distance' ? `내 주변 ${label}` : label
+})
 
 function toggleSort() {
   if (sortMode.value === 'distance') {
@@ -319,6 +373,7 @@ function currentUi() {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
+  showMapSearchBtn.value = false
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
   const params = {
@@ -388,6 +443,7 @@ function onSearchInput() {
 
 function clearSearch() {
   searchQuery.value = ''
+  showMapSearchBtn.value = false
   loadAttractions()
 }
 
@@ -521,7 +577,7 @@ onMounted(() => {
 
 /* ── Top bar ──────────────────────────────────────────────────────────────── */
 .top-bar {
-  padding: 12px 16px 0;
+  padding: 52px 16px 0;
   background: var(--color-white);
   z-index: 10;
 }
@@ -574,7 +630,6 @@ onMounted(() => {
 }
 
 .cat-pill.active {
-  background: var(--color-peach);
   color: white;
 }
 
@@ -583,6 +638,23 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   position: relative;
+}
+.map-search-btn {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  background: #fff;
+  border: 1.5px solid var(--color-peach, #f78f57);
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach-pressed, #e0743a);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 /* ── Bottom sheet ─────────────────────────────────────────────────────────── */
@@ -597,7 +669,7 @@ onMounted(() => {
 }
 
 .bottom-sheet.expanded {
-  max-height: 65%;
+  max-height: 50%;
 }
 
 .sheet-handle {

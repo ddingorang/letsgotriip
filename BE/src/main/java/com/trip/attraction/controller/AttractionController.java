@@ -4,10 +4,12 @@ import com.trip.attraction.dto.AttractionSearchRequestDto;
 import com.trip.attraction.dto.AttractionTourApiResponse.AttractionItem;
 import com.trip.attraction.dto.AttractionTourApiResponse.AreaItem;
 import com.trip.attraction.service.AttractionService;
+import com.trip.festival.service.FestivalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -21,6 +23,7 @@ import java.util.List;
 public class AttractionController {
 
     private final AttractionService attractionService;
+    private final FestivalService   festivalService;
 
     /**
      * GET /api/attractions
@@ -38,9 +41,32 @@ public class AttractionController {
             @RequestParam(required = false) String mapY,    // 위도(lat)
             @RequestParam(required = false) Integer radius) {  // 반경(m, 기본 5000)
 
+        // contentTypeId=15(축제)는 날짜 윈도우 필터가 있는 Festival 도메인으로 위임
+        if ("15".equals(contentTypeId)) {
+            return ResponseEntity.ok(festivalService.searchAsItems(keyword, areaCode, mapX, mapY, radius));
+        }
+
         AttractionSearchRequestDto req = new AttractionSearchRequestDto(
                 areaCode, sigunguCode, contentTypeId, keyword, page, size, mapX, mapY, radius);
-        return ResponseEntity.ok(attractionService.search(req));
+        List<AttractionItem> items = attractionService.search(req);
+
+        // 전체 검색(contentTypeId 미지정)일 때 TourAPI가 반환하는 축제(15) 항목은
+        // 날짜 필터가 없으므로 제거 후 Festival 도메인 결과(날짜 윈도우 적용)로 교체.
+        // 총 결과 수가 size를 크게 초과하지 않도록 남은 슬롯만큼만 축제 추가.
+        if (contentTypeId == null || contentTypeId.isBlank()) {
+            List<AttractionItem> nonFestivals = items.stream()
+                    .filter(i -> !"15".equals(i.contentTypeId()))
+                    .toList();
+            int festivalSlots = Math.max(0, size - nonFestivals.size());
+            List<AttractionItem> festivals = festivalService
+                    .searchAsItems(keyword, areaCode, mapX, mapY, radius)
+                    .stream().limit(festivalSlots).toList();
+            List<AttractionItem> merged = new ArrayList<>(nonFestivals);
+            merged.addAll(festivals);
+            return ResponseEntity.ok(merged);
+        }
+
+        return ResponseEntity.ok(items);
     }
 
     /**
