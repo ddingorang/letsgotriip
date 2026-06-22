@@ -17,10 +17,36 @@
     </header>
 
     <div class="scroll-content">
+      <!-- 여행(계획) 선택 — 칩으로 여행별 체크리스트 전환 -->
+      <div class="plan-section">
+        <p class="plan-label">여행 선택</p>
+        <div class="plan-chips">
+          <!-- 전체(여행 미지정) -->
+          <div
+            class="plan-chip"
+            :class="{ active: selectedPlanId == null }"
+            @click="selectPlan(null)"
+          >
+            전체
+          </div>
+          <div
+            v-for="p in plans"
+            :key="p.id"
+            class="plan-chip"
+            :class="{ active: selectedPlanId === p.id }"
+            @click="selectPlan(p.id)"
+          >
+            {{ p.title || '제목 없는 여행' }}
+          </div>
+          <div v-if="plansLoading" class="plan-empty">여행 목록 불러오는 중…</div>
+          <div v-else-if="!plans.length" class="plan-empty">저장된 여행이 없어요</div>
+        </div>
+      </div>
+
       <!-- Progress -->
       <div class="progress-section">
         <div class="progress-header">
-          <span class="progress-label">전체 준비 현황</span>
+          <span class="progress-label">{{ selectedPlanTitle }} 준비 현황</span>
           <span class="progress-count">{{ doneItems }}/{{ totalItems }} 완료</span>
         </div>
         <div class="progress-bar">
@@ -150,15 +176,31 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { checklistApi } from '@/api/index.js'
+import { usePlanStore } from '@/stores/plan.js'
 
 const route = useRoute()
-// /checklist?planId=12 형태로 들어오면 해당 plan 기준으로 동작
-const planId = computed(() => {
-  const raw = route.query.planId
-  if (raw == null || raw === '') return undefined
+
+// ── 여행(계획) 선택 상태 ──────────────────────────────────────────────────────
+// selectedPlanId: null = 전체(여행 미지정 포함), 숫자 = 해당 여행만.
+// /checklist?planId=12 로 들어오면 그 여행을 초기 선택값으로 사용한다.
+const planStore = usePlanStore()
+const { plans } = storeToRefs(planStore)
+const plansLoading = ref(false)
+
+function parsePlanId(raw) {
+  if (raw == null || raw === '') return null
   const n = Number(raw)
-  return Number.isFinite(n) ? n : undefined
+  return Number.isFinite(n) ? n : null
+}
+const selectedPlanId = ref(parsePlanId(route.query.planId))
+
+// 진행 현황 라벨용 — 선택한 여행 제목(미지정이면 "전체")
+const selectedPlanTitle = computed(() => {
+  if (selectedPlanId.value == null) return '전체'
+  const p = plans.value.find((x) => x.id === selectedPlanId.value)
+  return p?.title || '선택한 여행'
 })
 
 const items = ref([])
@@ -215,7 +257,8 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const params = planId.value != null ? { planId: planId.value } : {}
+    // 선택한 여행이 있으면 그 여행 항목만, 없으면 전체 조회
+    const params = selectedPlanId.value != null ? { planId: selectedPlanId.value } : {}
     const [listRes, tplRes] = await Promise.all([
       checklistApi.list(params),
       templates.value.length ? Promise.resolve({ data: templates.value }) : checklistApi.templates(),
@@ -235,9 +278,17 @@ function reload() {
 }
 
 async function refreshItems() {
-  const params = planId.value != null ? { planId: planId.value } : {}
+  const params = selectedPlanId.value != null ? { planId: selectedPlanId.value } : {}
   const { data } = await checklistApi.list(params)
   items.value = data ?? []
+}
+
+// 여행 칩 선택 — 선택 즉시 해당 여행 체크리스트로 갈아끼운다
+function selectPlan(id) {
+  if (selectedPlanId.value === id || loading.value) return
+  selectedPlanId.value = id
+  cancelAdd() // 다른 여행의 입력 행이 남지 않도록 초기화
+  load()
 }
 
 async function toggleItem(item) {
@@ -306,7 +357,7 @@ async function confirmAdd(category) {
       title,
       category: category === FALLBACK_CATEGORY ? null : category,
     }
-    if (planId.value != null) payload.planId = planId.value
+    if (selectedPlanId.value != null) payload.planId = selectedPlanId.value
     const { data } = await checklistApi.create(payload)
     if (data) items.value = [...items.value, data]
     newTitle.value = ''
@@ -328,7 +379,7 @@ async function applyTemplate(tpl) {
   error.value = ''
   try {
     const params = { templateKey: tpl.key }
-    if (planId.value != null) params.planId = planId.value
+    if (selectedPlanId.value != null) params.planId = selectedPlanId.value
     await checklistApi.applyTemplate(params)
     await refreshItems()
   } catch (e) {
@@ -338,7 +389,23 @@ async function applyTemplate(tpl) {
   }
 }
 
-onMounted(load)
+// 여행 목록을 불러와 칩으로 보여준다(이미 로드돼 있으면 재사용).
+async function loadPlans() {
+  if (plans.value.length) return
+  plansLoading.value = true
+  try {
+    await planStore.loadPlans()
+  } catch (e) {
+    // 여행 목록 실패는 체크리스트 본체를 막지 않는다(전체 보기로 동작)
+  } finally {
+    plansLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadPlans()
+  load()
+})
 </script>
 
 <style scoped>
@@ -386,6 +453,52 @@ onMounted(load)
 .scroll-content {
   flex: 1;
   overflow-y: auto;
+}
+
+/* 여행 선택 칩 */
+.plan-section {
+  padding: 14px 20px;
+  background: var(--color-white);
+  border-bottom: 1px solid var(--color-line-light);
+}
+.plan-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.plan-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+.plan-chip {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-ink-secondary);
+  border: 1.5px solid var(--color-line-light);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-chip.active {
+  background: var(--color-peach);
+  color: white;
+  border-color: var(--color-peach);
+}
+.plan-empty {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  padding: 7px 2px;
+  white-space: nowrap;
 }
 
 /* Progress */

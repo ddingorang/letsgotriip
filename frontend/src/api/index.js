@@ -581,4 +581,26 @@ export const analysisApi = {
   },
 }
 
+// ── 여행별 체크리스트 헬퍼 (planId 스코프) ───────────────────────────────────
+// 기존 checklistApi는 그대로 두고, 여행(계획) 단위 조작용 편의 함수만 새로 추가한다.
+// planId가 null/undefined면 "여행 미지정(전체)" 으로 동작한다.
+// 보안: 서버가 planId 소유권을 검증하므로(남의 계획 거부) 프론트는 planId만 전달하면 된다.
+export const planChecklistApi = {
+  // 특정 여행의 체크리스트만 조회. planId 없으면 전체(미지정 포함) 조회.
+  list: (planId) =>
+    http.get('/api/checklists', { params: planId != null ? { planId } : {} }),
+  // 항목 생성 — planId가 있으면 그 여행에 묶어서 생성.
+  create: (title, { category = null, planId = null } = {}) =>
+    http.post('/api/checklists', { title, category, planId }),
+  // 완료/미완료 토글 (소유자만, 서버 검증).
+  toggle: (id) => http.patch(`/api/checklists/${id}/toggle`),
+  // 항목 삭제 (소유자만, 서버 검증).
+  remove: (id) => http.delete(`/api/checklists/${id}`),
+  // 템플릿을 특정 여행에 일괄 적용 — planId 선택.
+  applyTemplate: (templateKey, planId = null) =>
+    http.post('/api/checklists/apply', null, {
+      params: planId != null ? { templateKey, planId } : { templateKey },
+    }),
+}
+
 export default http
