@@ -415,7 +415,9 @@ public class PlanService {
 
     @Transactional
     public PlanDetailResponseDto createFromDraft(Long userId, ItineraryDraft draft, RecommendRequestDto req) {
-        String title = req.areaCode() + " 여행 (" + req.startDate() + " ~ " + req.endDate() + ")";
+        String title = (req.title() != null && !req.title().isBlank())
+                ? req.title()
+                : req.areaCode() + " 여행 (" + req.startDate() + " ~ " + req.endDate() + ")";
 
         CompanionsType companions = null;
         if (req.companions() != null && !req.companions().isBlank()) {

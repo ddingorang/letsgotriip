@@ -67,6 +67,10 @@
         <div v-if="!postsStore.hasMore && postsStore.posts.length > 0" class="end-msg">모든 게시글을 불러왔어요</div>
         <div class="bottom-spacer" />
       </div>
+
+      <button class="fab" @click="$router.push('/community/write')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+      </button>
     </div>
 
     <!-- ② 핫플 -->

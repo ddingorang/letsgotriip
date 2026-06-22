@@ -24,7 +24,9 @@ public record RecommendRequestDto(
 
         Integer budget,
 
-        List<String> themes
+        List<String> themes,
+
+        String title
 ) {
     /**
      * 기간 유효성: startDate <= endDate, 간격 <= 6일 (최대 7일 포함)

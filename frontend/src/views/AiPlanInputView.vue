@@ -18,6 +18,27 @@
     </header>
 
     <div class="scroll-content">
+      <!-- 일정 제목 -->
+      <div class="form-card">
+        <div class="form-card-title">
+          <span class="form-card-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </span>
+          일정 이름
+          <span class="title-hint">(선택)</span>
+        </div>
+        <input
+          v-model="planTitle"
+          type="text"
+          class="title-input"
+          placeholder="예) 제주 여름 힐링 여행"
+          maxlength="50"
+        />
+      </div>
+
       <!-- 지역 -->
       <div class="form-card">
         <div class="form-card-title">
@@ -437,6 +458,9 @@ function toggleTheme(key) {
   else selectedThemes.value.splice(idx, 1)
 }
 
+// ── 일정 제목 ─────────────────────────────────────────────────────────────────
+const planTitle = ref('')
+
 // ── 에러 ──────────────────────────────────────────────────────────────────────
 const localError = ref('')
 
@@ -460,6 +484,7 @@ function handleNext() {
     periodValid: true,
   }
   if (budgetOpt?.value != null) conditions.budget = budgetOpt.value
+  if (planTitle.value.trim()) conditions.title = planTitle.value.trim()
 
   // Pass conditions to /ai via History state so AiInputView can read them
   router.push({ name: 'ai-input', state: { conditions } })
@@ -622,6 +647,29 @@ function handleNext() {
   font-size: 12px;
   font-weight: 400;
   color: var(--color-ink-muted);
+}
+
+/* ── Title input ─────────────────────────────────────────────────────────── */
+.title-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-line-light);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--color-ink);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.title-input::placeholder {
+  color: var(--color-ink-muted);
+}
+
+.title-input:focus {
+  border-color: var(--color-peach);
 }
 
 /* ── Region grid ─────────────────────────────────────────────────────────── */
