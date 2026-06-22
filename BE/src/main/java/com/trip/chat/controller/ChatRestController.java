@@ -7,6 +7,7 @@ import com.trip.chat.entity.enums.MessageType;
 import com.trip.chat.repository.mongo.ChatMessageRepository;
 import com.trip.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +16,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// chat.enabled=true 일 때는 ChatHistoryController 가 이 경로를 담당한다(인증 포함).
+// chat 기능이 비활성화된 경우에만 이 컨트롤러를 로드해 URL 충돌을 방지한다.
+@ConditionalOnProperty(name = "chat.enabled", havingValue = "false")
 @RestController
 @RequestMapping("/api/chat")
 @RequiredArgsConstructor
