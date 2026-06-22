@@ -148,6 +148,29 @@ public class PlanService {
         return PlanCompareResponseDto.of(a, b);
     }
 
+    /**
+     * N개 계획 비교(모두 요청자 본인 소유여야 함, 아니면 PLAN_FORBIDDEN).
+     * 중복 id는 제거하고 요청 순서를 유지한다. 유효 id가 2개 미만이면 PLAN_COMPARE_BAD_REQUEST.
+     */
+    public PlanCompareResponseDto.PlanCompareListResponseDto compareMany(Long userId, List<Long> ids) {
+        // null 방어 + 중복 제거(요청 순서 유지)
+        List<Long> distinctIds = (ids == null ? List.<Long>of() : ids).stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (distinctIds.size() < 2) {
+            throw new PlanHandler(ResponseCode.PLAN_COMPARE_BAD_REQUEST);
+        }
+        List<TripPlan> plans = distinctIds.stream()
+                .map(id -> {
+                    TripPlan p = findPlanWithDays(id);
+                    verifyOwner(p, userId);   // 남의 계획이 섞이면 즉시 거부
+                    return p;
+                })
+                .toList();
+        return PlanCompareResponseDto.PlanCompareListResponseDto.of(plans);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // 예산 — 카테고리 기반 추정(데모)
     // ─────────────────────────────────────────────────────────────

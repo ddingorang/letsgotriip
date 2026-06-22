@@ -347,7 +347,10 @@ public class CompanionService {
     }
 
     public List<MyCompanionRoomResponse> getMyRooms(Long userId) {
-        List<ChatRoomMembership> memberships = chatRoomMembershipRepository.findByUserId(userId);
+        List<ChatRoomMembership> memberships = chatRoomMembershipRepository.findByUserId(userId)
+                .stream()
+                .filter(ChatRoomMembership::isActiveMember)
+                .toList();
         List<Long> chatRoomIds = memberships.stream()
                 .map(m -> m.getChatRoom().getId())
                 .toList();

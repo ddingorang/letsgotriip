@@ -60,6 +60,7 @@ public enum ResponseCode {
     PLAN_VERSION_CONFLICT(HttpStatus.CONFLICT, "PLAN4092", "여행 계획이 다른 세션에서 수정되었습니다. 최신 버전을 다시 조회해주세요."),
     DUPLICATE_PLACE(HttpStatus.CONFLICT, "PLAN4093", "해당 일자에 이미 추가된 장소입니다."),
     INVALID_PLAN_PERIOD(HttpStatus.BAD_REQUEST, "PLAN400", "여행 기간이 유효하지 않습니다. 시작일은 종료일보다 이전이어야 하며 최대 14일입니다."),
+    PLAN_COMPARE_BAD_REQUEST(HttpStatus.BAD_REQUEST, "PLAN4001", "비교할 계획을 2개 이상 선택해주세요."),
 
     // Recommend Error
     RECO_NOT_FOUND(HttpStatus.NOT_FOUND, "RECO404", "존재하지 않는 추천 결과입니다."),

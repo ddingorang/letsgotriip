@@ -323,12 +323,12 @@ const documentsStore = useDocumentsStore()
 const msgScroll = ref(null)
 const inputText = ref('')
 
-// PlanView 의 "챗봇으로 수정"에서 진입 시(?planId=N) 입력창에 시드 메시지를 채운다.
-// 자동 전송하지 않고 사용자가 확인 후 보내도록 한다.
+// PlanView 의 "이 계획을 챗봇과 다듬기"에서 진입 시(?planId=N) 입력창에 시드 메시지를 채운다.
+// 자동 전송하지 않고 사용자가 확인 후 보내도록 한다(프리필 정도).
 onMounted(() => {
   const planId = route.query.planId
   if (planId != null && String(planId).trim() !== '' && !inputText.value) {
-    inputText.value = `내 계획(#${planId})을 수정/평가하고 싶어`
+    inputText.value = `내 여행 계획(planId: ${planId})을 다듬고 싶어요. 동선·일정을 살펴보고 개선점을 제안해줘.`
   }
 })
 
