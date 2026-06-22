@@ -581,19 +581,24 @@ function onSearchInput() {
 function clearSearch() {
   searchQuery.value = ''
   showMapSearchBtn.value = false
-  mapFit.value = true
-  loadAttractions()
+  loadAttractions() // 현 지도 영역 기준으로 재조회(카메라 유지 여부는 loadAttractions가 결정)
 }
 
 function loadAttractions() {
-  mapFit.value = true
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
-  const params = {
-    page: 1,
-    size: PAGE_SIZE,
-    ...locParams(),
-    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+  const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+
+  // 현재 보고 있는 지도 영역이 있으면 그 '크기'(반경) 기준으로 조회하고 카메라를 고정한다.
+  // (확대했는데도 고정 20km로 검색되던 문제 해결 — 검색은 항상 현 지도 영역 기준)
+  if (mapDragCenter.value) {
+    mapFit.value = false
+    store.list(mapAreaParams(ct), currentUi())
+    return
   }
+
+  // 지도 영역 미확정(최초 진입) — 위치 기준 + 결과에 맞춰 카메라 fit.
+  mapFit.value = true
+  const params = { page: 1, size: PAGE_SIZE, ...locParams(), ...ct }
   store.list(params, currentUi())
 }
 
