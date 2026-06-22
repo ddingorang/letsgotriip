@@ -15,6 +15,7 @@ const props = defineProps({
   level: { type: Number, default: 9 }, // Kakao zoom level (작을수록 확대)
   numbered: { type: Boolean, default: true },
   categoryColors: { type: Object, default: () => ({}) },
+  fit: { type: Boolean, default: true }, // false면 places 변경 시 카메라 재설정 안 함
 })
 
 const emit = defineEmits(['select', 'detail', 'move'])
@@ -185,7 +186,12 @@ onMounted(async () => {
 
     kakao.maps.event.addListener(map, 'dragend', () => {
       const c = map.getCenter()
-      emit('move', { lat: c.getLat(), lng: c.getLng() })
+      emit('move', { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() })
+    })
+
+    kakao.maps.event.addListener(map, 'zoom_changed', () => {
+      const c = map.getCenter()
+      emit('move', { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() })
     })
 
     // 탭 전환/폰트 로드 등으로 컨테이너 크기가 늦게 잡히는 경우 대비 — 재시도
@@ -212,10 +218,11 @@ onMounted(async () => {
     }
 
     // 장소 목록이 바뀌면(검색/카테고리/거리순) 전체 bounds 로 다시 맞춘다.
+    // fit=false(현 지도에서 검색)이면 카메라를 그대로 유지한다.
     watch(
       () => props.places,
       () => {
-        needsFit = true
+        needsFit = props.fit
         renderMarkers(kakao)
       },
       { deep: true },
