@@ -129,13 +129,21 @@ public class PlanController {
         return ResponseEntity.ok(planService.getShared(token));
     }
 
-    /** GET /api/plans/compare?aId&bId — 두 계획 비교(소유자) */
+    /** GET /api/plans/compare?aId&bId — 두 계획 비교(소유자, 레거시 2개 호환) */
     @GetMapping("/compare")
     public ResponseEntity<PlanCompareResponseDto> compare(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam Long aId,
             @RequestParam Long bId) {
         return ResponseEntity.ok(planService.compare(principal.userId(), aId, bId));
+    }
+
+    /** GET /api/plans/compare-many?ids=1,2,3 — N개 계획 비교(모두 소유자 검증) */
+    @GetMapping("/compare-many")
+    public ResponseEntity<PlanCompareResponseDto.PlanCompareListResponseDto> compareMany(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("ids") java.util.List<Long> ids) {
+        return ResponseEntity.ok(planService.compareMany(principal.userId(), ids));
     }
 
     /** GET /api/plans/{planId}/budget — 카테고리 기반 예산 추정(소유자) */

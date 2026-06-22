@@ -219,8 +219,13 @@ export const planApi = {
   share: (planId) => http.post(`/api/plans/${planId}/share`),
   // 공유 토큰으로 공개 조회 (인증 불필요) → PlanDetailResponseDto
   getShared: (token) => http.get(`/api/plans/shared/${token}`),
-  // 두 계획 비교 (소유자) → PlanCompareResponseDto
+  // 두 계획 비교 (소유자) → PlanCompareResponseDto (레거시 2개 호환)
   compare: (aId, bId) => http.get('/api/plans/compare', { params: { aId, bId } }),
+  // N개 계획 비교 (소유자) → { plans: PlanStat[] }. ids는 배열 → ids=1,2,3 쿼리로 직렬화
+  compareMany: (ids) =>
+    http.get('/api/plans/compare-many', {
+      params: { ids: (ids ?? []).join(',') },
+    }),
   // 예산 추정 (소유자) → 일자별/총 예산
   getBudget: (planId) => http.get(`/api/plans/${planId}/budget`),
   // 일자별 자동차 도로 경로 (카카오 길찾기) → { planId, enabled, days:[{dayNo, distanceMeters, durationSeconds, taxiFare, tollFare, path:[[lat,lng],...]}] }
