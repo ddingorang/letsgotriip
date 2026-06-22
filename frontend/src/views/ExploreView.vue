@@ -395,13 +395,10 @@ function onMapMove(center) {
   showMapSearchBtn.value = true
 }
 
-function searchByMapCenter() {
-  if (!mapDragCenter.value) return
-  showMapSearchBtn.value = false
-  mapFit.value = false
-  const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
+// 현재 보고 있는 지도 영역 기준 조회 파라미터 — 중심 + '크기'(중심~북동 모서리 반경 m).
+// bounds 가 없으면(구형 SDK) 줌레벨로 반경을 근사한다.
+function mapAreaParams(extra = {}) {
   const c = mapDragCenter.value
-  // 현 지도 '크기' 기준 반경 — 중심에서 북동 모서리까지 거리(m). bounds 없으면 줌레벨 근사.
   let radius
   if (c.neLat != null && c.neLng != null) {
     radius = Math.round(distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.neLat, lng: c.neLng }) * 1000)
@@ -409,15 +406,23 @@ function searchByMapCenter() {
   } else {
     radius = ZOOM_RADIUS[c.level ?? 9] ?? 20000
   }
-  const params = {
+  return {
     page: 1,
     size: PAGE_SIZE,
-    mapX: String(mapDragCenter.value.lng),
-    mapY: String(mapDragCenter.value.lat),
+    mapX: String(c.lng),
+    mapY: String(c.lat),
     radius,
-    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+    ...extra,
   }
-  store.list(params, currentUi(), { forceLoading: true })
+}
+
+function searchByMapCenter() {
+  if (!mapDragCenter.value) return
+  showMapSearchBtn.value = false
+  mapFit.value = false
+  const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
+  const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+  store.list(mapAreaParams(ct), currentUi(), { forceLoading: true })
 }
 
 // 지도 마커는 항상 시트와 동일한 집합을 표시 — 클릭(목록 row)과 지도 핀 불일치 방지.
@@ -499,15 +504,21 @@ function currentUi() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
   showMapSearchBtn.value = false
-  mapFit.value = true
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
-  const params = {
-    page: 1,
-    size: PAGE_SIZE,
-    ...locParams(),
-    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+  const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+
+  // 사용자가 정한 지도 영역이 우선 — 분류를 바꿔도 카메라를 결과에 맞춰 재조정하지 않고
+  // 현재 보고 있는 지도 영역(크기) 안에서만 다시 조회한다.
+  if (mapDragCenter.value) {
+    mapFit.value = false // 결과에 맞춰 줌/이동하지 않음(지도 크기 유지)
+    store.list(mapAreaParams(ct), currentUi(), { forceLoading: true })
+    return
   }
+
+  // 아직 지도를 움직인 적이 없으면(영역 미확정) 위치 기준 + 결과에 맞춰 카메라 fit.
+  mapFit.value = true
+  const params = { page: 1, size: PAGE_SIZE, ...locParams(), ...ct }
   // 카테고리 전환은 결과가 반드시 바뀌어야 하므로 즉시 로딩 표시(forceLoading)
   store.list(params, currentUi(), { forceLoading: true })
 }
