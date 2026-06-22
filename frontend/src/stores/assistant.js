@@ -25,7 +25,8 @@ export const useAssistantStore = defineStore('assistant', () => {
   // ── 개인화(메모리) 설정 — 챗봇이 내 기록을 얼마나 참고할지 ──────────────────────
   // localStorage 영속. 매 요청 body.memory 로 전송. 서버는 userId 기준으로만 조회(보안).
   const MEM_KEY = 'triip.assistantMemory'
-  const DEFAULT_MEM = { useRecords: true, plans: true, favorites: true, reviews: true, stories: true, recall: true }
+  // planIds: 활용할 계획 화이트리스트(빈 배열이면 전체). 'plans'가 켜진 경우에만 의미.
+  const DEFAULT_MEM = { useRecords: true, plans: true, favorites: true, reviews: true, stories: true, recall: true, planIds: [] }
   function loadMem() {
     try {
       const raw = localStorage.getItem(MEM_KEY)

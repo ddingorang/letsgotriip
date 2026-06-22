@@ -252,7 +252,7 @@ public class AssistantService {
     private ChatClient.ChatClientRequestSpec buildPrompt(Long userId, String conversationId, String message,
                                                          MemoryPrefs prefs) {
         if (prefs == null) {
-            prefs = new MemoryPrefs(true, true, true, true, true, true);
+            prefs = new MemoryPrefs(true, true, true, true, true, true, null);
         }
 
         // 대화 기억(윈도우)은 항상 유지 — 멀티턴 대화의 기본. userId로 키 격리.
@@ -647,9 +647,15 @@ public class AssistantService {
         public String getMyTravelPlans() {
             if (!prefs.wantPlans()) return OFF;
             try {
-                Page<PlanSummaryResponseDto> plans = planService.getMyPlans(userId, 0, 10);
-                if (plans.isEmpty()) return "저장된 여행 계획이 없습니다.";
-                return plans.getContent().stream()
+                Page<PlanSummaryResponseDto> plans = planService.getMyPlans(userId, 0, 30);
+                // 계획 화이트리스트(설정에서 선택)가 있으면 그 계획만. 비어있으면 전체.
+                // userId 소유 결과에서만 필터하므로 소유권은 그대로 보장된다.
+                java.util.List<Long> allow = prefs.planIdsOrEmpty();
+                var list = plans.getContent().stream()
+                        .filter(p -> allow.isEmpty() || allow.contains(p.id()))
+                        .toList();
+                if (list.isEmpty()) return "조회할 여행 계획이 없습니다.";
+                return list.stream()
                         .map(p -> "- planId=" + p.id() + " | " + nvl(p.title())
                                 + " (" + p.startDate() + " ~ " + p.endDate() + ")")
                         .collect(Collectors.joining("\n"));
