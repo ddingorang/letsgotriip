@@ -263,6 +263,7 @@
                 <div class="map-actions">
                   <span v-if="currentDaySummary" class="route-summary">
                     {{ selectedDay }}일차 · 차량 {{ currentDaySummary.distanceKm }}km · 약 {{ currentDaySummary.durationMin }}분
+                    <span v-if="currentDayPartial" class="route-partial">· 일부 구간 직선 근사</span>
                   </span>
                   <span v-else-if="routePathLoading" class="route-summary muted">경로 계산 중…</span>
                   <span v-else-if="currentDayDashed" class="route-summary muted">{{ selectedDay }}일차 · 직선 동선(도로경로 없음)</span>
@@ -973,6 +974,14 @@ const currentDayLine = computed(() => {
 const currentDayDashed = computed(
   () => currentDayPath.value.length < 2 && currentDayPlaces.value.length >= 2,
 )
+// 도로경로는 있지만 일부 구간이 직선 근사(비도로 폴백)인 경우 — 서버 partial 플래그.
+// 실제 도로로 오인하지 않도록 안내 문구를 띄운다(정직성).
+const currentDayPartial = computed(() => {
+  const rp = routePath.value
+  if (!rp || rp.planId !== selectedPlanId.value || !rp.enabled) return false
+  const day = (rp.days ?? []).find((d) => d.dayNo === selectedDay.value)
+  return !!day?.partial && currentDayPath.value.length >= 2
+})
 
 // 선택한 일차의 차량 거리/시간 요약. 경로 없으면 null.
 const currentDaySummary = computed(() => {
@@ -2162,6 +2171,12 @@ async function removePlace(planId, dayNo, place) {
 }
 
 .route-summary.muted {
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
+/* 일부 구간 직선 근사 안내 — 실제 도로로 오인하지 않도록 옅게 강조 */
+.route-partial {
   color: var(--color-ink-muted);
   font-weight: 500;
 }

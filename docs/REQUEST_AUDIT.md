@@ -129,7 +129,20 @@
 | R10 | mapDragCenter 자동fit 발화로 비명시 영역조회 | ➖ 의도부합 | 사용자가 "현 지도 기준 조회"를 명시 요청 → 자동fit 후 그 영역 조회는 의도와 일치 |
 
 ### 우선순위(코덱스 Top3, 내 코멘트 반영)
-1. **AI 도구 권한 경계** (R1+R6) — 화이트리스트를 planId 기반 모든 도구에 확장 + 상태변경 서버 확인. → 설계 판단 필요(사용자 의도 확인)
-2. **기록/PII 최소화** (R2+R9) — prefs null 기본값을 비허용으로, LLM 전달 필드 축소. → 빠른 방어 가능
-3. **동선 폴백 안정화** (R3+R4+R5) — 30개 절단 표면화·폴백 캐시 TTL·구간 상태 표시. → 실결함, 우선 수정 권장
+1. **AI 도구 권한 경계** (R1+R6) — 화이트리스트를 planId 기반 모든 도구에 확장 + 상태변경 서버 확인.
+2. **기록/PII 최소화** (R2+R9) — prefs null 기본값을 비허용으로, LLM 전달 필드 축소.
+3. **동선 폴백 안정화** (R3+R4+R5) — 30개 절단 표면화·폴백 캐시 TTL·구간 상태 표시.
+
+### 조치 결과(이번 작업에서 수정·배포 완료)
+| 항목 | 조치 | 위치 |
+|---|------|------|
+| **R1** | planIds 화이트리스트를 액션 도구(평가/추가/삭제/체크리스트) 전체에 확장 — 선택 안 한 계획은 조회·수정 차단 | `AssistantService.AssistantTools.planAllowed` |
+| **R2** | 서버 측 `memory==null` 기본값을 전체 허용→**전체 비허용**(opt-in). 프런트 사용자 기본값(all-ON)은 유지 | `AssistantChatRequest.memoryOrDefault`, `AssistantService.buildPrompt` |
+| **R3** | 30포인트 초과 시 `log.warn` + `fallback=true`(조용한 절단 제거) | `KakaoDirectionsClient.route/routeStitched` |
+| **R4** | `RouteResult.fallback` 추적 → 근사 포함 시 DB 영속 보류·Redis 단기(10분)로 카카오 회복 시 재계산 | `KakaoDirectionsClient`, `PlanService.getRoutePath` |
+| **R5** | `DayPath.partial` 플래그 → 지도 요약에 "일부 구간 직선 근사" 안내 | `RoutePathResponseDto`, `PlanView.vue` |
+| **R6** | (부분) 화이트리스트가 서버 측 변경 경계를 제공. 도구별 **명시 confirm/intent 토큰**은 UX 변경이 커 별도 항목으로 분리(미적용) | — |
+| **탐색 반경** | 현 지도 기준 조회 반경을 중심~모서리(반대각선)→**내접원**(가장 가까운 변)으로 — 조회 원이 항상 화면 안쪽 | `ExploreView.mapAreaParams` |
+
+> 남은 권장(미적용, 추후): R6 도구별 confirm 게이트, R9 기록 필드 추가 축소/요약, R7 typed RAG filter.
 

@@ -267,6 +267,9 @@ public class PlanService {
 
         boolean enabled = kakaoDirectionsClient.isEnabled();
         List<com.trip.plan.dto.RoutePathResponseDto.DayPath> days = new ArrayList<>();
+        // 한 일자라도 직선 근사/조회실패가 섞이면 '근사 포함' — 카카오 일시장애로 만든 부정확한
+        // 경로를 plan.version 캐시에 장기 고착시키지 않도록 캐시 전략을 바꾼다(R4).
+        boolean anyApprox = false;
 
         for (TripDay day : plan.getDays()) {
             List<com.trip.plan.client.KakaoDirectionsClient.Point> points = new ArrayList<>();
@@ -277,8 +280,9 @@ public class PlanService {
                         a.getLatitude(), a.getLongitude()));
             }
             if (!enabled || points.size() < 2) {
+                // 좌표 부족/키 미설정 — 경로 없음(빈 path). 이는 '근사'가 아니라 안정 상태.
                 days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
-                        day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
+                        day.getDayNo(), 0, 0, 0, 0, false, java.util.List.of()));
                 continue;
             }
             // 1) 하루 전체를 한 번에 조회(성공 시 전부 실제 도로경로).
@@ -287,31 +291,45 @@ public class PlanService {
             //    안 되는 구간만 직선으로 이어 항상 동선이 보이게 한다.
             if (r == null) r = kakaoDirectionsClient.routeStitched(points);
             if (r == null) {
+                // 도로/직선 폴백 모두 실패(예: API 전면 장애) — 전송 경로 없음 + 일시 실패로 간주.
+                anyApprox = true;
                 days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
-                        day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
+                        day.getDayNo(), 0, 0, 0, 0, true, java.util.List.of()));
             } else {
+                if (r.fallback()) anyApprox = true;
                 days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
                         day.getDayNo(), r.distanceMeters(), r.durationSeconds(),
-                        r.taxiFare(), r.tollFare(), r.path()));
+                        r.taxiFare(), r.tollFare(), r.fallback(), r.path()));
             }
         }
         com.trip.plan.dto.RoutePathResponseDto dto =
                 new com.trip.plan.dto.RoutePathResponseDto(plan.getId(), enabled, days);
 
-        // ── 캐시 저장 — DB(영속) + Redis(L1). 키 미설정(enabled=false)이면 저장 안 함. ──
-        // DB 저장은 두 컬럼만 벌크 UPDATE → @Version 미증가(자기 무효화 루프 방지).
+        // ── 캐시 저장 ──────────────────────────────────────────────────────────────
+        // 전부 실제 도로경로면 DB(영속) + Redis 7일. 일부라도 직선 근사/조회실패가 섞이면
+        // DB 영속을 보류하고 Redis 단기(10분)만 — 카카오 회복 시 곧 재계산되도록(R4).
         if (enabled) {
             try {
                 String json = objectMapper.writeValueAsString(dto);
-                try {
-                    planRepository.updateRoutePathCache(planId, json, version);
-                } catch (Exception e) {
-                    log.warn("route-path DB 저장 실패 — planId={}, err={}", planId, e.getMessage());
-                }
-                try {
-                    stringRedisTemplate.opsForValue().set(cacheKey, json, java.time.Duration.ofDays(7));
-                } catch (Exception e) {
-                    log.warn("route-path Redis 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                if (!anyApprox) {
+                    try {
+                        planRepository.updateRoutePathCache(planId, json, version);
+                    } catch (Exception e) {
+                        log.warn("route-path DB 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                    }
+                    try {
+                        stringRedisTemplate.opsForValue().set(cacheKey, json, java.time.Duration.ofDays(7));
+                    } catch (Exception e) {
+                        log.warn("route-path Redis 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                    }
+                } else {
+                    // 근사 포함 — DB 영속 보류, Redis 단기 캐시만(반복 조회 폭주는 막되 고착은 방지).
+                    try {
+                        stringRedisTemplate.opsForValue().set(cacheKey, json, java.time.Duration.ofMinutes(10));
+                    } catch (Exception e) {
+                        log.warn("route-path Redis 단기 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                    }
+                    log.info("route-path 근사 포함 — 단기 캐시(10분)·DB 영속 보류. planId={}", planId);
                 }
             } catch (Exception e) {
                 log.warn("route-path 직렬화 실패 — planId={}, err={}", planId, e.getMessage());

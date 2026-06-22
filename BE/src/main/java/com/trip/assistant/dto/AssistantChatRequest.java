@@ -7,7 +7,8 @@ import java.util.List;
 /**
  * 어시스턴트 대화 요청.
  * conversationId가 null/blank면 서버가 새 대화로 간주하고 UUID를 발급한다.
- * memory가 null이면 모든 개인기록·RAG 사용을 허용(하위호환: 기존 동작 유지).
+ * memory가 null(클라가 설정을 아예 보내지 않음)이면 프라이버시 보수적 기본값(개인기록·RAG 모두 비허용).
+ * 정상 클라이언트는 항상 memory를 전송하며, 사용자 화면 기본값은 프런트(DEFAULT_MEM)에서 전체 ON으로 둔다.
  */
 public record AssistantChatRequest(
         String conversationId,
@@ -58,9 +59,9 @@ public record AssistantChatRequest(
         }
     }
 
-    /** memory가 null이면 전체 허용 기본값을 돌려준다(하위호환). */
+    /** memory가 null(클라가 미전송)이면 보수적 기본값(모두 비허용)을 돌려준다 — 개인정보 누출 방지. */
     public MemoryPrefs memoryOrDefault() {
         return memory != null ? memory
-                : new MemoryPrefs(true, true, true, true, true, true, null);
+                : new MemoryPrefs(false, false, false, false, false, false, null);
     }
 }

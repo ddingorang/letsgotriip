@@ -252,7 +252,8 @@ public class AssistantService {
     private ChatClient.ChatClientRequestSpec buildPrompt(Long userId, String conversationId, String message,
                                                          MemoryPrefs prefs) {
         if (prefs == null) {
-            prefs = new MemoryPrefs(true, true, true, true, true, true, null);
+            // 보수적 기본값 — 클라가 설정을 안 보낸 경우 개인기록·RAG를 노출하지 않는다(R2).
+            prefs = new MemoryPrefs(false, false, false, false, false, false, null);
         }
 
         // 대화 기억(윈도우)은 항상 유지 — 멀티턴 대화의 기본. userId로 키 격리.
@@ -281,7 +282,7 @@ public class AssistantService {
 
         // 도구: 핵심(검색·생성·편집)은 항상. 내 기록 조회 도구는 설정에 따라 장착.
         List<Object> toolBeans = new ArrayList<>();
-        toolBeans.add(new AssistantTools(userId));
+        toolBeans.add(new AssistantTools(userId, prefs));
         if (prefs.anyRecord()) {
             toolBeans.add(new RecordTools(userId, prefs));
         }
@@ -333,10 +334,27 @@ public class AssistantService {
      */
     public class AssistantTools {
 
-        private final Long userId;
+        private static final String NOT_SELECTED =
+                "어시스턴트 설정에서 '활용 대상'으로 선택하지 않은 여행 계획이에요. "
+                + "설정에서 해당 계획을 선택하면 조회·수정할 수 있어요.";
 
-        AssistantTools(Long userId) {
+        private final Long userId;
+        private final MemoryPrefs prefs;
+
+        AssistantTools(Long userId, MemoryPrefs prefs) {
             this.userId = userId;
+            this.prefs = prefs;
+        }
+
+        /**
+         * planId가 사용자의 '활용 대상' 화이트리스트에 들어있는지(R1).
+         * 화이트리스트가 비어있으면(=전체) 모두 허용. 소유권은 별도로 PlanService가 검증한다.
+         * 화이트리스트가 지정된 경우, 선택하지 않은 계획은 조회/수정 도구가 손대지 않는다.
+         */
+        private boolean planAllowed(Long planId) {
+            if (planId == null) return true;
+            java.util.List<Long> allow = (prefs == null) ? java.util.List.of() : prefs.planIdsOrEmpty();
+            return allow.isEmpty() || allow.contains(planId);
         }
 
         @Tool(description = "키워드 또는 지역코드로 한국 관광지/맛집/문화시설을 검색한다. "
@@ -424,6 +442,7 @@ public class AssistantService {
                 if (planId == null) {
                     return "평가할 여행 계획 ID가 필요합니다. 먼저 어떤 여행을 평가할지 알려 주세요.";
                 }
+                if (!planAllowed(planId)) return NOT_SELECTED;
 
                 // 소유자 검증은 PlanService(verifyOwner)가 수행. userId는 서버가 주입(LLM 파라미터 아님).
                 RouteReportResponseDto route = planService.getRouteReport(userId, planId);
@@ -509,6 +528,7 @@ public class AssistantService {
                 if (planId == null || contentId == null || contentId.isBlank()) {
                     return "장소를 추가하려면 여행 계획 ID와 장소 contentId 가 필요해요.";
                 }
+                if (!planAllowed(planId)) return NOT_SELECTED;
                 // contentId 만으로는 contentType 을 알 수 없으므로, 상세조회로 유형을 추론해
                 // 스냅샷을 만든 뒤 그 contentType 으로 PlanService.addPlace 를 호출한다.
                 // (addPlace 가 소유자 검증·중복 검증을 내장한다. userId 는 서버가 주입.)
@@ -547,6 +567,7 @@ public class AssistantService {
                 if (planId == null || placeId == null) {
                     return "장소를 삭제하려면 여행 계획 ID와 장소 placeId 가 필요해요.";
                 }
+                if (!planAllowed(planId)) return NOT_SELECTED;
                 // PlanService.removePlace 가 소유자 검증을 내장. userId 는 서버가 주입(LLM 파라미터 아님).
                 PlanDetailResponseDto plan = planService.removePlace(userId, planId, dayNo, placeId);
                 return "여행 계획(planId=" + plan.id() + ")의 " + dayNo
@@ -586,9 +607,10 @@ public class AssistantService {
                     return "체크리스트로 만들 항목이 없습니다. 추가할 항목을 알려 주세요.";
                 }
 
-                // planId가 지정된 경우, 현재 사용자가 그 계획의 소유자인지 먼저 검증한다.
+                // planId가 지정된 경우, 활용 대상 화이트리스트(R1) → 소유권 순으로 검증한다.
                 // ChecklistService.create는 planId 소유권을 확인하지 않으므로, 검증 없이 저장하면
                 // 남의 계획 ID로 체크리스트를 묶을 수 있다. getDetail은 비소유/부재 시 예외를 던진다.
+                if (planId != null && !planAllowed(planId)) return NOT_SELECTED;
                 if (planId != null) {
                     try {
                         planService.getDetail(userId, planId);

@@ -395,13 +395,18 @@ function onMapMove(center) {
   showMapSearchBtn.value = true
 }
 
-// 현재 보고 있는 지도 영역 기준 조회 파라미터 — 중심 + '크기'(중심~북동 모서리 반경 m).
+// 현재 보고 있는 지도 영역 기준 조회 파라미터 — 중심 + '크기'(반경 m).
+// 반경은 보이는 사각형의 '내접원'(중심~가장 가까운 변까지)으로 잡아, 조회 원이 항상 화면 영역
+// 안쪽에 들어오게 한다(이전엔 중심~모서리=반대각선이라 화면보다 크게 조회됐음).
 // bounds 가 없으면(구형 SDK) 줌레벨로 반경을 근사한다.
 function mapAreaParams(extra = {}) {
   const c = mapDragCenter.value
   let radius
   if (c.neLat != null && c.neLng != null) {
-    radius = Math.round(distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.neLat, lng: c.neLng }) * 1000)
+    // 중심~북변(N-S 반높이), 중심~동변(E-W 반너비) 중 더 작은 값 = 내접원 반경.
+    const vertM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.neLat, lng: c.lng }) * 1000
+    const horizM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.lat, lng: c.neLng }) * 1000
+    radius = Math.round(Math.min(vertM, horizM))
     radius = Math.min(Math.max(radius, 500), 20000) // TourAPI radius 상한 20km
   } else {
     radius = ZOOM_RADIUS[c.level ?? 9] ?? 20000

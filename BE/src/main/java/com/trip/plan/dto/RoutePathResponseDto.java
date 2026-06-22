@@ -12,12 +12,17 @@ public record RoutePathResponseDto(
         boolean enabled,
         List<DayPath> days
 ) {
+    /**
+     * partial=true 면 이 일자의 경로가 일부 직선 근사(비도로 구간 폴백)이거나 조회 실패라
+     * 실제 도로경로와 다를 수 있음을 뜻한다(프론트에서 '일부 구간 직선 근사' 안내에 사용).
+     */
     public record DayPath(
             int dayNo,
             int distanceMeters,
             int durationSeconds,
             int taxiFare,
             int tollFare,
+            boolean partial,
             List<double[]> path
     ) {}
 }
