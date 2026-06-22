@@ -45,6 +45,7 @@
         :selected-id="selectedPlace?.contentId"
         :center="mapCenter"
         :category-colors="pinColorMap"
+        :fit="mapFit"
         @select="selectPlace"
         @detail="goDetail"
         @move="onMapMove"
@@ -284,9 +285,13 @@ const mapCenter = computed(() =>
   userLoc.value ? [userLoc.value.lat, userLoc.value.lng] : [37.5665, 126.978],
 )
 
-// 지도 드래그 → 현 지도에서 검색 버튼
+// 지도 드래그/줌 → 현 지도에서 검색 버튼
 const mapDragCenter = ref(null)
 const showMapSearchBtn = ref(false)
+const mapFit = ref(true) // 현 지도에서 검색 시 false → 카메라 고정
+
+// 카카오맵 level(클수록 광역) → 검색 반경(m)
+const ZOOM_RADIUS = { 1:500, 2:1000, 3:2000, 4:3000, 5:5000, 6:8000, 7:12000, 8:16000, 9:20000, 10:35000, 11:60000, 12:100000, 13:200000, 14:400000 }
 
 function onMapMove(center) {
   mapDragCenter.value = center
@@ -296,13 +301,16 @@ function onMapMove(center) {
 function searchByMapCenter() {
   if (!mapDragCenter.value) return
   showMapSearchBtn.value = false
+  mapFit.value = false
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
+  const level = mapDragCenter.value.level ?? 9
+  const radius = ZOOM_RADIUS[level] ?? 20000
   const params = {
     page: 1,
     size: PAGE_SIZE,
     mapX: String(mapDragCenter.value.lng),
     mapY: String(mapDragCenter.value.lat),
-    radius: 20000,
+    radius,
     ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
   }
   store.list(params, currentUi(), { forceLoading: true })
@@ -374,6 +382,7 @@ function currentUi() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
   showMapSearchBtn.value = false
+  mapFit.value = true
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
   const params = {
@@ -444,10 +453,12 @@ function onSearchInput() {
 function clearSearch() {
   searchQuery.value = ''
   showMapSearchBtn.value = false
+  mapFit.value = true
   loadAttractions()
 }
 
 function loadAttractions() {
+  mapFit.value = true
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
   const params = {
     page: 1,

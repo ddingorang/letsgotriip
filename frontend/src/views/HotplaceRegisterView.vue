@@ -145,6 +145,9 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHotplaceStore } from '@/stores/hotplace.js'
 import { communityApi } from '@/api/index.js'
+import { useAlert } from '@/composables/useAlert.js'
+
+const $alert = useAlert()
 
 const router = useRouter()
 const hotplaceStore = useHotplaceStore()
@@ -333,7 +336,7 @@ async function onPhotoSelect(e) {
       } catch {
         // 업로드 실패를 가짜 성공으로 숨기지 않는다 — 미리보기를 정리하고 알린다.
         URL.revokeObjectURL(preview)
-        alert('이미지 업로드에 실패했어요. 다시 시도해주세요.')
+        $alert.error('이미지 업로드에 실패했어요. 다시 시도해주세요.')
       }
     }
   } finally {

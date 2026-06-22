@@ -122,7 +122,7 @@
           </svg>
           지도 보기
         </button>
-        <button class="action-btn secondary" @click="router.push('/explore')">
+        <button class="action-btn secondary" @click="getRecommendation">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
@@ -367,6 +367,11 @@ import { usePlanStore } from '@/stores/plan.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { contextApi, reviewApi, favoriteApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
+import { useAlert } from '@/composables/useAlert.js'
+import { useConfirm } from '@/composables/useConfirm.js'
+
+const $alert = useAlert()
+const $confirm = useConfirm().confirm
 
 const route = useRoute()
 const router = useRouter()
@@ -540,7 +545,7 @@ async function submitReview() {
 }
 
 async function removeReview(review) {
-  if (!window.confirm('이 후기를 삭제할까요?')) return
+  if (!await $confirm('이 후기를 삭제할까요?')) return
   const contentId = route.params.id
   try {
     await reviewApi.remove(contentId, review.id)
@@ -741,6 +746,11 @@ async function confirmAdd() {
   } finally {
     addSheet.value.adding = false
   }
+}
+
+// master: 브라우저 alert 대신 커스텀 $alert 사용("다시 추천" 버튼에서 호출)
+function getRecommendation() {
+  $alert.info('비슷한 여행지를 추천해드릴게요!')
 }
 
 onMounted(async () => {

@@ -148,6 +148,9 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { storyApi } from '@/api/index.js'
+import { useConfirm } from '@/composables/useConfirm.js'
+
+const $confirm = useConfirm().confirm
 
 // ── 상태 ──────────────────────────────────────────────────────────────────────
 const stories = ref([])
@@ -265,7 +268,7 @@ async function onSubmit() {
 // ── 삭제 ──────────────────────────────────────────────────────────────────────
 async function onDelete(story) {
   if (deletingId.value) return
-  if (!window.confirm(`'${story.title}' 스토리를 삭제할까요?`)) return
+  if (!await $confirm(`'${story.title}' 스토리를 삭제할까요?`)) return
   deletingId.value = storyKey(story)
   try {
     await storyApi.remove(storyKey(story))

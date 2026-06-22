@@ -72,6 +72,9 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { communityApi } from '@/api/index.js'
 import { usePostsStore } from '@/stores/posts.js'
+import { useAlert } from '@/composables/useAlert.js'
+
+const $alert = useAlert()
 
 const route = useRoute()
 const router = useRouter()
@@ -148,7 +151,7 @@ async function onImageSelect(e) {
     form.value.imageUrl = null
     revokeObjectUrl()
     previewUrl.value = null
-    alert('이미지 업로드에 실패했어요. 다시 시도해주세요.')
+    $alert.error('이미지 업로드에 실패했어요. 다시 시도해주세요.')
   } finally {
     uploading.value = false
     // 같은 파일 재선택 시에도 change가 발화하도록 input 값 초기화
@@ -182,7 +185,7 @@ async function submitPost() {
       await postsStore.updatePost(editId.value, payload)
       router.push(`/community/${editId.value}`)
     } catch {
-      alert('수정에 실패했어요. 다시 시도해주세요.')
+      $alert.error('수정에 실패했어요. 다시 시도해주세요.')
     }
   } else {
     try {
@@ -190,7 +193,7 @@ async function submitPost() {
       router.push('/community')
     } catch {
       // 등록 실패를 성공처럼 이동시키지 않고 실패로 노출한다.
-      alert('등록에 실패했어요. 다시 시도해주세요.')
+      $alert.error('등록에 실패했어요. 다시 시도해주세요.')
     }
   }
 }

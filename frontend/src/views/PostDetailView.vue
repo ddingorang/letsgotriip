@@ -198,6 +198,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { usePostsStore } from '@/stores/posts.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { followApi } from '@/api/index.js'
+import { useAlert } from '@/composables/useAlert.js'
+import { useConfirm } from '@/composables/useConfirm.js'
+
+const $alert = useAlert()
+const $confirm = useConfirm().confirm
 
 const route = useRoute()
 const router = useRouter()
@@ -210,7 +215,7 @@ function isMyComment(comment) {
 }
 
 async function deleteComment(commentId) {
-  if (!confirm('댓글을 삭제하시겠어요?')) return
+  if (!await $confirm('댓글을 삭제하시겠어요?')) return
   await postsStore.deleteComment(route.params.id, commentId)
 }
 
@@ -333,12 +338,12 @@ function editPost() {
 
 async function deletePost() {
   menuOpen.value = false
-  if (!confirm('게시글을 삭제하시겠어요?')) return
+  if (!await $confirm('게시글을 삭제하시겠어요?')) return
   try {
     await postsStore.deletePost(route.params.id)
     router.push('/community')
   } catch {
-    alert('삭제에 실패했어요. 다시 시도해주세요.')
+    $alert.error('삭제에 실패했어요. 다시 시도해주세요.')
   }
 }
 
