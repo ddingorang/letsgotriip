@@ -203,6 +203,75 @@ export const usePlanStore = defineStore('plan', () => {
     }
   }
 
+  /**
+   * 장소를 다른 일차로 이동 — 단일 move 엔드포인트가 없어 (대상에 추가 → 원본에서 제거) 2단계.
+   * 대상에 이미 있으면(PLAN4093) 추가는 건너뛰고 원본만 제거(중복 정리 효과).
+   * 두 호출 모두 expectedVersion이 필요 없는 add/delete라 버전 충돌 없이 동작한다.
+   */
+  async function movePlaceToDay(planId, fromDay, toDay, place) {
+    error.value = null
+    const contentId = String(place.attraction?.contentId ?? place.contentId ?? '')
+    const contentType = place.attraction?.contentType ?? place.contentType
+    loading.value = true
+    try {
+      try {
+        await http.post(`/api/plans/${planId}/days/${toDay}/places`, { contentId, contentType })
+      } catch (e) {
+        if (e.response?.data?.code !== 'PLAN4093') throw e
+        // 대상 일차에 이미 있음 → 추가 생략, 원본만 제거
+      }
+      await http.delete(`/api/plans/${planId}/days/${fromDay}/places/${place.id}`)
+      await loadPlan(planId)
+    } catch (e) {
+      await loadPlan(planId).catch(() => {})
+      const { msg } = handleError(e)
+      error.value = msg
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * 한 장소의 방문 시간 설정/해제 — 같은 일차 places를 그대로 PUT(낙관적).
+   * visitTime: 'HH:mm' 문자열 또는 null(해제). reorder와 동일한 본문 규격.
+   */
+  async function setPlaceVisitTime(planId, dayNo, placeId, visitTime) {
+    if (!current.value) return
+    const dayObj = (current.value.days ?? []).find((d) => d.dayNo === dayNo)
+    if (!dayObj) return
+    const newPlaces = (dayObj.places ?? []).map((p) =>
+      p.id === placeId ? { ...p, visitTime } : p,
+    )
+    const snapshot = current.value
+    current.value = {
+      ...current.value,
+      days: (current.value.days ?? []).map((d) =>
+        d.dayNo === dayNo ? { ...d, places: newPlaces } : d,
+      ),
+    }
+    error.value = null
+    try {
+      const body = {
+        expectedVersion: snapshot.version,
+        places: newPlaces.map((p, idx) => ({
+          contentId: p.attraction?.contentId ?? p.contentId,
+          contentType: p.attraction?.contentType ?? p.contentType,
+          seq: idx + 1,
+          visitTime: p.visitTime ?? null,
+          memo: p.memo ?? null,
+        })),
+      }
+      await http.put(`/api/plans/${planId}/days/${dayNo}/places`, body)
+      if (current.value) current.value = { ...current.value, version: (current.value.version ?? 0) + 1 }
+    } catch (e) {
+      await loadPlan(planId).catch(() => {})
+      const { msg } = handleError(e)
+      error.value = msg
+      throw e
+    }
+  }
+
   async function removePlace(planId, dayNo, placeId) {
     loading.value = true
     error.value = null
@@ -343,6 +412,8 @@ export const usePlanStore = defineStore('plan', () => {
     addPlace,
     replacePlaces,
     reorderDayPlaces,
+    movePlaceToDay,
+    setPlaceVisitTime,
     removePlace,
   }
 })

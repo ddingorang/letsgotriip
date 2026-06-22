@@ -119,6 +119,17 @@
             <div v-if="selectedPlanId === plan.id" class="plan-detail">
               <div class="detail-divider" />
 
+              <!-- 편집 도움말 — 한 번만(세션) 노출 -->
+              <div v-if="showEditHint" class="edit-hint">
+                <span class="edit-hint-text">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8" /><line x1="4" y1="14" x2="20" y2="14" /></svg>
+                  끌어서 순서 변경 · <strong>⋯</strong> 눌러 다른 날로 이동·삭제
+                </span>
+                <button class="edit-hint-close" aria-label="도움말 닫기" @click="dismissEditHint">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+              </div>
+
               <!-- Days list from planStore.current if loaded -->
               <div v-if="planStore.loading" class="detail-loading">불러오는 중...</div>
               <template v-else-if="planStore.current?.id === plan.id">
@@ -158,14 +169,13 @@
                       <span class="detail-place-name">{{ place.attraction?.title ?? place.title ?? '장소' }}</span>
                       <span v-if="place.visitTime" class="detail-place-time">{{ place.visitTime }}</span>
                       <button
-                        class="place-edit-btn danger"
-                        title="장소 삭제"
+                        class="place-edit-btn"
+                        title="더보기 (다른 날로 이동·삭제)"
                         :disabled="planStore.loading"
-                        @click="removePlace(plan.id, day.dayNo, place)"
+                        @click="openRowSheet(plan.id, day.dayNo, place)"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" />
                         </svg>
                       </button>
                     </div>
@@ -434,6 +444,82 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 장소 행 액션 시트 — 다른 날로 이동 / 삭제 -->
+    <Transition name="fade">
+      <div v-if="rowSheet.open" class="rs-overlay" @click.self="closeRowSheet">
+        <div class="rs-sheet">
+          <div class="rs-head">
+            <button v-if="rowSheet.step !== 'menu'" class="rs-back" aria-label="뒤로" @click="rowSheet.step = 'menu'">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <span class="rs-title">{{ rowSheet.step === 'move' ? '며칠차로 옮길까요?' : rowSheet.step === 'time' ? '방문 시간' : (rowSheet.place?.attraction?.title ?? '장소') }}</span>
+            <button class="rs-close" aria-label="닫기" @click="closeRowSheet">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+
+          <p v-if="rowSheet.error" class="rs-error">{{ rowSheet.error }}</p>
+
+          <!-- 메뉴 -->
+          <div v-if="rowSheet.step === 'menu'" class="rs-menu">
+            <button class="rs-item" :disabled="rowSheet.moving" @click="openTimeStep">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg>
+              방문 시간 설정
+              <span v-if="rowSheet.place?.visitTime" class="rs-item-val">{{ shortTime(rowSheet.place.visitTime) }}</span>
+            </button>
+            <button
+              v-if="moveTargets.length"
+              class="rs-item"
+              :disabled="rowSheet.moving"
+              @click="rowSheet.step = 'move'"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
+              다른 날로 이동
+            </button>
+            <button class="rs-item danger" :disabled="rowSheet.moving" @click="removeFromSheet">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
+              삭제
+            </button>
+          </div>
+
+          <!-- 방문 시간 -->
+          <div v-else-if="rowSheet.step === 'time'" class="rs-time">
+            <div class="rs-time-chips">
+              <button
+                v-for="q in timeQuickChips"
+                :key="q.label"
+                :class="['rs-time-chip', { active: rowSheet.time === q.value }]"
+                @click="rowSheet.time = q.value"
+              >{{ q.label }}<span class="rs-time-chip-sub">{{ q.value }}</span></button>
+            </div>
+            <input v-model="rowSheet.time" type="time" class="rs-time-input" />
+            <div class="rs-time-actions">
+              <button class="rs-time-clear" :disabled="rowSheet.moving" @click="confirmTime(null)">시간 지우기</button>
+              <button class="rs-time-save" :disabled="rowSheet.moving || !rowSheet.time" @click="confirmTime(rowSheet.time)">
+                {{ rowSheet.moving ? '저장 중…' : '저장' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 일차 선택 -->
+          <div v-else class="rs-days">
+            <button
+              v-for="dn in moveTargets"
+              :key="dn"
+              class="rs-day-chip"
+              :disabled="rowSheet.moving"
+              @click="confirmMove(dn)"
+            >{{ dn }}일차</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 편집 토스트(순서변경/이동 결과) -->
+    <Transition name="fade">
+      <div v-if="planToast.show" class="plan-toast">{{ planToast.text }}</div>
+    </Transition>
   </div>
 </template>
 
@@ -508,6 +594,102 @@ function openAddPlace(planId, dayNo) {
 }
 function closeAddPlace() {
   addPlace.value.open = false
+}
+
+// ── 장소 행 액션(다른 날로 이동·삭제) + 편집 토스트 ────────────────────────────
+const rowSheet = ref({ open: false, planId: null, dayNo: null, place: null, step: 'menu', moving: false, error: '', time: '' })
+const timeQuickChips = [
+  { label: '오전', value: '09:00' },
+  { label: '점심', value: '12:00' },
+  { label: '오후', value: '15:00' },
+  { label: '저녁', value: '19:00' },
+]
+// 'HH:mm:ss' → 'HH:mm'
+function shortTime(t) {
+  return t ? String(t).slice(0, 5) : ''
+}
+const planToast = ref({ show: false, text: '' })
+let planToastTimer = null
+
+// 편집 도움말 — 세션당 한 번만
+const HINT_KEY = 'triip.planEditHintSeen'
+const showEditHint = ref((() => { try { return !sessionStorage.getItem(HINT_KEY) } catch { return true } })())
+function dismissEditHint() {
+  showEditHint.value = false
+  try { sessionStorage.setItem(HINT_KEY, '1') } catch { /* noop */ }
+}
+
+function showPlanToast(text) {
+  planToast.value = { show: true, text }
+  if (planToastTimer) clearTimeout(planToastTimer)
+  planToastTimer = setTimeout(() => { planToast.value.show = false }, 2600)
+}
+
+// 이동 가능한 일차(현재 일차 제외)
+const moveTargets = computed(() =>
+  planDayNumbers.value.filter((dn) => dn !== rowSheet.value.dayNo),
+)
+
+function openRowSheet(planId, dayNo, place) {
+  rowSheet.value = { open: true, planId, dayNo, place, step: 'menu', moving: false, error: '', time: shortTime(place?.visitTime) }
+}
+function closeRowSheet() {
+  rowSheet.value.open = false
+}
+
+function openTimeStep() {
+  rowSheet.value.time = shortTime(rowSheet.value.place?.visitTime)
+  rowSheet.value.step = 'time'
+}
+
+async function confirmTime(time) {
+  const s = rowSheet.value
+  if (s.moving || !s.place) return
+  s.moving = true
+  s.error = ''
+  try {
+    await planStore.setPlaceVisitTime(s.planId, s.dayNo, s.place.id, time || null)
+    closeRowSheet()
+    showPlanToast(time ? `방문 시간 ${time} 설정` : '방문 시간을 지웠어요')
+  } catch {
+    s.error = planStore.error ?? '시간 저장에 실패했어요.'
+  } finally {
+    s.moving = false
+  }
+}
+
+async function removeFromSheet() {
+  const s = rowSheet.value
+  if (s.moving || !s.place) return
+  s.moving = true
+  s.error = ''
+  try {
+    await removePlace(s.planId, s.dayNo, s.place)
+    closeRowSheet()
+    showPlanToast('장소를 삭제했어요')
+  } catch {
+    s.error = planStore.error ?? '삭제에 실패했어요.'
+  } finally {
+    s.moving = false
+  }
+}
+
+async function confirmMove(toDay) {
+  const s = rowSheet.value
+  if (s.moving || !s.place) return
+  s.moving = true
+  s.error = ''
+  try {
+    await planStore.movePlaceToDay(s.planId, s.dayNo, toDay, s.place)
+    loadRoutePath(s.planId)
+    selectedDay.value = toDay
+    closeRowSheet()
+    showPlanToast(`${toDay}일차로 옮겼어요`)
+  } catch {
+    s.error = planStore.error ?? '이동에 실패했어요.'
+  } finally {
+    s.moving = false
+  }
 }
 
 async function searchPlaces() {
@@ -969,8 +1151,10 @@ async function onPointerUp() {
     // 낙관적 — 화면은 즉시 바뀌고 저장은 백그라운드(목록이 "불러오는 중"으로 안 사라짐)
     await planStore.reorderDayPlaces(cur.id, day, places)
     loadRoutePath(cur.id) // 순서 변경 → 도로 경로 갱신(백그라운드)
+    showPlanToast('순서를 변경했어요')
   } catch {
-    // 오류는 planStore.error에 반영됨(실패 시 자동 되돌림)
+    // 실패 시 자동 되돌림 + 안내
+    showPlanToast(planStore.error || '순서 저장에 실패했어요')
   }
 }
 
@@ -2106,5 +2290,188 @@ async function removePlace(planId, dayNo, place) {
 
 .bottom-spacer {
   height: 24px;
+}
+
+/* ── 편집 도움말 ─────────────────────────────────────────────────────────────── */
+.edit-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 10px 8px 12px;
+  background: var(--color-peach-light);
+  border-radius: var(--radius-md);
+}
+.edit-hint-text {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--color-peach-pressed);
+  letter-spacing: -0.2px;
+}
+.edit-hint-text strong { font-weight: 800; }
+.edit-hint-close {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-peach-pressed);
+  flex-shrink: 0;
+}
+
+/* ── 장소 행 액션 시트 ───────────────────────────────────────────────────────── */
+.rs-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+}
+.rs-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-white);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+}
+.rs-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.rs-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rs-back, .rs-close {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+.rs-error { font-size: 12px; color: var(--color-error); margin: 0 2px 8px; }
+.rs-menu { display: flex; flex-direction: column; gap: 4px; }
+.rs-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 10px;
+  border-radius: var(--radius-md);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-ink);
+  text-align: left;
+}
+.rs-item:active { background: var(--color-surface); }
+.rs-item.danger { color: var(--color-error); }
+.rs-item:disabled { opacity: 0.5; }
+.rs-item-val {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-peach);
+  background: var(--color-peach-light);
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+}
+
+/* ── 방문 시간 ───────────────────────────────────────────────────────────────── */
+.rs-time { padding: 2px 0 4px; }
+.rs-time-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.rs-time-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+.rs-time-chip.active { border-color: var(--color-peach); background: var(--color-peach-light); }
+.rs-time-chip-sub { font-size: 10.5px; font-weight: 500; color: var(--color-ink-muted); font-family: var(--font-mono); }
+.rs-time-input {
+  width: 100%;
+  height: 44px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  font-size: 15px;
+  color: var(--color-ink);
+  background: var(--color-white);
+  margin-bottom: 12px;
+}
+.rs-time-actions { display: flex; gap: 8px; }
+.rs-time-clear {
+  flex: 1;
+  height: 44px;
+  border-radius: var(--radius-xl);
+  background: var(--color-white);
+  border: 1px solid var(--color-line);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-ink-secondary);
+}
+.rs-time-save {
+  flex: 1.4;
+  height: 44px;
+  border-radius: var(--radius-xl);
+  background: var(--color-peach);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+.rs-time-save:disabled, .rs-time-clear:disabled { opacity: 0.5; }
+.rs-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  padding: 4px 0 6px;
+}
+.rs-day-chip {
+  padding: 14px 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 2px solid transparent;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--color-ink);
+}
+.rs-day-chip:active { border-color: var(--color-peach); background: var(--color-peach-light); }
+.rs-day-chip:disabled { opacity: 0.5; }
+
+/* ── 편집 토스트 ─────────────────────────────────────────────────────────────── */
+.plan-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 1100;
+  padding: 10px 18px;
+  background: var(--color-ink);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
 }
 </style>
