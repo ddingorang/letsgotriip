@@ -46,7 +46,14 @@
           <button class="see-all" @click="$router.push('/explore')">전체보기</button>
         </div>
         <div class="horizontal-scroll">
-          <PlaceCard v-for="place in places" :key="place.id" :place="place" :rank="place.rank" @click="$router.push(`/place/${place.id}`)" @bookmark="toggleBookmark(place.id)" />
+          <!-- 로딩 중(데이터 도착 전)엔 스켈레톤 — 빈 줄로 "고장난 것처럼" 보이지 않게 -->
+          <template v-if="attractionStore.loading && !places.length">
+            <div v-for="n in 3" :key="'sk' + n" class="place-skeleton" />
+          </template>
+          <template v-else>
+            <PlaceCard v-for="place in places" :key="place.id" :place="place" :rank="place.rank" @click="$router.push(`/place/${place.id}`)" @bookmark="toggleBookmark(place.id)" />
+          </template>
+          <p v-if="!attractionStore.loading && !places.length" class="trending-empty">표시할 여행지를 불러오지 못했어요.</p>
         </div>
       </section>
 
@@ -366,6 +373,24 @@ onMounted(() => {
   padding: 1px 7px;
   margin-left: 6px;
   vertical-align: middle;
+}
+
+.place-skeleton {
+  flex-shrink: 0;
+  width: 150px;
+  height: 190px;
+  border-radius: var(--radius-lg, 16px);
+  background: var(--color-surface);
+  animation: home-shimmer 1.2s infinite ease-in-out;
+}
+@keyframes home-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.trending-empty {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  padding: 24px 4px;
 }
 
 .news-loading {

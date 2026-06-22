@@ -3,6 +3,7 @@
     <main class="app-main" :class="{ 'no-tab': !showTabBar }">
       <RouterView />
     </main>
+    <CartFab />
     <BottomNav v-if="showTabBar" />
     <AppAlert />
     <AppConfirm />
@@ -13,6 +14,7 @@
 import { computed, onMounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import BottomNav from '@/components/common/BottomNav.vue'
+import CartFab from '@/components/common/CartFab.vue'
 import AppAlert from '@/components/common/AppAlert.vue'
 import AppConfirm from '@/components/common/AppConfirm.vue'
 import { useLocationStore } from '@/stores/location.js'

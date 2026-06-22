@@ -59,6 +59,14 @@ public class PlanController {
         return ResponseEntity.ok(planService.getRouteReport(principal.userId(), planId));
     }
 
+    /** GET /api/plans/{planId}/route-path — 일자별 자동차 도로 경로(카카오 길찾기) */
+    @GetMapping("/{planId}/route-path")
+    public ResponseEntity<com.trip.plan.dto.RoutePathResponseDto> getRoutePath(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long planId) {
+        return ResponseEntity.ok(planService.getRoutePath(principal.userId(), planId));
+    }
+
     /** PATCH /api/plans/{planId} — 여행 계획 메타 수정 */
     @PatchMapping("/{planId}")
     public ResponseEntity<PlanDetailResponseDto> update(

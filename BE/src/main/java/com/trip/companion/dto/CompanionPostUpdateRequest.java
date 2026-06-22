@@ -14,5 +14,6 @@ public record CompanionPostUpdateRequest(
         @Size(max = 50) String duration,
         @Min(1) @Max(50) Integer maxMembers,
         @Min(0) Integer estimatedCost,
-        @Size(max = 2000) String description
+        @Size(max = 2000) String description,
+        @Size(max = 500) String imageUrl   // optional — 대표 이미지 URL. ""이면 제거, null이면 미변경
 ) {}

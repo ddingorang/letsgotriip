@@ -52,6 +52,7 @@ public class PlanService {
     private final AttractionService attractionService;
     private final EntityManager entityManager;
     private final UserDataIndexer userDataIndexer;
+    private final com.trip.plan.client.KakaoDirectionsClient kakaoDirectionsClient;
 
     // ─────────────────────────────────────────────────────────────
     // 생성
@@ -198,6 +199,43 @@ public class PlanService {
         TripPlan plan = findPlanWithDays(planId);
         verifyOwner(plan, userId);
         return com.trip.plan.dto.RouteReportResponseDto.from(plan);
+    }
+
+    /**
+     * 일자별 자동차 도로 경로(카카오 모빌리티 길찾기) 조회(소유자 전용).
+     * 좌표 2개 미만인 날은 경로 없음(빈 path). 키 미설정/호출 실패 시 enabled=false.
+     */
+    public com.trip.plan.dto.RoutePathResponseDto getRoutePath(Long userId, Long planId) {
+        TripPlan plan = findPlanWithDays(planId);
+        verifyOwner(plan, userId);
+
+        boolean enabled = kakaoDirectionsClient.isEnabled();
+        List<com.trip.plan.dto.RoutePathResponseDto.DayPath> days = new ArrayList<>();
+
+        for (TripDay day : plan.getDays()) {
+            List<com.trip.plan.client.KakaoDirectionsClient.Point> points = new ArrayList<>();
+            for (TripPlace p : day.getPlaces()) {
+                Attraction a = p.getAttraction();
+                if (a == null || a.getLatitude() == null || a.getLongitude() == null) continue;
+                points.add(new com.trip.plan.client.KakaoDirectionsClient.Point(
+                        a.getLatitude(), a.getLongitude()));
+            }
+            if (!enabled || points.size() < 2) {
+                days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
+                        day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
+                continue;
+            }
+            com.trip.plan.client.KakaoDirectionsClient.RouteResult r = kakaoDirectionsClient.route(points);
+            if (r == null) {
+                days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
+                        day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
+            } else {
+                days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
+                        day.getDayNo(), r.distanceMeters(), r.durationSeconds(),
+                        r.taxiFare(), r.tollFare(), r.path()));
+            }
+        }
+        return new com.trip.plan.dto.RoutePathResponseDto(plan.getId(), enabled, days);
     }
 
     // ─────────────────────────────────────────────────────────────

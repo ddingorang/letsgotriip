@@ -17,6 +17,7 @@ public record CompanionPostSummaryResponse(
         int currentMembers,
         CompanionStatus status,
         String authorNickname,
+        String imageUrl,
         LocalDateTime createdAt
 ) {
     public static CompanionPostSummaryResponse of(CompanionPost post, int currentMembers) {
@@ -30,6 +31,7 @@ public record CompanionPostSummaryResponse(
                 currentMembers,
                 post.getStatus(),
                 post.getAuthor().getNickname(),
+                post.getImageUrl(),
                 post.getCreatedAt()
         );
     }

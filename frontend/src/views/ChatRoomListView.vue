@@ -15,6 +15,16 @@
     </header>
 
     <div class="scroll-content">
+      <!-- 빈 상태: 참여 중인 방이 없을 때 -->
+      <div v-if="companionStore.myRooms.length === 0" class="empty-card">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+        </svg>
+        <p class="empty-title">아직 참여 중인 방이 없어요</p>
+        <p class="empty-sub">마음에 드는 동행을 찾아 함께 떠나보세요.</p>
+        <button class="empty-cta" @click="$router.push({ path: '/community', query: { tab: 'companion' } })">동행 둘러보기</button>
+      </div>
+
       <div
         v-for="room in companionStore.myRooms"
         :key="room.id"
@@ -23,7 +33,8 @@
         @click="$router.push(`/chat/${room.id}`)"
       >
         <div class="room-avatar">
-          <div class="avatar-placeholder" />
+          <img v-if="room.imageUrl" :src="room.imageUrl" :alt="room.title" class="avatar-image" />
+          <div v-else class="avatar-placeholder" />
         </div>
         <div class="room-info">
           <div class="room-title-row">
@@ -38,7 +49,7 @@
         <div class="room-right">
           <span class="room-time">{{ room.time }}</span>
           <span v-if="room.unreadCount > 0" class="unread-badge">{{ room.unreadCount }}</span>
-          <span v-else class="read-label">최 {{ room.unreadCount || '0' }}</span>
+          <span v-else class="read-label">읽음</span>
         </div>
       </div>
     </div>
@@ -113,6 +124,35 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   background: linear-gradient(135deg, #e8ddd4, #d8c8b8);
+}
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ── 빈 상태 ─────────────────────────────────────────────────────── */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  margin: 24px 16px;
+  padding: 32px 20px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+.empty-title { font-size: 14.5px; font-weight: 700; color: var(--color-ink); margin-top: 8px; }
+.empty-sub { font-size: 13px; color: var(--color-ink-muted); line-height: 1.5; }
+.empty-cta {
+  margin-top: 12px;
+  padding: 10px 22px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .room-info { flex: 1; min-width: 0; }

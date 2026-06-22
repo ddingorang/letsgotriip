@@ -36,6 +36,15 @@
         <button class="quick-plan-btn" type="button" @click="openPlanForm">
           ✈️ 여행 계획 세우기
         </button>
+        <div class="suggest-chips">
+          <button
+            v-for="s in suggestedPrompts"
+            :key="s"
+            class="suggest-chip"
+            type="button"
+            @click="onSuggest(s)"
+          >{{ s }}</button>
+        </div>
       </div>
 
       <!-- 메시지 -->
@@ -156,7 +165,10 @@
       </div>
 
       <!-- 에러 -->
-      <div v-if="error" class="error-banner">{{ error }}</div>
+      <div v-if="error" class="error-banner">
+        <span>{{ error }}</span>
+        <button v-if="lastUserMessage && !busy" class="error-retry" type="button" @click="onRetry">다시 시도</button>
+      </div>
     </div>
 
     <!-- 첨부(+) 메뉴 -->
@@ -204,6 +216,7 @@
         v-model="inputText"
         class="msg-input"
         placeholder="메시지 입력"
+        enterkeyhint="send"
         :disabled="busy"
         @keydown.enter.prevent="(e) => !e.isComposing && onSend()"
       />
@@ -290,6 +303,30 @@ const planning = computed(() => assistantStore.planning)
 
 // 응답 진행 중(요청~첫토큰=loading, 첫토큰~종료=streaming) — 입력 잠금/중지 버튼 노출 기준
 const busy = computed(() => loading.value || streaming.value)
+
+// 빈 상태 추천 프롬프트 — 탭하면 바로 전송
+const suggestedPrompts = [
+  '제주 2박3일 추천해줘',
+  '서울 데이트 코스 알려줘',
+  '방금 올린 문서 요약해줘',
+]
+function onSuggest(text) {
+  if (busy.value) return
+  assistantStore.send(text)
+}
+
+// 에러 복구용 — 마지막 사용자 메시지(다시 시도 대상)
+const lastUserMessage = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'user') return messages.value[i].content
+  }
+  return ''
+})
+function onRetry() {
+  const text = lastUserMessage.value
+  if (!text || busy.value) return
+  assistantStore.send(text)
+}
 
 // ── 계획 폼(바텀시트) ──────────────────────────────────────────────────────────
 const planFormOpen = ref(false)
@@ -593,6 +630,9 @@ watch(
 /* 에러 배너 */
 .error-banner {
   align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: #fdecea;
   color: var(--color-error);
   font-size: 12.5px;
@@ -601,6 +641,39 @@ watch(
   border-radius: var(--radius-full);
   margin: 4px 0;
   text-align: center;
+}
+.error-retry {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-error);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 빈 상태 추천 칩 */
+.suggest-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.suggest-chip {
+  padding: 8px 14px;
+  background: var(--color-white);
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-ink-secondary);
+  letter-spacing: -0.2px;
+  transition: all 0.15s;
+}
+.suggest-chip:active {
+  background: var(--color-peach-light);
+  border-color: var(--color-peach);
+  color: var(--color-peach-pressed);
 }
 
 /* 입력 바 */

@@ -86,19 +86,35 @@
         <p class="overview-text">{{ place.overview }}</p>
       </div>
 
+      <!-- ── 담기 완료 토스트 ──────────────────────────────────────────────── -->
+      <Transition name="fade">
+        <div v-if="addedToast.show" class="added-toast">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          <span class="added-text">{{ addedToast.text }}</span>
+          <button class="added-link" @click="goToPlan">여행 보기</button>
+        </div>
+      </Transition>
+
       <!-- ── Actions ───────────────────────────────────────────────────────── -->
       <div class="action-row">
-        <button class="action-btn primary" :disabled="addLoading" @click="addToPlan">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="18" height="18" rx="2" />
-            <path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01" />
-          </svg>
-          <span v-if="addLoading">추가 중…</span>
-          <span v-else-if="addMsg === 'added'">담기 완료!</span>
-          <span v-else-if="addMsg === 'duplicate'">이미 담겨 있어요</span>
-          <span v-else-if="addMsg === 'error'">오류가 발생했어요</span>
-          <span v-else>일정에 담기</span>
-        </button>
+        <!-- 장바구니 분할 버튼: 본문 탭=활성 계획에 바로 담기, ▾=다른 일정 선택 -->
+        <div class="cart-btn">
+          <button class="cart-main" :disabled="addLoading" @click="quickAdd">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+            <span v-if="addLoading">담는 중…</span>
+            <span v-else>{{ cartLabel }}</span>
+          </button>
+          <button class="cart-caret" :disabled="addLoading" @click="openAddSheet" aria-label="다른 일정에 담기">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+        </div>
         <button class="action-btn secondary" @click="$router.push('/explore')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8" />
@@ -276,6 +292,70 @@
 
       <div class="bottom-spacer" />
     </div>
+
+    <!-- 일정에 담기 — 계획/일차 선택 바텀시트 -->
+    <Transition name="fade">
+      <div v-if="addSheet.open" class="ai-overlay" @click.self="closeAddSheet">
+        <div class="ai-sheet">
+          <div class="ai-sheet-head">
+            <button v-if="addSheet.step === 'day'" class="ai-back" @click="addSheet.step = 'plan'" aria-label="뒤로">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <h3 class="ai-sheet-title">
+              {{ addSheet.step === 'noplan' ? '여행 계획이 없어요'
+                 : addSheet.step === 'plan' ? '어느 일정에 담을까요?'
+                 : '며칠차에 담을까요?' }}
+            </h3>
+            <button class="ai-close" @click="closeAddSheet" aria-label="닫기">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+
+          <!-- 계획 없음 -->
+          <div v-if="addSheet.step === 'noplan'" class="ai-noplan">
+            <p class="ai-noplan-text">먼저 여행 계획을 만들어 주세요.</p>
+            <button class="ai-primary" :disabled="addSheet.adding" @click="createPlanFromSheet">
+              {{ addSheet.adding ? '만드는 중…' : '새 계획 만들기' }}
+            </button>
+          </div>
+
+          <!-- 계획 선택 -->
+          <div v-else-if="addSheet.step === 'plan'" class="ai-list">
+            <button
+              v-for="p in planStore.plans"
+              :key="p.id"
+              class="ai-plan-row"
+              @click="selectPlanInSheet(p.id)"
+            >
+              <span class="ai-plan-main">
+                <span class="ai-plan-title">{{ p.title || '제목 없는 계획' }}</span>
+                <span class="ai-plan-sub">{{ p.startDate }}<span v-if="p.endDate && p.endDate !== p.startDate"> ~ {{ p.endDate }}</span></span>
+              </span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+            </button>
+          </div>
+
+          <!-- 일차 선택 + 담기 -->
+          <div v-else class="ai-day-step">
+            <div class="ai-day-chips">
+              <button
+                v-for="d in sheetDays"
+                :key="d.dayNo"
+                :class="['ai-day-chip', { active: addSheet.selectedDay === d.dayNo }]"
+                @click="addSheet.selectedDay = d.dayNo"
+              >
+                <span class="ai-day-no">{{ d.dayNo }}일차</span>
+                <span class="ai-day-meta">{{ d.label }} · {{ d.count }}곳</span>
+              </button>
+            </div>
+            <p v-if="addSheet.error" class="ai-err">{{ addSheet.error }}</p>
+            <button class="ai-primary" :disabled="addSheet.adding || addSheet.selectedDay == null" @click="confirmAdd">
+              {{ addSheet.adding ? '담는 중…' : (addSheet.selectedDay != null ? addSheet.selectedDay + '일차에 담기' : '일차를 선택하세요') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -304,7 +384,6 @@ const bookmarkLoading = ref(false)
 const place = ref(null)
 const loading = ref(false)
 const fetchError = ref(null)
-const addMsg = ref('')      // 'added' | 'duplicate' | 'error' | 'no-auth'
 const addLoading = ref(false)
 
 // ── 리뷰 상태 (실연동) ───────────────────────────────────────────────────────
@@ -512,55 +591,164 @@ async function loadBookmark() {
   }
 }
 
-async function addToPlan() {
+// ── 장바구니 담기 (한 번 탭) ──────────────────────────────────────────────────
+const addedToast = ref({ show: false, text: '' })
+let toastTimer = null
+
+// 버튼 라벨: 활성 계획(=담는 중인 여행)이 있으면 그 이름으로, 없으면 기본 문구.
+// 제목이 길면 잘라 버튼 넘침을 막는다("에 담기"는 항상 보이게).
+const cartLabel = computed(() => {
+  const t = (planStore.activePlanTitle || '').trim()
+  if (!t) return '내 여행에 담기'
+  const short = t.length > 10 ? t.slice(0, 10) + '…' : t
+  return `${short}에 담기`
+})
+
+function showAddedToast(text) {
+  addedToast.value = { show: true, text }
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => { addedToast.value.show = false }, 3200)
+}
+
+function goToPlan() {
+  router.push('/plan')
+}
+
+function placePayload() {
+  return {
+    contentId: route.params.id,
+    contentType: place.value?.contentTypeId ?? 12,
+  }
+}
+
+// 본문 탭 — 활성 계획(없으면 자동 생성)에 바로 담는다
+async function quickAdd() {
   if (!authStore.isAuthenticated) {
     router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
     return
   }
-
+  if (addLoading.value) return
   addLoading.value = true
-  addMsg.value = ''
   planStore.error = null
-
   try {
-    await planStore.loadPlans()
-
-    let planId
-    if (planStore.plans.length === 0) {
-      // Auto-create a default plan
-      const today = new Date()
-      const endD = new Date()
-      endD.setDate(today.getDate() + 2)
-      const pad = (n) => String(n).padStart(2, '0')
-      const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-      const created = await planStore.createPlan({
-        title: '나의 여행',
-        startDate: fmt(today),
-        endDate: fmt(endD),
-      })
-      planId = created.id
+    const res = await planStore.quickAddPlace(placePayload())
+    if (res.duplicate) {
+      showAddedToast(`이미 ${res.planTitle}에 담겨 있어요`)
     } else {
-      planId = planStore.plans[0].id
-      await planStore.loadPlan(planId)
+      showAddedToast(`${res.planTitle} ${res.dayNo}일차에 담았어요`)
     }
-
-    const contentId = route.params.id
-    const contentType = place.value?.contentTypeId ?? 12
-
-    await planStore.addPlace(planId, 1, { contentId, contentType })
-    addMsg.value = 'added'
-  } catch (e) {
-    const code = e?.response?.data?.code
-    if (code === 'PLAN4093') {
-      addMsg.value = 'duplicate'
-    } else {
-      addMsg.value = 'error'
-    }
+  } catch {
+    showAddedToast(planStore.error || '담기에 실패했어요')
   } finally {
     addLoading.value = false
   }
 }
 
+// ── 일정에 담기 — 계획/일차 선택 시트 ──────────────────────────────────────────
+const addSheet = ref({ open: false, step: 'plan', selectedPlanId: null, selectedDay: null, adding: false, error: '' })
+
+// 선택한 계획의 일차 목록(번호·날짜라벨·장소수) — 일차 칩에 표시
+const sheetDays = computed(() => {
+  const cur = planStore.current
+  if (!cur || cur.id !== addSheet.value.selectedPlanId) return []
+  const start = cur.startDate ? new Date(cur.startDate + 'T00:00:00') : null
+  return (cur.days ?? []).map((d) => {
+    let label = `${d.dayNo}일차`
+    if (start) {
+      const dt = new Date(start); dt.setDate(start.getDate() + (d.dayNo - 1))
+      label = `${dt.getMonth() + 1}/${dt.getDate()}`
+    }
+    return { dayNo: d.dayNo, label, count: (d.places ?? []).length }
+  })
+})
+
+async function openAddSheet() {
+  if (!authStore.isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  addLoading.value = true
+  addSheet.value = { open: false, step: 'plan', selectedPlanId: null, selectedDay: null, adding: false, error: '' }
+  try {
+    await planStore.loadPlans()
+    addSheet.value.open = true
+    if (planStore.plans.length === 0) {
+      addSheet.value.step = 'noplan'
+    } else if (planStore.plans.length === 1) {
+      // 계획이 하나면 바로 일차 선택으로
+      await selectPlanInSheet(planStore.plans[0].id)
+    } else {
+      addSheet.value.step = 'plan'
+    }
+  } catch {
+    addSheet.value = { ...addSheet.value, open: true, step: 'noplan' }
+  } finally {
+    addLoading.value = false
+  }
+}
+
+function closeAddSheet() {
+  addSheet.value.open = false
+}
+
+async function selectPlanInSheet(planId) {
+  addSheet.value.selectedPlanId = planId
+  addSheet.value.error = ''
+  try {
+    await planStore.loadPlan(planId)
+    // 피커에서 고른 계획을 활성(장바구니) 계획으로 고정 — 이후 한 번 탭이 여기로 담긴다
+    planStore.setActivePlan(planId, planStore.current?.title)
+    addSheet.value.selectedDay = planStore.current?.days?.[0]?.dayNo ?? 1
+    addSheet.value.step = 'day'
+  } catch {
+    addSheet.value.error = '계획을 불러오지 못했어요.'
+  }
+}
+
+async function createPlanFromSheet() {
+  if (addSheet.value.adding) return
+  addSheet.value.adding = true
+  try {
+    const today = new Date()
+    const endD = new Date(); endD.setDate(today.getDate() + 2)
+    const pad = (n) => String(n).padStart(2, '0')
+    const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const created = await planStore.createPlan({ title: '나의 여행', startDate: fmt(today), endDate: fmt(endD) })
+    await planStore.loadPlans()
+    await selectPlanInSheet(created.id)
+  } catch {
+    addSheet.value.error = '계획 생성에 실패했어요.'
+  } finally {
+    addSheet.value.adding = false
+  }
+}
+
+async function confirmAdd() {
+  const planId = addSheet.value.selectedPlanId
+  const dayNo = addSheet.value.selectedDay
+  if (planId == null || dayNo == null || addSheet.value.adding) return
+  addSheet.value.adding = true
+  addSheet.value.error = ''
+  planStore.error = null
+  try {
+    const contentId = route.params.id
+    const contentType = place.value?.contentTypeId ?? 12
+    await planStore.addPlace(planId, dayNo, { contentId, contentType })
+    if (planStore.error) { addSheet.value.error = planStore.error; return }
+    // 활성 계획·장바구니 수 동기화 후 토스트
+    planStore.setActivePlan(planId, planStore.current?.title)
+    planStore.setCartCount((planStore.current?.days ?? []).reduce((s, d) => s + (d.places?.length ?? 0), 0))
+    addSheet.value.open = false
+    showAddedToast(`${planStore.current?.title ?? '내 여행'} ${dayNo}일차에 담았어요`)
+  } catch (e) {
+    const code = e?.response?.data?.code
+    addSheet.value.error = code === 'PLAN4093' ? '이미 이 일차에 담겨 있어요.' : '담기에 실패했어요.'
+  } finally {
+    addSheet.value.adding = false
+  }
+}
+
+// master: 브라우저 alert 대신 커스텀 $alert 사용("다시 추천" 버튼에서 호출)
 function getRecommendation() {
   $alert.info('비슷한 여행지를 추천해드릴게요!')
 }
@@ -829,15 +1017,73 @@ onMounted(async () => {
   letter-spacing: -0.2px;
 }
 
-.action-btn.primary {
-  background: var(--color-peach);
-  color: white;
-  flex: 1.3;
-}
-
 .action-btn.secondary {
   background: var(--color-surface);
   color: var(--color-ink-secondary);
+}
+
+/* ── 장바구니 분할 버튼 ─────────────────────────────────────────────────────── */
+.cart-btn {
+  flex: 1.5;
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--color-peach);
+  box-shadow: 0 4px 14px rgba(247, 143, 87, 0.28);
+}
+.cart-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 6px;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+.cart-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cart-main svg { flex-shrink: 0; }
+.cart-main:active { background: var(--color-peach-pressed); }
+.cart-main:disabled { opacity: 0.6; }
+.cart-caret {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  color: #fff;
+  border-left: 1px solid rgba(255, 255, 255, 0.32);
+}
+.cart-caret:active { background: var(--color-peach-pressed); }
+.cart-caret:disabled { opacity: 0.6; }
+
+/* ── 담기 토스트 ───────────────────────────────────────────────────────────── */
+.added-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 20px;
+  padding: 11px 14px;
+  background: var(--color-ink);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  font-weight: 600;
+}
+.added-text { flex: 1; letter-spacing: -0.2px; }
+.added-link {
+  flex-shrink: 0;
+  color: #ffd9bf;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 2px 4px;
 }
 
 /* ── Map section ──────────────────────────────────────────────────────────── */
@@ -1273,4 +1519,92 @@ onMounted(async () => {
 .bottom-spacer {
   height: 32px;
 }
+
+/* ── 일정에 담기 바텀시트 ──────────────────────────────────────────────────── */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.ai-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+}
+.ai-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-white);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: 14px 18px calc(env(safe-area-inset-bottom, 0px) + 18px);
+  max-height: 80%;
+  display: flex;
+  flex-direction: column;
+}
+.ai-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.ai-sheet-title { flex: 1; font-size: 16px; font-weight: 800; color: var(--color-ink); letter-spacing: -0.3px; }
+.ai-back, .ai-close {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-ink-muted);
+}
+.ai-list { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.ai-plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-align: left;
+  cursor: pointer;
+}
+.ai-plan-row:active { background: var(--color-peach-light); }
+.ai-plan-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ai-plan-title { font-size: 14px; font-weight: 700; color: var(--color-ink); }
+.ai-plan-sub { font-size: 12px; color: var(--color-ink-muted); }
+.ai-day-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.ai-day-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 12px 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.ai-day-chip.active { border-color: var(--color-peach); background: var(--color-peach-light); }
+.ai-day-no { font-size: 13px; font-weight: 800; color: var(--color-ink); }
+.ai-day-meta { font-size: 11px; color: var(--color-ink-muted); }
+.ai-primary {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(90deg, var(--color-peach) 0%, #f9a96a 100%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(247, 143, 87, 0.3);
+}
+.ai-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.ai-noplan { display: flex; flex-direction: column; gap: 14px; padding: 8px 0 4px; }
+.ai-noplan-text { font-size: 14px; color: var(--color-ink-secondary); text-align: center; }
+.ai-err { font-size: 12.5px; color: var(--color-error); margin: 0 2px 10px; }
 </style>

@@ -26,6 +26,7 @@
       <h2 class="form-title">새 계정 만들기</h2>
       <p class="form-sub">정보를 입력하고 여행을 시작해보세요.</p>
 
+      <form @submit.prevent="handleSignup">
       <div class="fields">
         <!-- Email -->
         <div class="field-wrap">
@@ -94,7 +95,6 @@
               class="field-input"
               placeholder="비밀번호를 다시 입력해 주세요"
               autocomplete="new-password"
-              @keydown.enter="handleSignup"
             />
           </div>
           <span v-if="passwordConfirmError" class="inline-error">{{ passwordConfirmError }}</span>
@@ -103,10 +103,11 @@
 
       <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
 
-      <button class="signup-btn" :disabled="loading" @click="handleSignup">
+      <button class="signup-btn" type="submit" :disabled="loading || !canSubmit">
         <span v-if="!loading">가입하기</span>
         <div v-else class="btn-spinner" />
       </button>
+      </form>
 
       <p class="login-link">
         이미 계정이 있으신가요?
@@ -150,6 +151,17 @@ const passwordConfirmError = computed(() => {
   if (password.value !== passwordConfirm.value) return '비밀번호가 일치하지 않아요.'
   return ''
 })
+
+// 모든 필수 항목이 채워지고 검증 오류가 없을 때만 제출 가능
+const canSubmit = computed(() =>
+  !!email.value &&
+  !!nickname.value &&
+  !!password.value &&
+  !!passwordConfirm.value &&
+  !nicknameError.value &&
+  !passwordError.value &&
+  !passwordConfirmError.value
+)
 
 async function handleSignup() {
   errorMsg.value = ''

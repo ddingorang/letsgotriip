@@ -39,34 +39,22 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: {
-      // Order matters: more specific rules first.
-      // BE serves community/companion at /community·/companion (no /api prefix),
-      // but the SPA uses those same paths as page routes. So the FE calls them
-      // under /api/* and we strip /api here — this prevents the proxy from
-      // hijacking SPA navigations to /community or /companion.
-      '/api/community': {
-        target: BACKEND,
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-      '/api/companion': {
-        target: BACKEND,
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-      // BE PreprocessingController is mapped at bare `analysis` (no /api) — strip /api.
-      '/api/analysis': {
-        target: BACKEND,
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-      '/api': { target: BACKEND, changeOrigin: true },
-      '/auth': { target: BACKEND, changeOrigin: true },
-      '/users': { target: BACKEND, changeOrigin: true },
-      '/uploads': { target: BACKEND, changeOrigin: true },
-      '/oauth2': { target: BACKEND, changeOrigin: true },
-      '/login/oauth2': { target: BACKEND, changeOrigin: true },
-    },
+    proxy: (() => {
+      // dev 프록시 공통 — 대체 포트(예: 5174)로 띄워도 BE CORS 허용 origin(5173)으로
+      // 요청하도록 Origin 헤더를 고정한다. 기본 5173 실행 시엔 동일 값이라 무해.
+      const be = { target: BACKEND, changeOrigin: true, headers: { origin: 'http://localhost:5173' } }
+      const beStrip = { ...be, rewrite: (path) => path.replace(/^\/api/, '') }
+      return {
+        '/api/community': beStrip,
+        '/api/companion': beStrip,
+        '/api/analysis': beStrip,
+        '/api': be,
+        '/auth': be,
+        '/users': be,
+        '/uploads': be,
+        '/oauth2': be,
+        '/login/oauth2': be,
+      }
+    })(),
   },
 })

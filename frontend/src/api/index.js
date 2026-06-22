@@ -223,6 +223,8 @@ export const planApi = {
   compare: (aId, bId) => http.get('/api/plans/compare', { params: { aId, bId } }),
   // 예산 추정 (소유자) → 일자별/총 예산
   getBudget: (planId) => http.get(`/api/plans/${planId}/budget`),
+  // 일자별 자동차 도로 경로 (카카오 길찾기) → { planId, enabled, days:[{dayNo, distanceMeters, durationSeconds, taxiFare, tollFare, path:[[lat,lng],...]}] }
+  getRoutePath: (planId) => http.get(`/api/plans/${planId}/route-path`),
 }
 
 // ── Recommendations ───────────────────────────────────────────────────────────

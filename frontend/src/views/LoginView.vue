@@ -32,52 +32,69 @@
       <h2 class="form-title">다시 만나서 반가워요</h2>
       <p class="form-sub">로그인하고 나만의 여행을 계획해보세요.</p>
 
-      <div class="fields">
-        <!-- Email -->
-        <div class="field-wrap">
-          <label class="field-label">이메일</label>
-          <div class="input-wrap">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
-            </svg>
-            <input
-              v-model="email"
-              type="email"
-              class="field-input"
-              placeholder="user@email.com"
-              autocomplete="email"
-              @keydown.enter="focusPassword"
-            />
+      <form @submit.prevent="submitLogin">
+        <div class="fields">
+          <!-- Email -->
+          <div class="field-wrap">
+            <label class="field-label">이메일</label>
+            <div class="input-wrap">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+              <input
+                v-model="email"
+                type="email"
+                name="email"
+                class="field-input"
+                placeholder="user@email.com"
+                autocomplete="email"
+                @keydown.enter="focusPassword"
+              />
+            </div>
+          </div>
+
+          <!-- Password -->
+          <div class="field-wrap">
+            <label class="field-label">비밀번호</label>
+            <div class="input-wrap">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
+              </svg>
+              <input
+                ref="passwordRef"
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'"
+                name="password"
+                class="field-input"
+                placeholder="••••••••"
+                autocomplete="current-password"
+              />
+              <button
+                type="button"
+                class="pw-toggle"
+                :aria-label="showPassword ? '비밀번호 숨기기' : '비밀번호 표시'"
+                @click="showPassword = !showPassword"
+              >
+                <svg v-if="showPassword" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+                <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- Password -->
-        <div class="field-wrap">
-          <label class="field-label">비밀번호</label>
-          <div class="input-wrap">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
-            </svg>
-            <input
-              ref="passwordRef"
-              v-model="password"
-              type="password"
-              class="field-input"
-              placeholder="••••••••"
-              autocomplete="current-password"
-              @keydown.enter="submitLogin"
-            />
-          </div>
-        </div>
-      </div>
+        <div v-if="error" class="error-msg">{{ error }}</div>
 
-      <div v-if="error" class="error-msg">{{ error }}</div>
-
-      <!-- Login button -->
-      <button class="login-btn" :disabled="loading" @click="submitLogin">
-        <span v-if="!loading">로그인</span>
-        <div v-else class="btn-spinner" />
-      </button>
+        <!-- Login button -->
+        <button class="login-btn" type="submit" :disabled="loading">
+          <span v-if="!loading">로그인</span>
+          <div v-else class="btn-spinner" />
+        </button>
+      </form>
 
       <!-- Forgot password -->
       <button class="forgot-link" @click="goPasswordReset">비밀번호를 잊으셨나요?</button>
@@ -137,6 +154,7 @@ const email = ref(import.meta.env.VITE_DEMO_EMAIL || '')
 const password = ref(import.meta.env.VITE_DEMO_PASSWORD || '')
 const loading = ref(false)
 const error = ref('')
+const showPassword = ref(false)
 const passwordRef = ref(null)
 const isRedirected = !!route.query.redirect
 const isResetDone = route.query.reset === 'done'
@@ -301,6 +319,14 @@ function goPasswordReset() {
   background: transparent;
 }
 .field-input::placeholder { color: var(--color-ink-muted); }
+
+.pw-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
 
 .error-msg {
   font-size: 13px;

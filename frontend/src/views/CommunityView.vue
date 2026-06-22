@@ -54,6 +54,13 @@
             @bookmark="postsStore.bookmarkPost($event)"
           />
         </div>
+        <div v-if="!postsStore.loading && postsStore.posts.length === 0" class="hp-empty">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+          </svg>
+          <span>아직 게시글이 없어요</span>
+          <button class="hp-empty-btn" @click="$router.push('/community/write')">글쓰기</button>
+        </div>
         <div v-if="postsStore.loading" class="loading-row">
           <div class="spinner" />
         </div>
@@ -112,7 +119,6 @@
             <div class="map-card-body">
               <div class="map-card-row1">
                 <span class="cat-tag">{{ selectedHp.category }}</span>
-                <span class="walk-time">도보 12분</span>
               </div>
               <div class="map-card-name">{{ selectedHp.name }}</div>
               <div class="map-card-sub">{{ selectedHp.location }} · {{ selectedHp.description }}</div>
@@ -156,9 +162,6 @@
               {{ hp.rating }} ({{ hp.ratingCount }}) · 저장 {{ hp.saveCount }}
             </div>
           </div>
-          <button class="bookmark-btn" @click.stop>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /></svg>
-          </button>
         </div>
       </div>
 
@@ -198,10 +201,6 @@
 
         <div class="section-header" style="margin-top: 24px">
           <span class="section-title">동행 모집</span>
-          <button class="sort-btn">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="9" y2="18" /></svg>
-            최신순
-          </button>
         </div>
         <div class="companion-list">
           <div
@@ -651,7 +650,6 @@ onMounted(() => {
   gap: 8px;
   margin-bottom: 3px;
 }
-.walk-time { font-size: 11.5px; color: var(--color-ink-muted); }
 .map-card-name { font-size: 15px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.3px; }
 .map-card-sub { font-size: 12px; color: var(--color-ink-muted); margin-top: 2px; }
 .map-card-rating { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--color-ink-secondary); margin-top: 4px; }
@@ -713,15 +711,6 @@ onMounted(() => {
   font-size: 12px;
   color: var(--color-ink-secondary);
 }
-.bookmark-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
 /* ====== 동행 ====== */
 .companion-pane { background: var(--color-white); }
 .section-header {
@@ -741,15 +730,6 @@ onMounted(() => {
   font-weight: 500;
   color: var(--color-ink-muted);
 }
-.sort-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-ink-secondary);
-}
-
 /* Room cards horizontal scroll */
 .rooms-row {
   display: flex;

@@ -137,3 +137,9 @@ tour:
   api:
     base-url: https://apis.data.go.kr/B551011/KorService2
     key: ${TOUR_API_KEY}
+
+# 카카오 모빌리티 길찾기(자동차 경로) REST API
+kakao:
+  directions:
+    base-url: https://apis-navi.kakaomobility.com
+    key: ${KAKAO_REST_API_KEY:}
