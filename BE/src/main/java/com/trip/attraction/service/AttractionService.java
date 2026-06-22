@@ -110,7 +110,9 @@ public class AttractionService {
                 // 내 위치 근처 — 좌표 기반 거리순 조회
                 items = tourApiClient.fetchLocationBased(req.mapX(), req.mapY(), req.clampedRadius(), req.contentTypeId(), page, size);
             } else {
-                items = tourApiClient.fetchAreaBased(req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size);
+                // arrange=B(조회순/인기) — 기본 A(제목순)는 'ㄱ'으로 시작하는 장소만 앞에 몰려
+                // '추천순'이 '이름순'과 똑같아 보이는 문제가 있어 인기순을 기본으로 한다.
+                items = tourApiClient.fetchAreaBased(req.areaCode(), req.sigunguCode(), req.contentTypeId(), page, size, "B");
             }
 
             // 빈 결과는 stale 폴백 캐시에 저장하지 않는다(#19) — 빈 응답을 stale로 굳히지 않음.

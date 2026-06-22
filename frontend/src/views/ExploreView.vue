@@ -56,8 +56,10 @@
     </div>
 
     <!-- ── Bottom sheet ──────────────────────────────────────────────────── -->
-    <div ref="bottomSheet" class="bottom-sheet" :class="{ expanded: sheetExpanded }">
-      <div class="sheet-handle" @click="sheetExpanded = !sheetExpanded" />
+    <div ref="bottomSheet" class="bottom-sheet" :class="{ dragging: sheetDragging }" :style="{ height: sheetH + 'vh' }">
+      <div class="sheet-handle-wrap" @pointerdown="onSheetPointerDown">
+        <div class="sheet-handle" />
+      </div>
       <div class="sheet-header">
         <h2 class="sheet-title">
           {{ sheetTitle }}
@@ -232,8 +234,53 @@ const locationStore = useLocationStore()
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const searchQuery = ref('')
-const sheetExpanded = ref(false)
 const selectedPlace = ref(null)
+
+// ── 드래그 바텀시트 (높이 vh, 스냅 3단) ───────────────────────────────────────
+const SHEET_SNAPS = [26, 52, 82]   // 접힘 / 중간 / 펼침 (viewport height %)
+const sheetH = ref(48)             // 현재 시트 높이(vh) — 인라인 style로 바인딩
+const sheetDragging = ref(false)
+let dragStartY = 0
+let dragStartH = 0
+let dragMoved = 0
+
+function expandSheet() {
+  sheetH.value = SHEET_SNAPS[2]
+}
+function nearestSnap(v) {
+  return SHEET_SNAPS.reduce((best, s) => (Math.abs(s - v) < Math.abs(best - v) ? s : best), SHEET_SNAPS[0])
+}
+function onSheetPointerDown(e) {
+  e.preventDefault()
+  sheetDragging.value = true
+  dragStartY = e.clientY
+  dragStartH = sheetH.value
+  dragMoved = 0
+  try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* noop */ }
+  window.addEventListener('pointermove', onSheetPointerMove, { passive: false })
+  window.addEventListener('pointerup', onSheetPointerUp, { once: true })
+  window.addEventListener('pointercancel', onSheetPointerUp, { once: true })
+}
+function onSheetPointerMove(e) {
+  if (!sheetDragging.value) return
+  e.preventDefault()
+  dragMoved = Math.max(dragMoved, Math.abs(e.clientY - dragStartY))
+  const dyVh = ((dragStartY - e.clientY) / window.innerHeight) * 100 // 위로 끌면 +
+  sheetH.value = Math.min(88, Math.max(18, dragStartH + dyVh))
+}
+function onSheetPointerUp() {
+  window.removeEventListener('pointermove', onSheetPointerMove)
+  window.removeEventListener('pointerup', onSheetPointerUp)
+  window.removeEventListener('pointercancel', onSheetPointerUp)
+  sheetDragging.value = false
+  if (dragMoved < 8) {
+    // 거의 안 움직였으면 탭으로 간주 → 다음 스냅으로 순환
+    const idx = SHEET_SNAPS.indexOf(nearestSnap(sheetH.value))
+    sheetH.value = SHEET_SNAPS[(idx + 1) % SHEET_SNAPS.length]
+  } else {
+    sheetH.value = nearestSnap(sheetH.value)
+  }
+}
 const selectedCategory = ref('all')
 
 // 무한스크롤 — 바닥 센티넬이 보이면 다음 페이지를 누적 로드
@@ -353,8 +400,15 @@ function searchByMapCenter() {
   showMapSearchBtn.value = false
   mapFit.value = false
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
-  const level = mapDragCenter.value.level ?? 9
-  const radius = ZOOM_RADIUS[level] ?? 20000
+  const c = mapDragCenter.value
+  // 현 지도 '크기' 기준 반경 — 중심에서 북동 모서리까지 거리(m). bounds 없으면 줌레벨 근사.
+  let radius
+  if (c.neLat != null && c.neLng != null) {
+    radius = Math.round(distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.neLat, lng: c.neLng }) * 1000)
+    radius = Math.min(Math.max(radius, 500), 20000) // TourAPI radius 상한 20km
+  } else {
+    radius = ZOOM_RADIUS[c.level ?? 9] ?? 20000
+  }
   const params = {
     page: 1,
     size: PAGE_SIZE,
@@ -470,7 +524,7 @@ function setRowRef(contentId, el) {
 function selectPlace(place) {
   selectedPlace.value = place
   // 시트를 펼쳐 항목이 보이도록 한 뒤, 해당 row 를 스크롤로 가시화
-  sheetExpanded.value = true
+  expandSheet()
   nextTick(() => {
     const el = rowRefs.get(String(place.contentId))
     if (el && typeof el.scrollIntoView === 'function') {
@@ -620,7 +674,13 @@ watch(
   },
 )
 
-onBeforeUnmount(teardownObserver)
+onBeforeUnmount(() => {
+  teardownObserver()
+  // 드래그 도중 이탈 시 window 리스너 누수 방지
+  window.removeEventListener('pointermove', onSheetPointerMove)
+  window.removeEventListener('pointerup', onSheetPointerUp)
+  window.removeEventListener('pointercancel', onSheetPointerUp)
+})
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
@@ -736,23 +796,28 @@ onMounted(() => {
   background: var(--color-white);
   border-radius: 20px 20px 0 0;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
-  max-height: 40%;
+  height: 48vh;              /* JS가 인라인 style로 덮어씀(드래그) */
   overflow-y: auto;
-  transition: max-height 0.3s ease;
+  transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
 }
+/* 드래그 중엔 트랜지션을 꺼서 손가락을 즉시 따라오게 */
+.bottom-sheet.dragging { transition: none; }
 
-.bottom-sheet.expanded {
-  max-height: 50%;
+/* 핸들 — 히트영역 넓힌 래퍼로 감싸 드래그 쉽게 */
+.sheet-handle-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;       /* 핸들에서 시작한 터치는 스크롤이 아닌 드래그로 */
 }
-
+.sheet-handle-wrap:active { cursor: grabbing; }
 .sheet-handle {
-  width: 36px;
-  height: 4px;
+  width: 44px;
+  height: 5px;
   background: var(--color-line);
-  border-radius: 2px;
-  margin: 10px auto 0;
-  cursor: pointer;
+  border-radius: 3px;
 }
 
 .sheet-header {

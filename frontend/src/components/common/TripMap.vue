@@ -220,15 +220,21 @@ onMounted(async () => {
     })
     renderMarkers(kakao)
 
-    kakao.maps.event.addListener(map, 'dragend', () => {
+    // 현 지도 중심 + 가시영역(bounds) 을 함께 알린다(부모가 '현 지도 크기' 기준으로 조회).
+    const emitMove = () => {
       const c = map.getCenter()
-      emit('move', { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() })
-    })
-
-    kakao.maps.event.addListener(map, 'zoom_changed', () => {
-      const c = map.getCenter()
-      emit('move', { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() })
-    })
+      const payload = { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() }
+      try {
+        const b = map.getBounds()
+        const sw = b.getSouthWest()
+        const ne = b.getNorthEast()
+        payload.swLat = sw.getLat(); payload.swLng = sw.getLng()
+        payload.neLat = ne.getLat(); payload.neLng = ne.getLng()
+      } catch { /* bounds 미지원 시 중심/레벨만 */ }
+      emit('move', payload)
+    }
+    kakao.maps.event.addListener(map, 'dragend', emitMove)
+    kakao.maps.event.addListener(map, 'zoom_changed', emitMove)
 
     // 탭 전환/폰트 로드 등으로 컨테이너 크기가 늦게 잡히는 경우 대비 — 재시도
     setTimeout(refresh, 60)
