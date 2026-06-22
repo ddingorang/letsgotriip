@@ -38,7 +38,8 @@ public class AssistantController {
                 ? UUID.randomUUID().toString()
                 : request.conversationId();
 
-        String reply = assistantService.chat(principal.userId(), conversationId, request.message());
+        String reply = assistantService.chat(principal.userId(), conversationId, request.message(),
+                request.memoryOrDefault());
 
         return ResponseEntity.ok(new AssistantChatResponse(conversationId, reply));
     }
@@ -75,7 +76,7 @@ public class AssistantController {
                         .build());
 
         Flux<ServerSentEvent<String>> tokenEvents = assistantService
-                .chatStream(principal.userId(), conversationId, request.message())
+                .chatStream(principal.userId(), conversationId, request.message(), request.memoryOrDefault())
                 .map(token -> ServerSentEvent.<String>builder()
                         .event("token")
                         .data(token)

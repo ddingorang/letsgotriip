@@ -17,7 +17,44 @@
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
         </svg>
       </button>
+      <button class="docs-btn" :class="{ on: mem.useRecords }" title="개인화 설정" @click="showSettings = !showSettings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+        </svg>
+      </button>
     </header>
+
+    <!-- 개인화(메모리) 설정 패널 — 챗봇이 내 기록을 얼마나 참고할지 -->
+    <Transition name="fade">
+      <div v-if="showSettings" class="mem-overlay" @click.self="showSettings = false">
+        <div class="mem-panel">
+          <div class="mem-head">
+            <span class="mem-title">개인화 — 내 기록 활용</span>
+            <button class="mem-close" @click="showSettings = false" aria-label="닫기">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+          <p class="mem-desc">챗봇이 답할 때 참고할 내 기록을 켜고 끌 수 있어요. 모두 끄면 내 기록을 보지 않아요.</p>
+
+          <label class="mem-row master">
+            <span class="mem-label">내 기록 활용</span>
+            <input type="checkbox" :checked="mem.useRecords" @change="toggle('useRecords', $event.target.checked)" />
+          </label>
+
+          <div class="mem-sub" :class="{ disabled: !mem.useRecords }">
+            <label v-for="opt in memOptions" :key="opt.key" class="mem-row">
+              <span class="mem-label">{{ opt.label }}</span>
+              <input type="checkbox" :disabled="!mem.useRecords" :checked="mem[opt.key]" @change="toggle(opt.key, $event.target.checked)" />
+            </label>
+          </div>
+
+          <label class="mem-row recall">
+            <span class="mem-label">대화·문서 기억(RAG)</span>
+            <input type="checkbox" :checked="mem.recall" @change="toggle('recall', $event.target.checked)" />
+          </label>
+        </div>
+      </div>
+    </Transition>
 
     <div class="msg-scroll" ref="msgScroll">
       <!-- 빈 상태 안내 -->
@@ -300,6 +337,19 @@ const loading = computed(() => assistantStore.loading)
 const streaming = computed(() => assistantStore.streaming)
 const error = computed(() => assistantStore.error)
 const planning = computed(() => assistantStore.planning)
+
+// ── 개인화(메모리) 설정 ─────────────────────────────────────────────────────────
+const showSettings = ref(false)
+const mem = computed(() => assistantStore.memoryPrefs)
+const memOptions = [
+  { key: 'plans', label: '내 여행 계획' },
+  { key: 'favorites', label: '찜한 곳' },
+  { key: 'reviews', label: '내 리뷰' },
+  { key: 'stories', label: '여행 스토리' },
+]
+function toggle(key, value) {
+  assistantStore.setMemoryPrefs({ [key]: value })
+}
 
 // 응답 진행 중(요청~첫토큰=loading, 첫토큰~종료=streaming) — 입력 잠금/중지 버튼 노출 기준
 const busy = computed(() => loading.value || streaming.value)
@@ -976,4 +1026,35 @@ watch(
   gap: 8px;
 }
 .plan-saved-link { font-size: 12px; font-weight: 700; color: var(--color-peach); white-space: nowrap; }
+
+/* ── 개인화(메모리) 설정 패널 ──────────────────────────────────────────────────── */
+.docs-btn.on { color: var(--color-peach); }
+.mem-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: flex-start; justify-content: flex-end;
+  padding: 56px 12px 0;
+}
+.mem-panel {
+  width: 100%; max-width: 320px;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  padding: 14px 16px 16px;
+}
+.mem-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.mem-title { font-size: 15px; font-weight: 800; color: var(--color-ink); letter-spacing: -0.3px; }
+.mem-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--color-ink-muted); }
+.mem-desc { font-size: 12px; color: var(--color-ink-muted); line-height: 1.5; margin-bottom: 10px; }
+.mem-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 2px; cursor: pointer;
+}
+.mem-row .mem-label { font-size: 13.5px; font-weight: 600; color: var(--color-ink); }
+.mem-row.master { border-top: 1px solid var(--color-line-light); }
+.mem-row.master .mem-label, .mem-row.recall .mem-label { font-weight: 800; }
+.mem-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--color-peach); }
+.mem-sub { padding-left: 10px; }
+.mem-sub.disabled { opacity: 0.45; }
+.mem-row.recall { border-top: 1px solid var(--color-line-light); margin-top: 4px; }
 </style>

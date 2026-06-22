@@ -358,8 +358,8 @@ export const chatApi = {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
 export const assistantApi = {
-  chat: ({ conversationId, message }) =>
-    http.post('/api/assistant/chat', { conversationId, message }, { timeout: 60_000 }),
+  chat: ({ conversationId, message, memory }) =>
+    http.post('/api/assistant/chat', { conversationId, message, memory }, { timeout: 60_000 }),
 
   /**
    * SSE 스트리밍 채팅. fetch + ReadableStream 으로 토큰을 점진 수신한다.
@@ -372,7 +372,7 @@ export const assistantApi = {
    * }} [handlers]
    * @returns {Promise<{ conversationId: string|null, reply: string, errored: boolean, errorMessage: string|null }>} 누적 결과
    */
-  async chatStream({ conversationId, message }, { onToken, onConversationId, onError, signal } = {}) {
+  async chatStream({ conversationId, message, memory }, { onToken, onConversationId, onError, signal } = {}) {
     let token = null
     try {
       token = useAuthStore().accessToken
@@ -387,7 +387,7 @@ export const assistantApi = {
       method: 'POST',
       headers,
       credentials: 'include',
-      body: JSON.stringify({ conversationId: conversationId ?? null, message }),
+      body: JSON.stringify({ conversationId: conversationId ?? null, message, memory }),
       signal,
     })
 
