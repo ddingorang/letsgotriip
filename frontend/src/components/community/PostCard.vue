@@ -3,11 +3,9 @@
   <article class="post-card" @click="$emit('click')">
     <div class="post-image">
       <div class="img-area">
-        <div v-if="!imgFailed" class="img-wrapper">
-          <img :src="displayImage" :alt="post.title" @error="imgFailed = true" />
-        </div>
-        <div v-else class="img-placeholder">
-          <span class="img-caption">{{ post.location }}</span>
+        <!-- 대표 이미지: 업로드 이미지가 없거나 로딩 실패 시 공통 기본 이미지로 대체 -->
+        <div class="img-wrapper">
+          <img :src="displayImage" :alt="post.title" @error="onImgError" />
         </div>
         <div class="img-gradient" />
         <span class="category-badge">{{ post.categoryLabel ?? post.category }}</span>
@@ -85,9 +83,12 @@ defineEmits(['click', 'like', 'bookmark'])
 const router = useRouter()
 const authStore = useAuthStore()
 
-// 게시물 사진 — 업로드 이미지가 없으면 로컬 기본 썸네일로 채움(외부 더미 미사용)
-const imgFailed = ref(false)
-const displayImage = computed(() => props.post.imageUrl || '/images/placeholder-thumb.png')
+// 게시물 사진 — 업로드 이미지가 없거나 로딩 실패 시 공통 기본 이미지로 채움(외부 더미 미사용)
+const PLACEHOLDER_IMG = '/images/placeholder-thumb.png'
+const displayImage = computed(() => props.post.imageUrl || PLACEHOLDER_IMG)
+function onImgError(e) {
+  if (!e.target.src.endsWith(PLACEHOLDER_IMG)) e.target.src = PLACEHOLDER_IMG
+}
 
 // 팔로우 — 작성자 본인 글이면 버튼을 숨기고, 아니면 followApi.status로 초기 상태를 채운다.
 const following = ref(false)
