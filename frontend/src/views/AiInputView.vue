@@ -185,6 +185,7 @@ async function handleGenerate() {
     periodValid: conditions.value.periodValid ?? true,
   }
   if (conditions.value.budget != null) payload.budget = conditions.value.budget
+  if (conditions.value.title) payload.title = conditions.value.title
 
   try {
     await recommendStore.generate(payload)

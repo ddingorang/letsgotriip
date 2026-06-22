@@ -545,8 +545,10 @@ import { useGamificationStore } from '@/stores/gamification.js'
 import { http } from '@/api/http.js'
 import { favoriteApi, followApi, reviewApi, storyApi } from '@/api/index.js'
 import { useAlert } from '@/composables/useAlert.js'
+import { usePrompt } from '@/composables/usePrompt.js'
 
 const $alert = useAlert()
+const $prompt = usePrompt().prompt
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -647,7 +649,7 @@ async function loadAlbums() {
 const albumCreating = ref(false)
 async function createAlbum() {
   if (albumCreating.value) return
-  const name = (window.prompt('새 앨범 이름을 입력하세요') ?? '').trim()
+  const name = await $prompt('새 앨범 이름을 입력하세요', '앨범 이름')
   if (!name) return
   albumCreating.value = true
   try {
@@ -831,6 +833,7 @@ onMounted(() => {
   height: 100%;
   overflow: hidden;
   background: var(--color-white);
+  position: relative;
 }
 .scroll-content {
   flex: 1;
@@ -1411,12 +1414,12 @@ onMounted(() => {
 
 /* 바텀 시트 (찜 목록 / 내 리뷰) */
 .sheet-backdrop {
-  position: fixed;          /* .page(overflow:hidden)에 갇히지 않게 뷰포트 기준 */
+  position: absolute;       /* .page(position:relative) 기준 — 앱 컨테이너 너비에 맞춤 */
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: flex-end;
-  z-index: 1000;            /* BottomNav(z-index:100) 위로 — 시트 하단이 가려지지 않게 */
+  z-index: 1000;
 }
 .sheet {
   width: 100%;

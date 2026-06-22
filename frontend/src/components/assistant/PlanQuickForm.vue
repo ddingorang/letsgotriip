@@ -17,6 +17,18 @@
       </div>
 
       <div class="sheet-body">
+        <!-- 일정 제목 -->
+        <section class="field">
+          <div class="field-label">일정 이름 <span class="field-hint">(선택)</span></div>
+          <input
+            v-model="planTitle"
+            type="text"
+            class="title-input"
+            placeholder="예) 제주 여름 힐링 여행"
+            maxlength="50"
+          />
+        </section>
+
         <!-- 지역 -->
         <section class="field">
           <div class="field-label">어디로 가세요?</div>
@@ -238,6 +250,9 @@ const budgetOptions = [
 ]
 const selectedBudget = ref('10~30만원')
 
+// ── 일정 제목 ────────────────────────────────────────────────────────────────
+const planTitle = ref('')
+
 // ── 테마 (AiPlanInputView 와 동일한 key — BE THEME_LABELS 단일 소스) ────────────
 const themes = [
   { key: 'sea', icon: '🌊', label: '바다/해변' },
@@ -279,13 +294,16 @@ function handleSubmit() {
     periodValid: true,
   }
   if (budgetOpt?.value != null) conditions.budget = budgetOpt.value
+  if (planTitle.value.trim()) conditions.title = planTitle.value.trim()
 
   // 사람이 읽을 요약(말풍선용) — 부모가 사용자 메시지로 표시
   const areaName = areas.value.find((a) => a.code === selectedAreaCode.value)?.name ?? selectedAreaCode.value
   const themeLabels = selectedThemes.value
     .map((k) => themes.find((t) => t.key === k)?.label)
     .filter(Boolean)
+  const titlePrefix = planTitle.value.trim() ? `📌 ${planTitle.value.trim()}\n` : ''
   const summary =
+    titlePrefix +
     `✈️ ${areaName} · ${startDate.value} ~ ${endDate.value} (${nights.value}박)` +
     ` · ${companion?.label ?? ''}` +
     (budgetOpt?.value != null ? ` · 예산 ${selectedBudget.value}` : '') +
@@ -384,6 +402,29 @@ function handleSubmit() {
 .field-loading {
   font-size: 13px;
   color: var(--color-ink-muted);
+}
+
+/* ── 일정 제목 ────────────────────────────────────────────────────────────── */
+.title-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-line-light);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--color-ink);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.title-input::placeholder {
+  color: var(--color-ink-muted);
+}
+
+.title-input:focus {
+  border-color: var(--color-peach);
 }
 
 /* ── 지역 ─────────────────────────────────────────────────────────────────── */

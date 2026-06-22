@@ -408,7 +408,7 @@ public class AssistantService {
                         : List.of(themes.split("\\s*,\\s*"));
 
                 RecommendRequestDto req = new RecommendRequestDto(
-                        areaCode, start, end, companions, budget, themeList);
+                        areaCode, start, end, companions, budget, themeList, null);
 
                 RecommendationResponseDto reco = recommendService.process(userId, req);
 
