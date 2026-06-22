@@ -44,10 +44,12 @@
           <input
             v-model="form.nickname"
             class="field-input"
+            :class="{ 'input-error-border': nicknameError }"
             placeholder="닉네임"
             maxlength="12"
           />
-          <span class="field-hint">2~12자, 한글·영문·숫자</span>
+          <span v-if="nicknameError" class="inline-error">{{ nicknameError }}</span>
+          <span v-else class="field-hint">2~12자, 한글·영문·숫자</span>
         </div>
 
         <!-- 한줄 소개 -->
@@ -93,6 +95,15 @@ const saving = ref(false)
 const uploading = ref(false)
 const error = ref(null)
 const fileInput = ref(null)
+
+// 닉네임 인라인 검증(SignupView 패턴) — 입력이 있을 때만 오류 노출(2~12자, 한글·영문·숫자)
+const nicknameError = computed(() => {
+  const v = form.value.nickname
+  if (!v) return ''
+  if (v.length < 2 || v.length > 12) return '닉네임은 2~12자로 입력해 주세요.'
+  if (!/^[가-힣a-zA-Z0-9]+$/.test(v)) return '한글·영문·숫자만 사용할 수 있어요.'
+  return ''
+})
 
 // BE 기본값(/images/default-profile.png)은 실제 파일이 없어 깨지므로 placeholder 처리(HomeView 패턴)
 const previewUrl = computed(() => {
@@ -261,11 +272,19 @@ function logout() {
   transition: border-color 0.15s;
 }
 .field-input:focus { border-color: var(--color-peach); }
+.field-input.input-error-border { border-color: var(--color-error); }
 .field-input::placeholder { color: var(--color-ink-muted); }
 .field-hint {
   display: block;
   font-size: 12px;
   color: var(--color-ink-muted);
+  margin-top: 5px;
+  padding-left: 2px;
+}
+.inline-error {
+  display: block;
+  font-size: 12px;
+  color: var(--color-error);
   margin-top: 5px;
   padding-left: 2px;
 }

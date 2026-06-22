@@ -76,10 +76,10 @@
               </div>
               <ul v-if="members.length" class="member-list">
                 <li v-for="m in members" :key="m.userId" class="member-item">
-                  <div class="member-avatar">{{ String(m.userId).slice(-1) }}</div>
+                  <div class="member-avatar">{{ initial(memberName(m)) }}</div>
                   <div class="member-info">
                     <span class="member-name">
-                      {{ m.userId === myUserId ? '나' : `사용자 #${m.userId}` }}
+                      {{ m.userId === myUserId ? '나' : memberName(m) }}
                     </span>
                     <span class="member-joined">{{ formatDate(m.joinedAt) }} 참여</span>
                   </div>
@@ -243,6 +243,10 @@ function isOwner(g) {
 }
 function initial(name) {
   return (name || '?').trim().charAt(0).toUpperCase()
+}
+// 멤버 표시명 — 닉네임 우선, 없으면 사용자 번호 폴백
+function memberName(m) {
+  return m?.nickname?.trim() || `사용자 #${m?.userId}`
 }
 function formatDate(iso) {
   if (!iso) return '-'

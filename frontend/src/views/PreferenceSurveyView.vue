@@ -21,6 +21,7 @@
       <div class="survey-tag">취향 설문</div>
       <h1 class="survey-title">어떤 여행을<br />좋아하세요?</h1>
       <p class="survey-sub">관심사를 골라주시면 AI가 더 잘 맞는 일정을 추천해드려요. (복수 선택)</p>
+      <span v-if="selectedInterests.length" class="select-count">{{ selectedInterests.length }}개 선택됨</span>
 
       <!-- Interest grid -->
       <div class="interests-grid">
@@ -211,6 +212,16 @@ async function next() {
   color: var(--color-ink-muted);
   line-height: 1.55;
   margin-bottom: 24px;
+}
+.select-count {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  border-radius: var(--radius-full);
 }
 
 .interests-grid {

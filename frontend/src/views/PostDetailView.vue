@@ -2,6 +2,18 @@
 <template>
   <div class="page">
     <div class="scroll-area" ref="scrollEl">
+      <!-- 로딩 스켈레톤: 게시글 로드 전 -->
+      <template v-if="!post">
+        <div class="detail-skeleton-hero" />
+        <div class="detail-skeleton-body">
+          <div class="detail-skeleton w50" />
+          <div class="detail-skeleton w90" />
+          <div class="detail-skeleton w90" />
+          <div class="detail-skeleton w70" />
+        </div>
+      </template>
+
+      <template v-else>
       <div class="hero">
         <div class="hero-img">
           <img v-if="post?.imageUrl" :src="post.imageUrl" :alt="post?.title" />
@@ -158,6 +170,7 @@
       </div>
 
       <div class="bottom-spacer" />
+      </template>
     </div>
 
     <div class="comment-input-bar">
@@ -362,6 +375,31 @@ onBeforeUnmount(() => {
 .hero {
   position: relative;
   height: 340px;
+}
+
+/* ── 로딩 스켈레톤 ─────────────────────────────────────────────── */
+.detail-skeleton-hero {
+  width: 100%;
+  height: 340px;
+  background: var(--color-surface);
+  animation: detail-shimmer 1.2s infinite;
+}
+.detail-skeleton-body {
+  padding: 24px 20px;
+}
+.detail-skeleton {
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  margin-bottom: 14px;
+  animation: detail-shimmer 1.2s infinite;
+}
+.detail-skeleton.w50 { width: 50%; }
+.detail-skeleton.w70 { width: 70%; }
+.detail-skeleton.w90 { width: 90%; }
+@keyframes detail-shimmer {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 .hero-img {
@@ -600,6 +638,12 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 7px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.stat-btn:active {
+  transform: scale(0.95);
 }
 
 .stat-num {

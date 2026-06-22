@@ -37,6 +37,47 @@
           </template>
         </div>
 
+        <!-- 대표 이미지 (선택) -->
+        <div class="field">
+          <label class="field-label">대표 이미지 <span class="optional">(선택)</span></label>
+
+          <!-- 선택된 이미지 미리보기 -->
+          <div v-if="form.imageUrl" class="img-preview">
+            <img :src="form.imageUrl" alt="대표 이미지" />
+            <button class="img-remove" type="button" @click="clearImage" aria-label="이미지 제거">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+
+          <!-- 여행지 이미지에서 선택 (연결한 계획에 이미지가 있을 때만) -->
+          <template v-if="planImages.length">
+            <p class="img-hint">연결한 여행 계획의 여행지 이미지에서 고르기</p>
+            <div class="img-grid">
+              <button
+                v-for="img in planImages"
+                :key="img.url"
+                type="button"
+                :class="['img-thumb', { active: form.imageUrl === img.url }]"
+                :title="img.name"
+                @click="selectImage(img.url)"
+              >
+                <img :src="img.url" :alt="img.name" loading="lazy" />
+              </button>
+            </div>
+          </template>
+          <p v-else-if="form.planId && !planImagesLoading" class="img-hint muted">
+            연결한 계획에 이미지가 있는 여행지가 없어요. 직접 업로드해 주세요.
+          </p>
+
+          <!-- 직접 업로드 -->
+          <button type="button" class="img-upload-btn" :disabled="imgUploading" @click="imgInput?.click()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            {{ imgUploading ? '업로드 중…' : '직접 업로드' }}
+          </button>
+          <input ref="imgInput" type="file" accept="image/*" class="hidden-file" @change="onUploadImage" />
+          <p v-if="imgError" class="img-error">{{ imgError }}</p>
+        </div>
+
         <!-- 제목 -->
         <div class="field">
           <label class="field-label">제목 <span class="req">*</span></label>
@@ -141,7 +182,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { planApi } from '@/api/index.js'
+import { planApi, communityApi } from '@/api/index.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -162,11 +203,78 @@ const form = ref({
   estimatedCost: null,
   tags: [],
   planId: null,   // 연결할 여행 계획 ID (선택). null이면 미연결
+  imageUrl: '',   // 대표 이미지 URL (선택)
 })
 
 // ── 내 여행 계획 (연결용) ───────────────────────────────────────────────────
 const myPlans = ref([])
 const plansLoading = ref(false)
+
+// ── 대표 이미지 ─────────────────────────────────────────────────────────────
+const imgInput = ref(null)
+const planImages = ref([])          // [{ name, url }] — 연결한 계획의 여행지 이미지 후보
+const planImagesLoading = ref(false)
+const imgUploading = ref(false)
+const imgError = ref('')
+
+function selectImage(url) {
+  form.value.imageUrl = url
+}
+function clearImage() {
+  form.value.imageUrl = ''
+}
+
+// 연결한 계획의 여행지(attraction) 이미지를 후보로 수집
+async function loadPlanImages(planId) {
+  planImages.value = []
+  if (!planId) return
+  planImagesLoading.value = true
+  try {
+    const { data } = await planApi.getPlan(planId)
+    const seen = new Set()
+    const out = []
+    for (const day of data?.days ?? []) {
+      for (const place of day.places ?? []) {
+        const a = place.attraction ?? {}
+        // 이미지 필드가 attraction 또는 place 본문에, TourAPI식 소문자(firstimage)로 올 수 있어 모두 본다.
+        const url = a.imageUrl ?? a.firstimage ?? place.imageUrl ?? place.firstimage
+        if (url && !seen.has(url)) {
+          seen.add(url)
+          out.push({ name: a.title ?? place.title ?? '여행지', url })
+        }
+      }
+    }
+    planImages.value = out
+  } catch {
+    planImages.value = []
+  } finally {
+    planImagesLoading.value = false
+  }
+}
+
+// 직접 업로드 → /community/images (multipart) → { imageUrl }
+async function onUploadImage(e) {
+  const file = e.target.files?.[0]
+  e.target.value = '' // 같은 파일 재선택 허용
+  if (!file) return
+  imgError.value = ''
+  if (file.size > 10 * 1024 * 1024) {
+    imgError.value = '이미지 크기는 10MB를 초과할 수 없어요.'
+    return
+  }
+  imgUploading.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const { data } = await communityApi.uploadImage(fd)
+    if (data?.imageUrl) form.value.imageUrl = data.imageUrl
+    else imgError.value = '업로드 응답이 올바르지 않아요.'
+  } catch (err) {
+    imgError.value = err?.response?.data?.message ?? err?.message ?? '이미지 업로드에 실패했어요.'
+  } finally {
+    imgUploading.value = false
+  }
+}
 
 function planDateLabel(plan) {
   if (!plan.startDate) return ''
@@ -181,10 +289,12 @@ function selectPlan(plan) {
   if (!form.value.title && plan.title) form.value.title = plan.title
   if (!form.value.startDate && plan.startDate) form.value.startDate = plan.startDate
   if (!form.value.endDate && plan.endDate) form.value.endDate = plan.endDate
+  loadPlanImages(plan.id)  // 여행지 이미지 후보 갱신
 }
 
 function clearPlan() {
   form.value.planId = null
+  planImages.value = []
 }
 
 onMounted(async () => {
@@ -198,7 +308,7 @@ onMounted(async () => {
     if (presetId != null && !Number.isNaN(presetId)) {
       const preset = items.find(p => Number(p.id) === presetId)
       if (preset) selectPlan(preset)
-      else form.value.planId = presetId // 목록에 없어도 연결 의도는 보존(BE가 소유 검증)
+      else { form.value.planId = presetId; loadPlanImages(presetId) } // 목록에 없어도 연결 의도는 보존(BE가 소유 검증)
     }
   } catch {
     myPlans.value = []
@@ -279,6 +389,8 @@ async function submit() {
     tags: form.value.tags,
     // 연결된 계획이 있으면 함께 전송. null이면 BE는 미연결로 처리(하위호환).
     planId: form.value.planId ?? null,
+    // 대표 이미지(선택) — 여행지 이미지에서 고르거나 업로드한 URL. 없으면 null.
+    imageUrl: form.value.imageUrl || null,
   }
   try {
     const created = await companionStore.create(payload)
@@ -429,6 +541,68 @@ async function submit() {
 .tag-chip { font-size: 13px; }
 
 .optional { color: var(--color-ink-muted); font-weight: 500; font-size: 12px; }
+
+/* ── 대표 이미지 ──────────────────────────────────────────────────────────── */
+.hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.img-preview {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 10px;
+  background: var(--color-surface);
+}
+.img-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.img-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.img-hint { font-size: 12.5px; color: var(--color-ink-secondary); margin: 2px 0 8px; }
+.img-hint.muted { color: var(--color-ink-muted); }
+.img-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.img-thumb {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: var(--color-surface);
+}
+.img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.img-thumb.active { border-color: var(--color-peach); }
+.img-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-ink-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-light);
+  border-radius: var(--radius-full);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+.img-upload-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.img-error { font-size: 12px; color: var(--color-error); margin-top: 6px; }
 
 .plan-loading,
 .plan-empty {

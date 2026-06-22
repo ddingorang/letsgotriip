@@ -53,6 +53,9 @@
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
           </svg>
           <span>{{ store.alertError ? '알림을 불러오지 못했어요' : '새로운 알림이 없어요' }}</span>
+          <button v-if="store.alertError" class="retry-btn" :disabled="retrying" @click="retryLoad">
+            {{ retrying ? '불러오는 중...' : '다시 시도' }}
+          </button>
         </div>
       </template>
 
@@ -95,6 +98,18 @@ const store = useNotificationStore()
 
 const tab = ref('alerts')
 const openId = ref(null)
+const retrying = ref(false)
+
+// 에러 상태에서 다시 시도 — 알림 목록을 재요청
+async function retryLoad() {
+  if (retrying.value) return
+  retrying.value = true
+  try {
+    await store.refresh()
+  } finally {
+    retrying.value = false
+  }
+}
 
 function goBack() {
   if (window.history.length > 1) router.back()
@@ -408,6 +423,21 @@ onUnmounted(() => {
   padding: 64px 0;
   color: var(--color-ink-muted);
   font-size: 13.5px;
+}
+
+.retry-btn {
+  margin-top: 4px;
+  padding: 9px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-peach-pressed);
+  background: var(--color-peach-light);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.retry-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .bottom-spacer {

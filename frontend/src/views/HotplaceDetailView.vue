@@ -18,7 +18,6 @@
           </svg>
         </button>
       </div>
-      <div class="photo-counter">사진 1/24</div>
     </div>
 
     <!-- Content -->
@@ -51,7 +50,7 @@
             </svg>
           </div>
         </div>
-        <button class="route-btn">
+        <button v-if="hasCoords" class="route-btn" @click="openRoute">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M12 5l7 7-7 7" /></svg>
           길찾기
         </button>
@@ -185,6 +184,13 @@ onBeforeUnmount(() => {
 function share() {
   if (navigator.share) navigator.share({ title: hp.value.name, url: location.href })
 }
+// 카카오맵 길찾기 — 실좌표 보유 시 새 탭으로 카카오 지도 길찾기 페이지를 연다.
+function openRoute() {
+  if (!hasCoords.value) return
+  const name = encodeURIComponent(hp.value.name || '목적지')
+  const url = `https://map.kakao.com/link/to/${name},${Number(hp.value.lat)},${Number(hp.value.lng)}`
+  window.open(url, '_blank', 'noopener')
+}
 function addToItinerary() {
   router.push('/plan')
 }
@@ -269,18 +275,6 @@ async function loadBookmark() {
   border-radius: 50%;
   backdrop-filter: blur(4px);
 }
-.photo-counter {
-  position: absolute;
-  bottom: 12px;
-  left: 16px;
-  font-size: 12px;
-  font-weight: 500;
-  color: white;
-  background: rgba(0,0,0,0.4);
-  padding: 3px 9px;
-  border-radius: var(--radius-full);
-}
-
 .content-scroll {
   flex: 1;
   overflow-y: auto;

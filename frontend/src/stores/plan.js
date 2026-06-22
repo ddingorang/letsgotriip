@@ -2,6 +2,18 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { http } from '@/api/http.js'
 
+// 장바구니(활성 계획) 로컬 저장 키
+const LS_ACTIVE_ID = 'triip.activePlanId'
+const LS_ACTIVE_TITLE = 'triip.activePlanTitle'
+const LS_CART_COUNT = 'triip.cartCount'
+
+function lsGet(k) {
+  try { return localStorage.getItem(k) } catch { return null }
+}
+function lsSet(k, v) {
+  try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, String(v)) } catch { /* noop */ }
+}
+
 export const usePlanStore = defineStore('plan', () => {
   const plans = ref([])
   const current = ref(null)
@@ -9,12 +21,34 @@ export const usePlanStore = defineStore('plan', () => {
   const loading = ref(false)
   const error = ref(null)
 
+  // ── 장바구니(활성 계획) 상태 — 마지막에 담은/선택한 "내 여행" ───────────────────
+  // 한 번 탭으로 담을 수 있도록, 어느 계획에 담을지를 기억한다(localStorage 영속).
+  const activePlanId = ref(Number(lsGet(LS_ACTIVE_ID)) || null)
+  const activePlanTitle = ref(lsGet(LS_ACTIVE_TITLE) || '')
+  const cartCount = ref(Number(lsGet(LS_CART_COUNT)) || 0)
+
   // ── helpers ──────────────────────────────────────────────────────────────────
 
   function handleError(e) {
     const code = e.response?.data?.code
     const msg = e.response?.data?.message ?? e.message ?? '오류가 발생했습니다.'
     return { code, msg }
+  }
+
+  function setActivePlan(id, title) {
+    activePlanId.value = id ?? null
+    if (title != null) activePlanTitle.value = title
+    lsSet(LS_ACTIVE_ID, id ?? null)
+    if (title != null) lsSet(LS_ACTIVE_TITLE, title || null)
+  }
+
+  function setCartCount(n) {
+    cartCount.value = n ?? 0
+    lsSet(LS_CART_COUNT, cartCount.value)
+  }
+
+  function countPlaces(plan) {
+    return (plan?.days ?? []).reduce((sum, d) => sum + (d.places?.length ?? 0), 0)
   }
 
   // ── actions ──────────────────────────────────────────────────────────────────
@@ -184,12 +218,122 @@ export const usePlanStore = defineStore('plan', () => {
     }
   }
 
+  /**
+   * 같은 일차 내 순서 변경 — 낙관적 업데이트.
+   * 화면(current)을 즉시 새 순서로 바꾸고, 저장은 백그라운드로 한다(전역 loading 토글 X →
+   * 목록이 "불러오는 중…"으로 사라지지 않음). 실패 시에만 서버 상태로 되돌린다.
+   * 서버가 version을 force-increment 하므로 성공 시 로컬 version을 +1 해 다음 저장 충돌을 막는다.
+   */
+  async function reorderDayPlaces(planId, dayNo, newPlaces) {
+    if (!current.value) return
+    const snapshot = current.value
+    // 1) 낙관적 반영 — 즉시 새 순서로
+    current.value = {
+      ...current.value,
+      days: (current.value.days ?? []).map((d) =>
+        d.dayNo === dayNo ? { ...d, places: newPlaces } : d,
+      ),
+    }
+    error.value = null
+    // 2) 백그라운드 저장 (loading 토글 없이)
+    try {
+      const body = {
+        expectedVersion: snapshot.version,
+        places: newPlaces.map((p, idx) => ({
+          contentId: p.attraction?.contentId ?? p.contentId,
+          contentType: p.attraction?.contentType ?? p.contentType,
+          seq: idx + 1,
+          visitTime: p.visitTime ?? null,
+          memo: p.memo ?? null,
+        })),
+      }
+      await http.put(`/api/plans/${planId}/days/${dayNo}/places`, body)
+      // 성공: 서버 force-increment에 맞춰 로컬 version 동기화(재조회 없이)
+      if (current.value) {
+        current.value = { ...current.value, version: (current.value.version ?? 0) + 1 }
+      }
+    } catch (e) {
+      // 실패: 서버 최신 상태로 되돌린다
+      await loadPlan(planId).catch(() => {})
+      const { msg } = handleError(e)
+      error.value = msg ?? '순서 저장에 실패했어요.'
+      throw e
+    }
+  }
+
+  /**
+   * 장바구니에 담을 "활성 계획"을 보장한다.
+   * 1) 저장된 활성 계획이 아직 존재하면 그대로 사용
+   * 2) 없으면 가장 최근(=id 큰) 계획을 활성으로
+   * 3) 계획이 하나도 없으면 기본 "나의 여행"(오늘~+2일)을 자동 생성
+   * @returns {Promise<number>} 활성 계획 id
+   */
+  async function ensureActivePlan() {
+    if (!plans.value.length) await loadPlans()
+    // 1) 기존 활성 계획 유효성 확인
+    const found = activePlanId.value && plans.value.find((p) => p.id === activePlanId.value)
+    if (found) {
+      setActivePlan(found.id, found.title)
+      return found.id
+    }
+    // 2) 가장 최근 계획
+    if (plans.value.length) {
+      const recent = [...plans.value].sort((a, b) => (b.id ?? 0) - (a.id ?? 0))[0]
+      setActivePlan(recent.id, recent.title)
+      return recent.id
+    }
+    // 3) 기본 계획 자동 생성
+    const today = new Date()
+    const end = new Date(); end.setDate(today.getDate() + 2)
+    const pad = (n) => String(n).padStart(2, '0')
+    const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const created = await createPlan({ title: '나의 여행', startDate: fmt(today), endDate: fmt(end) })
+    setActivePlan(created.id, '나의 여행')
+    return created.id
+  }
+
+  /**
+   * 장바구니 담기 — 활성 계획의 첫 일차에 한 번에 담는다(피커 없이).
+   * 계획이 없으면 기본 계획을 만들어 담는다. 전역 loading 토글은 최소화한다.
+   * @returns {Promise<{planId:number, planTitle:string, dayNo:number, duplicate:boolean}>}
+   */
+  async function quickAddPlace(payload) {
+    const planId = await ensureActivePlan()
+    if (current.value?.id !== planId) await loadPlan(planId)
+    const dayNo = current.value?.days?.[0]?.dayNo ?? 1
+    const title = current.value?.title ?? activePlanTitle.value ?? '내 여행'
+    try {
+      await http.post(`/api/plans/${planId}/days/${dayNo}/places`, payload)
+      await loadPlan(planId)
+      setActivePlan(planId, current.value?.title ?? title)
+      setCartCount(countPlaces(current.value))
+      return { planId, planTitle: current.value?.title ?? title, dayNo, duplicate: false }
+    } catch (e) {
+      const code = e.response?.data?.code
+      if (code === 'PLAN4093') {
+        // 이미 담긴 장소 — 카운트만 동기화하고 중복으로 보고
+        return { planId, planTitle: title, dayNo, duplicate: true }
+      }
+      if (code === 'PLAN4092') await loadPlan(planId).catch(() => {})
+      const { msg } = handleError(e)
+      error.value = msg
+      throw e
+    }
+  }
+
   return {
     plans,
     current,
     routeReport,
     loading,
     error,
+    activePlanId,
+    activePlanTitle,
+    cartCount,
+    setActivePlan,
+    setCartCount,
+    ensureActivePlan,
+    quickAddPlace,
     loadPlans,
     loadPlan,
     loadRouteReport,
@@ -198,6 +342,7 @@ export const usePlanStore = defineStore('plan', () => {
     deletePlan,
     addPlace,
     replacePlaces,
+    reorderDayPlaces,
     removePlace,
   }
 })

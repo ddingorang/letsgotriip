@@ -15,6 +15,8 @@ const props = defineProps({
   level: { type: Number, default: 9 }, // Kakao zoom level (작을수록 확대)
   numbered: { type: Boolean, default: true },
   categoryColors: { type: Object, default: () => ({}) },
+  // 도로 경로선 — [[lat,lng], ...] 또는 [{lat,lng}, ...]. 비어있으면 선 미표시.
+  path: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['select', 'detail', 'move'])
@@ -23,6 +25,7 @@ const mapEl = ref(null)
 const error = ref('')
 let map = null
 let overlays = []
+let routeLine = null        // 도로 경로선(Polyline)
 let infoOverlay = null      // 선택된 핀 위의 상세보기 말풍선(인포윈도우)
 let resizeObserver = null
 let kakaoRef = null
@@ -73,6 +76,36 @@ function clearOverlays() {
   overlays = []
 }
 
+function clearRoute() {
+  if (routeLine) {
+    routeLine.setMap(null)
+    routeLine = null
+  }
+}
+
+// 도로 경로선(Polyline) 렌더. path 원소는 [lat,lng] 또는 {lat,lng} 모두 허용.
+function renderRoute(kakao) {
+  clearRoute()
+  if (!map || !Array.isArray(props.path) || props.path.length < 2) return
+  const latLngs = props.path
+    .map((pt) => {
+      const lat = Array.isArray(pt) ? Number(pt[0]) : Number(pt.lat)
+      const lng = Array.isArray(pt) ? Number(pt[1]) : Number(pt.lng)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+      return new kakao.maps.LatLng(lat, lng)
+    })
+    .filter(Boolean)
+  if (latLngs.length < 2) return
+  routeLine = new kakao.maps.Polyline({
+    path: latLngs,
+    strokeWeight: 5,
+    strokeColor: '#F78F57',
+    strokeOpacity: 0.85,
+    strokeStyle: 'solid',
+  })
+  routeLine.setMap(map)
+}
+
 // 선택된 핀 위에 '상세보기' 말풍선(인포윈도우)을 띄운다.
 // 탭하면 'detail' 이벤트로 상세 페이지 네비를 부모에 위임.
 function showInfo(kakao, p, pos) {
@@ -104,6 +137,7 @@ function showInfo(kakao, p, pos) {
 function renderMarkers(kakao) {
   if (!map) return
   clearOverlays()
+  renderRoute(kakao)
   const pts = validPoints()
   const bounds = new kakao.maps.LatLngBounds()
   let selectedPos = null
@@ -228,6 +262,12 @@ onMounted(async () => {
         panToSelected(kakao)
       },
     )
+    // 경로선만 바뀌면(길찾기 응답 도착) 카메라 재설정 없이 선만 다시 그린다.
+    watch(
+      () => props.path,
+      () => renderRoute(kakao),
+      { deep: true },
+    )
   } catch (e) {
     error.value = e.message || '지도를 불러올 수 없습니다.'
     // eslint-disable-next-line no-console
@@ -241,6 +281,7 @@ onBeforeUnmount(() => {
     resizeObserver = null
   }
   clearOverlays()
+  clearRoute()
   map = null
   kakaoRef = null
 })

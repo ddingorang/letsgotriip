@@ -19,12 +19,20 @@ public record CompanionPostCreateRequest(
         @Min(0) int estimatedCost,
         @Size(max = 2000) String description,
         @Size(max = 20) List<@Size(max = 30) String> tags,
-        Long planId   // optional — 연결할 작성자 소유 여행 계획 ID. null이면 미연결
+        Long planId,  // optional — 연결할 작성자 소유 여행 계획 ID. null이면 미연결
+        @Size(max = 500) String imageUrl  // optional — 대표 이미지 URL(여행지 이미지 선택 or 업로드)
 ) {
-    /** planId 없는 기존 호출(시드 등) 호환용 보조 생성자 — planId=null. */
+    /** planId 없는 기존 호출(시드 등) 호환용 보조 생성자 — planId=null, imageUrl=null. */
     public CompanionPostCreateRequest(String title, LocalDate travelDate, String region,
                                       String duration, int maxMembers, int estimatedCost,
                                       String description, List<String> tags) {
-        this(title, travelDate, region, duration, maxMembers, estimatedCost, description, tags, null);
+        this(title, travelDate, region, duration, maxMembers, estimatedCost, description, tags, null, null);
+    }
+
+    /** imageUrl 없는 호출 호환용 보조 생성자 — imageUrl=null. */
+    public CompanionPostCreateRequest(String title, LocalDate travelDate, String region,
+                                      String duration, int maxMembers, int estimatedCost,
+                                      String description, List<String> tags, Long planId) {
+        this(title, travelDate, region, duration, maxMembers, estimatedCost, description, tags, planId, null);
     }
 }

@@ -53,6 +53,13 @@ public class CompanionPost extends BaseEntity {
     @Column(length = 255)
     private String tags;
 
+    /**
+     * 대표 이미지 URL (nullable). 작성 시 연결한 여행 계획의 여행지 이미지에서 고르거나
+     * 직접 업로드(POST /community/images)한 URL을 저장한다. ddl-auto=update가 컬럼을 추가한다.
+     */
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
@@ -75,7 +82,7 @@ public class CompanionPost extends BaseEntity {
     private boolean deleted = false;
 
     public void update(String title, LocalDate travelDate, String region, String duration,
-                       Integer maxMembers, Integer estimatedCost, String description) {
+                       Integer maxMembers, Integer estimatedCost, String description, String imageUrl) {
         if (title != null && !title.isBlank()) this.title = title;
         if (travelDate != null) this.travelDate = travelDate;
         if (region != null && !region.isBlank()) this.region = region;
@@ -85,6 +92,8 @@ public class CompanionPost extends BaseEntity {
         if (maxMembers != null && maxMembers >= 1) this.maxMembers = maxMembers;
         if (estimatedCost != null) this.estimatedCost = estimatedCost;
         if (description != null && !description.isBlank()) this.description = description;
+        // 이미지: 빈 문자열이면 제거(null), 값이 있으면 교체, null이면 미변경
+        if (imageUrl != null) this.imageUrl = imageUrl.isBlank() ? null : imageUrl;
     }
 
     public void delete() {

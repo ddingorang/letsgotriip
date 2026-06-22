@@ -3,7 +3,7 @@
   <div class="page">
     <!-- Hero photo -->
     <div class="hero">
-      <div class="hero-img" />
+      <div class="hero-img" :style="heroStyle" />
       <div class="hero-overlay" />
       <div class="hero-top">
         <button class="ghost-btn" @click="$router.back()">
@@ -70,7 +70,11 @@
 
         <!-- Author -->
         <div class="author-row">
-          <div class="author-avatar" />
+          <div class="author-avatar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+            </svg>
+          </div>
           <div class="author-info">
             <span class="author-name">{{ comp.author?.nickname }}</span>
             <span class="author-sub">방장 · 동행 {{ comp.author?.tripCount }}회</span>
@@ -86,7 +90,11 @@
           <span class="owner-status-label">신청 현황</span>
           <span class="owner-status-val">대기 {{ comp.pendingCount }} · 승인 {{ comp.approvedCount }} / 정원 {{ comp.maxCount }}</span>
           <div class="avatar-stack">
-            <div v-for="n in Math.min(comp.approvedCount + comp.pendingCount, 3)" :key="n" class="stack-avatar" />
+            <div v-for="n in Math.min(comp.approvedCount + comp.pendingCount, 3)" :key="n" class="stack-avatar">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
           </div>
         </div>
       </div>
@@ -253,11 +261,14 @@
         </button>
       </template>
     </div>
+
+    <!-- 공유 토스트 -->
+    <div v-if="shareToast" class="share-toast">{{ shareToast }}</div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 import TripMap from '@/components/common/TripMap.vue'
@@ -290,6 +301,17 @@ const comp = computed(() => realComp.value ?? {
   period: '-', estimatedCost: '-', tags: [], intro: '',
   isOwner: false, pendingCount: 0, approvedCount: 0,
   isApplied: false, myApplicationId: null, myApplicationStatus: null, chatRoomId: null,
+})
+
+// 대표 이미지 — 있으면 hero 배경으로 표시(없으면 기존 그라데이션 placeholder 유지).
+const heroStyle = computed(() => {
+  const url = comp.value.imageUrl ?? comp.value.thumbnail
+  if (!url) return {}
+  return {
+    backgroundImage: `url("${url}")`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+  }
 })
 
 // 내 신청 상태/ID — origin 의 /applications/me 조회(getMyApplication) 결과를 보관.
@@ -527,9 +549,37 @@ function openChat() {
   }
 }
 
-function share() {
-  if (navigator.share) navigator.share({ title: comp.value.title, url: location.href })
+// 공유 — Web Share API가 있으면 사용하고, 없으면 클립보드 복사로 폴백한다.
+// 어느 경로든 짧은 토스트로 피드백을 주어 버튼이 "먹통"으로 느껴지지 않게 한다.
+const shareToast = ref('')
+let shareToastTimer = null
+function showShareToast(message) {
+  shareToast.value = message
+  if (shareToastTimer) clearTimeout(shareToastTimer)
+  shareToastTimer = setTimeout(() => { shareToast.value = '' }, 2000)
 }
+async function share() {
+  const url = location.href
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: comp.value.title, url })
+    } catch {
+      // 사용자가 공유 시트를 취소한 경우 등 — 조용히 무시
+    }
+    return
+  }
+  // 폴백: 클립보드 복사
+  try {
+    await navigator.clipboard.writeText(url)
+    showShareToast('링크 복사됨')
+  } catch {
+    showShareToast('링크를 복사하지 못했어요')
+  }
+}
+
+onBeforeUnmount(() => {
+  if (shareToastTimer) clearTimeout(shareToastTimer)
+})
 </script>
 
 <style scoped>
@@ -622,6 +672,9 @@ function share() {
   border-radius: 50%;
   background: var(--color-surface);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .author-info { display: flex; flex-direction: column; gap: 1px; flex: 1; }
 .author-name { font-size: 14px; font-weight: 600; color: var(--color-ink); }
@@ -650,9 +703,12 @@ function share() {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--color-line);
+  background: var(--color-surface);
   border: 2px solid white;
   margin-left: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .stack-avatar:first-child { margin-left: 0; }
 
@@ -944,5 +1000,21 @@ function share() {
 .detail-state-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ── 공유 토스트 ──────────────────────────────────────────────── */
+.share-toast {
+  position: fixed;
+  bottom: calc(90px + var(--safe-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.82);
+  color: #fff;
+  font-size: 13px;
+  padding: 10px 16px;
+  border-radius: var(--radius-full);
+  z-index: 70;
+  max-width: 80%;
+  text-align: center;
 }
 </style>

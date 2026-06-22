@@ -63,7 +63,8 @@ export const useCompanionStore = defineStore('companion', () => {
       status: toStatusLabel(item.status, currentCount, maxCount),
       currentCount,
       maxCount,
-      thumbnail: item.thumbnail ?? null,
+      thumbnail: item.thumbnail ?? item.imageUrl ?? null,
+      imageUrl: item.imageUrl ?? item.thumbnail ?? null,
       author: item.author ?? { nickname: item.authorNickname ?? '-', role: '방장', tripCount: 0 },
       period: item.duration ?? item.period ?? '-',
       estimatedCost: item.estimatedCost != null

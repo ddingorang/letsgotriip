@@ -47,6 +47,14 @@
         <span>{{ todayLabel }}</span>
       </div>
 
+      <!-- 빈 대화: 메시지가 하나도 없을 때 -->
+      <div v-if="messages.length === 0" class="empty-thread">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+        </svg>
+        <span class="empty-thread-text">첫 메시지를 보내 대화를 시작하세요</span>
+      </div>
+
       <template v-for="msg in messages" :key="msg.id">
         <!-- Outgoing -->
         <div v-if="isMyMessage(msg)" class="msg-row outgoing">
@@ -685,6 +693,18 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-full);
 }
 
+/* ── 빈 대화 힌트 ─────────────────────────────────────────────── */
+.empty-thread {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: auto 0;
+  padding: 40px 24px;
+  text-align: center;
+}
+.empty-thread-text { font-size: 13px; color: var(--color-ink-muted); letter-spacing: -0.2px; }
+
 .msg-row { display: flex; gap: 8px; }
 .msg-row.incoming { align-items: flex-start; }
 .msg-row.outgoing { justify-content: flex-end; }
@@ -788,8 +808,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.15s;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
 }
+.send-btn:active { transform: scale(0.95); }
 .send-btn.active { background: var(--color-peach); }
 
 /* ── ⋮ 드롭다운 메뉴 ───────────────────────────────────────────── */

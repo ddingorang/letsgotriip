@@ -297,12 +297,12 @@ function handleSubmit() {
 
 <style scoped>
 .sheet-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(15, 20, 40, 0.45);
   display: flex;
   align-items: flex-end;
-  z-index: 50;
+  z-index: 1000;
   animation: fade-in 0.18s ease;
 }
 

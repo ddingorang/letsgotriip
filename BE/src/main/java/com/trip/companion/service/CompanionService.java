@@ -79,6 +79,7 @@ public class CompanionService {
                 .description(request.description())
                 .tags(CompanionPost.joinTags(request.tags()))
                 .planId(request.planId())
+                .imageUrl(request.imageUrl())
                 .chatRoom(chatRoom)
                 .build();
 
@@ -135,7 +136,8 @@ public class CompanionService {
         }
 
         post.update(request.title(), request.travelDate(), request.region(),
-                request.duration(), request.maxMembers(), request.estimatedCost(), request.description());
+                request.duration(), request.maxMembers(), request.estimatedCost(), request.description(),
+                request.imageUrl());
 
         return buildResponse(post);
     }

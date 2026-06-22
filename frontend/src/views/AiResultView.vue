@@ -107,7 +107,14 @@
               <div class="place-card">
                 <div class="place-thumb-wrap">
                   <div class="place-thumb">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <img
+                      v-if="placeImage(place)"
+                      :src="placeImage(place)"
+                      :alt="place.title"
+                      class="place-thumb-img"
+                      @error="onThumbError"
+                    />
+                    <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                       <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
@@ -249,6 +256,19 @@ async function handleSavePlan() {
   } finally {
     saveLoading.value = false
   }
+}
+
+// 로드 실패한 이미지 URL — 폴백(핀 SVG) 노출용
+const failedThumbs = ref(new Set())
+// 장소 썸네일 — 이미지 URL이 있으면 사진을, 없으면(또는 로드 실패 시) 핀 SVG로 폴백
+function placeImage(place) {
+  const url = place?.imageUrl || place?.firstimage || place?.firstImage || place?.image || ''
+  return url && !failedThumbs.value.has(url) ? url : ''
+}
+// 이미지 로드 실패 시 해당 URL을 기록 → 다음 렌더에서 핀 SVG로 전환
+function onThumbError(e) {
+  const url = e.target.getAttribute('src')
+  if (url) failedThumbs.value = new Set(failedThumbs.value).add(url)
 }
 
 // 저장된 계획 ID 를 동행 작성 화면에 query 로 전달(라우트 변경 없음)
@@ -624,6 +644,13 @@ function goCompanion() {
   align-items: center;
   justify-content: center;
   color: var(--color-peach);
+  overflow: hidden;
+}
+
+.place-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .place-info {
