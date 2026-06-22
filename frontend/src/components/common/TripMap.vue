@@ -17,6 +17,8 @@ const props = defineProps({
   categoryColors: { type: Object, default: () => ({}) },
   // 도로 경로선 — [[lat,lng], ...] 또는 [{lat,lng}, ...]. 비어있으면 선 미표시.
   path: { type: Array, default: () => [] },
+  // true면 경로선을 점선으로(도로경로 대신 장소를 직선으로 잇는 근사 동선 표시용).
+  pathDashed: { type: Boolean, default: false },
   fit: { type: Boolean, default: true }, // false면 places 변경 시 카메라 재설정 안 함
 })
 
@@ -102,7 +104,7 @@ function renderRoute(kakao) {
     strokeWeight: 5,
     strokeColor: '#F78F57',
     strokeOpacity: 0.85,
-    strokeStyle: 'solid',
+    strokeStyle: props.pathDashed ? 'shortdash' : 'solid',
   })
   routeLine.setMap(map)
 }

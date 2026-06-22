@@ -234,7 +234,7 @@
                 </div>
 
                 <div v-if="currentDayPlaces.length" class="plan-map-wrap">
-                  <TripMap :places="currentDayPlaces" :path="currentDayPath" :numbered="true" />
+                  <TripMap :places="currentDayPlaces" :path="currentDayLine" :path-dashed="currentDayDashed" :numbered="true" />
                 </div>
                 <p v-else class="day-empty-map">{{ selectedDay }}일차는 지도에 표시할 장소(좌표)가 없어요.</p>
 
@@ -243,6 +243,7 @@
                     {{ selectedDay }}일차 · 차량 {{ currentDaySummary.distanceKm }}km · 약 {{ currentDaySummary.durationMin }}분
                   </span>
                   <span v-else-if="routePathLoading" class="route-summary muted">경로 계산 중…</span>
+                  <span v-else-if="currentDayDashed" class="route-summary muted">{{ selectedDay }}일차 · 직선 동선(도로경로 없음)</span>
                   <span v-else-if="currentDayPlaces.length" class="route-summary muted">{{ selectedDay }}일차 경로 없음</span>
                   <button
                     v-if="currentDayPlaces.length >= 1"
@@ -856,13 +857,27 @@ const currentDayPlaces = computed(() =>
   currentPlanPlaces.value.filter((p) => p.dayNo === selectedDay.value),
 )
 
-// 선택한 일차의 도로 경로선([lat,lng]…). 그 날 경로가 없으면 빈 배열.
+// 선택한 일차의 도로 경로선([lat,lng]…). 그 날 도로경로가 없으면 빈 배열.
 const currentDayPath = computed(() => {
   const rp = routePath.value
   if (!rp || rp.planId !== selectedPlanId.value || !rp.enabled) return []
   const day = (rp.days ?? []).find((d) => d.dayNo === selectedDay.value)
   return day?.path ?? []
 })
+
+// 지도에 그릴 동선 — 도로경로가 있으면 그것, 없으면(카카오 길찾기가 비도로 지점으로 실패한 날)
+// 장소들을 순서대로 잇는 '직선 근사 동선'으로 폴백한다(항상 동선이 보이도록).
+const currentDayLine = computed(() => {
+  const road = currentDayPath.value
+  if (road.length >= 2) return road
+  const pts = currentDayPlaces.value
+  if (pts.length >= 2) return pts.map((p) => [p.lat, p.lng])
+  return []
+})
+// 직선 폴백일 때만 true → 지도에서 점선으로 표시(도로경로가 아님을 명확히).
+const currentDayDashed = computed(
+  () => currentDayPath.value.length < 2 && currentDayPlaces.value.length >= 2,
+)
 
 // 선택한 일차의 차량 거리/시간 요약. 경로 없으면 null.
 const currentDaySummary = computed(() => {
