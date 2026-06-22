@@ -63,13 +63,16 @@
           {{ sheetTitle }}
           <span class="count">{{ displayedPlaces.length }}</span>
         </h2>
-        <button class="sort-btn" :class="{ active: sortMode === 'distance' }" @click="toggleSort">
+        <button class="sort-btn" :class="{ active: sortMode !== 'default' }" @click="openSortSheet">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="7" y1="12" x2="17" y2="12" />
             <line x1="10" y1="18" x2="14" y2="18" />
           </svg>
           {{ sortLabel }}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
         </button>
       </div>
 
@@ -182,6 +185,35 @@
         </div>
       </template>
     </div>
+
+    <!-- ── 정렬 기준 바텀시트 ──────────────────────────────────────────────── -->
+    <transition name="sort-fade">
+      <div v-if="sortSheetOpen" class="sort-overlay" @click.self="closeSortSheet">
+        <div class="sort-sheet">
+          <div class="sort-sheet-handle" />
+          <h3 class="sort-sheet-title">정렬 기준</h3>
+          <button
+            v-for="opt in SORT_OPTIONS"
+            :key="opt.key"
+            class="sort-opt"
+            :class="{ active: sortMode === opt.key, disabled: opt.requiresLoc && !userLoc }"
+            @click="selectSort(opt.key)"
+          >
+            <span class="sort-opt-label">
+              {{ opt.label }}
+              <span v-if="opt.requiresLoc && !userLoc" class="sort-opt-hint">위치 권한 필요</span>
+            </span>
+            <svg
+              v-if="sortMode === opt.key"
+              width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="var(--color-peach)" stroke-width="2.5"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -240,7 +272,16 @@ const PAGE_SIZE = 30   // 거리순 정렬이 의미있도록 후보를 넉넉�
 
 // ── 현재 위치 / 정렬 ─────────────────────────────────────────────────────────
 const userLoc = ref(null)              // { lat, lng }
-const sortMode = ref('default')        // 'default' | 'distance'
+const sortMode = ref('default')        // 'default' | 'distance' | 'name'
+const sortSheetOpen = ref(false)       // 정렬 기준 바텀시트 표시 여부
+
+// 정렬 기준 정의 — key/label/설명. requiresLoc 인 항목은 위치 없으면 비활성.
+// NOTE: TourAPI 는 평점 데이터를 제공하지 않아(rating 항상 null) 평점순은 제외.
+const SORT_OPTIONS = [
+  { key: 'default',  label: '추천순',        requiresLoc: false },
+  { key: 'distance', label: '거리순',        requiresLoc: true  },
+  { key: 'name',     label: '이름순(가나다)', requiresLoc: false },
+]
 
 // 두 좌표 사이 거리(km) — Haversine
 function distanceKm(a, b) {
@@ -266,16 +307,25 @@ const displayedPlaces = computed(() => {
         (p.address && p.address.includes(q))
     )
   }
+  // 위치가 있으면 항상 _dist 를 계산해 row 에 거리 배지를 노출(정렬 여부와 무관).
+  if (userLoc.value) {
+    list = list.map((p) => ({
+      ...p,
+      _dist:
+        Number.isFinite(p.lat) && Number.isFinite(p.lng)
+          ? distanceKm(userLoc.value, p)
+          : Infinity,
+    }))
+  }
+  // 정렬 적용 — 원본을 변형하지 않도록 복사 후 정렬.
   if (sortMode.value === 'distance' && userLoc.value) {
-    list = [...list]
-      .map((p) => ({
-        ...p,
-        _dist:
-          Number.isFinite(p.lat) && Number.isFinite(p.lng)
-            ? distanceKm(userLoc.value, p)
-            : Infinity,
-      }))
-      .sort((a, b) => a._dist - b._dist)
+    // 거리순 — 가까운 순. 좌표 없는 항목(_dist=Infinity)은 뒤로.
+    list = [...list].sort((a, b) => a._dist - b._dist)
+  } else if (sortMode.value === 'name') {
+    // 이름순 — title 로캘 비교(가나다). 한글·영문·숫자 자연스러운 정렬.
+    list = [...list].sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko'),
+    )
   }
   return list
 })
@@ -320,8 +370,9 @@ function searchByMapCenter() {
 // (거리순일 때도 8개로 자르지 않고 전체를 핀으로 노출)
 const mapPlaces = computed(() => displayedPlaces.value)
 
-const sortLabel = computed(() =>
-  sortMode.value === 'distance' ? '거리순' : '기본순',
+// 현재 활성 정렬 기준의 라벨 (정렬 버튼에 표시)
+const sortLabel = computed(
+  () => SORT_OPTIONS.find((o) => o.key === sortMode.value)?.label ?? '추천순',
 )
 
 const CATEGORY_LABEL = { all: '플레이스', '12': '관광지', '15': '축제', '39': '음식점', '32': '숙박' }
@@ -331,14 +382,26 @@ const sheetTitle = computed(() => {
   return sortMode.value === 'distance' ? `내 주변 ${label}` : label
 })
 
-function toggleSort() {
-  if (sortMode.value === 'distance') {
-    sortMode.value = 'default'
-  } else if (userLoc.value) {
-    sortMode.value = 'distance'
-  } else {
-    locateUser(true)   // 위치 먼저 확보 후 거리순
+// 정렬 바텀시트 토글
+function openSortSheet() {
+  sortSheetOpen.value = true
+}
+function closeSortSheet() {
+  sortSheetOpen.value = false
+}
+
+// 정렬 기준 선택 — 거리순은 위치가 필요하므로 없으면 권한 요청 후 적용.
+function selectSort(key) {
+  const opt = SORT_OPTIONS.find((o) => o.key === key)
+  if (!opt) return
+  if (opt.requiresLoc && !userLoc.value) {
+    // 위치 미확보 — 권한 확보를 시도하고, 성공하면 거리순으로 전환(locateUser 내부 처리).
+    closeSortSheet()
+    locateUser(true)
+    return
   }
+  sortMode.value = key
+  closeSortSheet()
 }
 
 // 위치가 있으면 BE 좌표(반경 20km) 검색 파라미터 — 검색어 없을 때만 사용
@@ -729,6 +792,90 @@ onMounted(() => {
 .sort-btn.active {
   color: var(--color-peach);
   font-weight: 600;
+}
+
+/* ── 정렬 바텀시트 ────────────────────────────────────────────────────────── */
+.sort-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sort-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-white);
+  border-radius: 20px 20px 0 0;
+  padding: 0 16px calc(20px + env(safe-area-inset-bottom));
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.16);
+}
+
+.sort-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--color-line);
+  border-radius: 2px;
+  margin: 10px auto 6px;
+}
+
+.sort-sheet-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.3px;
+  padding: 8px 4px 6px;
+}
+
+.sort-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  border-top: 1px solid var(--color-line-light);
+  cursor: pointer;
+  text-align: left;
+}
+
+.sort-opt.active {
+  color: var(--color-peach);
+}
+
+.sort-opt.disabled {
+  color: var(--color-ink-muted);
+}
+
+.sort-opt-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-opt-hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+
+/* 오버레이 페이드 트랜지션 */
+.sort-fade-enter-active,
+.sort-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.sort-fade-enter-from,
+.sort-fade-leave-to {
+  opacity: 0;
 }
 
 .place-dist {
