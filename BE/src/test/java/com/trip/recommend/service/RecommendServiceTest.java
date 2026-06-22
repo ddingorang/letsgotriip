@@ -38,6 +38,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -153,96 +154,68 @@ class RecommendServiceTest {
         verifyNoInteractions(chatClient);
     }
 
+    // 12-인자 AttractionItem(테스트용) — contentId·type·title만 의미 있고 나머지는 null
+    private static AttractionItem item(String id, String type, String title) {
+        return new AttractionItem(id, type, title, "주소", AREA, null, null, null, null, null, null, null);
+    }
+
     // ─────────────────────────────────────────────────────────────
-    // 테스트 2: 후보 외 contentId 필터링 검증
+    // 테스트 2: 검증 로직 — 후보 외 contentId 제거 후 PARTIAL
+    //   (에이전트형 전환 후 후보 수집은 도구가 담당 → 결정론적 후처리(validate/computeStatus)를 직접 검증)
     // ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("LLM이 후보 외 contentId 반환하면 해당 장소 제거 후 PARTIAL")
-    void process_unknownContentIdFiltered() throws Exception {
-        RecommendRequestDto req = makeReq();
+    @DisplayName("validate: 후보 외 contentId는 제거되고, 일자당 2곳 미만이면 PARTIAL")
+    void validate_unknownContentIdFiltered_partial() {
+        Set<String> candidateIds = Set.of("111");
+        List<AttractionItem> candidates = List.of(item("111", "12", "관광지A"));
 
-        // 캐시 미스
-        given(recommendationRepository
-                .findFirstByUserIdAndRequestHashAndStatusAndCreatedAtAfter(
-                        anyLong(), anyString(), eq(RecommendStatus.SUCCESS), any()))
-                .willReturn(Optional.empty());
-
-        // 락 획득 성공
-        given(valueOps.setIfAbsent(anyString(), anyString(), anyLong(), eq(TimeUnit.SECONDS)))
-                .willReturn(true);
-
-        // 후보: contentId "111"만 유효
-        AttractionItem validItem = new AttractionItem("111", "12", "관광지A", "부산시", AREA, null, null, null, null, null, null);
-        given(tourApiClient.fetchAreaBased(eq(AREA), isNull(), anyString(), anyInt(), anyInt()))
-                .willReturn(List.of(validItem));
-        given(festivalRepository.findByAreaCode(AREA)).willReturn(List.of());
-
-        // LLM 초안: "111"(유효) + "999"(후보 외) 포함
-        ItineraryDraft fakeDraft = new ItineraryDraft(
+        // 초안: "111"(유효) + "999"(후보 외). day2는 "999"뿐
+        ItineraryDraft draft = new ItineraryDraft(
                 List.of(
                         new DayPlan(1, List.of(
                                 new PlaceRecommendation("111", "관광지A", "10:00", "좋은 곳"),
                                 new PlaceRecommendation("999", "없는곳",  "11:00", "이유")
-                        ), "day1 요약"),
+                        ), "day1"),
                         new DayPlan(2, List.of(
                                 new PlaceRecommendation("999", "없는곳2", "09:00", "이유2")
-                        ), "day2 요약")
+                        ), "day2")
                 ),
-                "전체 요약"
+                "전체"
         );
-        String fakeDraftJson = objectMapper.writeValueAsString(fakeDraft);
 
-        given(chatClient.prompt()).willReturn(requestSpec);
-        given(requestSpec.user(anyString())).willReturn(requestSpec);
-        given(requestSpec.call()).willReturn(callSpec);
-        given(callSpec.content()).willReturn(fakeDraftJson);
+        ItineraryDraft validated = recommendService.validate(draft, candidateIds, candidates, 2);
 
-        // save 호출 캡처
-        given(recommendationRepository.save(any(Recommendation.class)))
-                .willAnswer(inv -> {
-                    Recommendation r = inv.getArgument(0);
-                    setField(r, "id", 99L);
-                    setField(r, "createdAt", LocalDateTime.now());
-                    return r;
-                });
-
-        RecommendationResponseDto result = recommendService.process(USER_ID, req);
-
-        // "999"는 제거, "111"만 남음 → day2는 0개 → PARTIAL
-        assertThat(result.status()).isEqualTo(RecommendStatus.PARTIAL);
+        // day1: "999" 제거 → "111"만 남음
+        assertThat(validated.days().get(0).places())
+                .extracting(PlaceRecommendation::contentId)
+                .containsExactly("111");
+        // 보충 후보가 없어 일자당 2곳을 못 채움 → PARTIAL
+        assertThat(recommendService.computeStatus(validated, 2))
+                .isEqualTo(RecommendStatus.PARTIAL);
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 테스트 3: 빈 결과 → FAILED 저장 + RECO_EMPTY_RESULT 예외
+    // 테스트 3: 모든 장소가 후보 외 + 보충 후보도 없음 → 빈 결과 → FAILED
     // ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("attraction 후보가 전혀 없으면 AI_GENERATION_FAILED (외부 API 장애)")
-    void process_emptyResult_savesFailed() throws Exception {
-        RecommendRequestDto req = makeReq();
+    @DisplayName("validate+computeStatus: 후보가 전혀 없으면 빈 결과 → FAILED")
+    void validate_allUnknown_failed() {
+        Set<String> candidateIds = Set.of();        // 유효 후보 없음
+        List<AttractionItem> candidates = List.of(); // 보충할 후보도 없음
 
-        given(recommendationRepository
-                .findFirstByUserIdAndRequestHashAndStatusAndCreatedAtAfter(
-                        anyLong(), anyString(), eq(RecommendStatus.SUCCESS), any()))
-                .willReturn(Optional.empty());
+        ItineraryDraft draft = new ItineraryDraft(
+                List.of(new DayPlan(1, List.of(
+                        new PlaceRecommendation("999", "없는곳", null, "이유")
+                ), "day1")),
+                "전체"
+        );
 
-        given(valueOps.setIfAbsent(anyString(), anyString(), anyLong(), eq(TimeUnit.SECONDS)))
-                .willReturn(true);
+        ItineraryDraft validated = recommendService.validate(draft, candidateIds, candidates, 2);
 
-        // 모든 TourAPI 호출이 빈 결과 반환 → attraction 후보 0
-        given(tourApiClient.fetchAreaBased(anyString(), any(), anyString(), anyInt(), anyInt()))
-                .willReturn(List.of());
-        given(festivalRepository.findByAreaCode(anyString())).willReturn(List.of());
-
-        // attraction 후보 없으면 LLM 호출 없이 AI_GENERATION_FAILED
-        assertThatThrownBy(() -> recommendService.process(USER_ID, req))
-                .isInstanceOf(RecommendHandler.class)
-                .extracting(e -> ((RecommendHandler) e).getErrorCode())
-                .isEqualTo(ResponseCode.AI_GENERATION_FAILED);
-
-        // LLM 호출 없어야 함
-        verifyNoInteractions(chatClient);
+        assertThat(recommendService.computeStatus(validated, 2))
+                .isEqualTo(RecommendStatus.FAILED);
     }
 
     // ─────────────────────────────────────────────────────────────
