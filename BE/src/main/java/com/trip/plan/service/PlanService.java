@@ -53,6 +53,9 @@ public class PlanService {
     private final EntityManager entityManager;
     private final UserDataIndexer userDataIndexer;
     private final com.trip.plan.client.KakaoDirectionsClient kakaoDirectionsClient;
+    // 동선(route-path) 캐시용 — 계획이 안 바뀌면(version 동일) 카카오 재호출 없이 반환
+    private final org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     // ─────────────────────────────────────────────────────────────
     // 생성
@@ -232,6 +235,18 @@ public class PlanService {
         TripPlan plan = findPlanWithDays(planId);
         verifyOwner(plan, userId);
 
+        // ── 캐시 적중 — 계획이 안 바뀌면(version 동일) 카카오 길찾기 재호출 없이 반환 ──
+        // version은 place 추가/삭제/교체 등 모든 하위 변경에서 증가하므로, 편집 시 자동 무효화된다.
+        final String cacheKey = "trip:routepath:" + planId + ":v" + plan.getVersion();
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (cached != null) {
+                return objectMapper.readValue(cached, com.trip.plan.dto.RoutePathResponseDto.class);
+            }
+        } catch (Exception e) {
+            log.warn("route-path 캐시 읽기 실패 — planId={}, err={}", planId, e.getMessage());
+        }
+
         boolean enabled = kakaoDirectionsClient.isEnabled();
         List<com.trip.plan.dto.RoutePathResponseDto.DayPath> days = new ArrayList<>();
 
@@ -262,7 +277,19 @@ public class PlanService {
                         r.taxiFare(), r.tollFare(), r.path()));
             }
         }
-        return new com.trip.plan.dto.RoutePathResponseDto(plan.getId(), enabled, days);
+        com.trip.plan.dto.RoutePathResponseDto dto =
+                new com.trip.plan.dto.RoutePathResponseDto(plan.getId(), enabled, days);
+
+        // ── 캐시 저장 — 키 미설정(enabled=false)이 아닐 때만. version을 키에 담아 편집 시 자동 폐기. ──
+        if (enabled) {
+            try {
+                stringRedisTemplate.opsForValue().set(
+                        cacheKey, objectMapper.writeValueAsString(dto), java.time.Duration.ofDays(7));
+            } catch (Exception e) {
+                log.warn("route-path 캐시 저장 실패 — planId={}, err={}", planId, e.getMessage());
+            }
+        }
+        return dto;
     }
 
     // ─────────────────────────────────────────────────────────────
