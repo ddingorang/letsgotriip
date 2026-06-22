@@ -248,7 +248,11 @@ public class PlanService {
                         day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
                 continue;
             }
+            // 1) 하루 전체를 한 번에 조회(성공 시 전부 실제 도로경로).
             com.trip.plan.client.KakaoDirectionsClient.RouteResult r = kakaoDirectionsClient.route(points);
+            // 2) 실패(한 지점이라도 비도로면 전체 실패) 시 구간별로 재시도 — 되는 구간은 실제 도로,
+            //    안 되는 구간만 직선으로 이어 항상 동선이 보이게 한다.
+            if (r == null) r = kakaoDirectionsClient.routeStitched(points);
             if (r == null) {
                 days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
                         day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
