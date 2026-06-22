@@ -15,6 +15,7 @@ public record PlanSummaryResponseDto(
         CompanionsType companions,
         Integer budget,
         OriginType origin,
+        String imageUrl,
         Long version,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
@@ -28,6 +29,7 @@ public record PlanSummaryResponseDto(
                 plan.getCompanions(),
                 plan.getBudget(),
                 plan.getOrigin(),
+                plan.getImageUrl(),
                 plan.getVersion(),
                 plan.getCreatedAt(),
                 plan.getUpdatedAt()

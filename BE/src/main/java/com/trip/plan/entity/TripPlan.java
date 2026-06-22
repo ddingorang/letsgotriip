@@ -52,6 +52,13 @@ public class TripPlan extends BaseEntity {
     private OriginType origin;
 
     /**
+     * 대표 이미지 URL(선택). null이면 프론트에서 기본 이미지(그라데이션/placeholder)로 표시.
+     * 업로드 엔드포인트(/community/images 등)로 받은 URL을 저장한다. (ddl-auto=update가 컬럼 추가)
+     */
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
+    /**
      * 공개 공유 토큰. null이면 미공유 상태.
      * 공유 활성화 시 UUID 기반 토큰을 1회 발급하고 이후 재사용한다(idempotent).
      * unique 제약으로 토큰 충돌 방지. (ddl-auto=update가 컬럼을 추가)
@@ -74,7 +81,7 @@ public class TripPlan extends BaseEntity {
 
     @Builder
     public TripPlan(Long userId, String title, LocalDate startDate, LocalDate endDate,
-                    CompanionsType companions, Integer budget, OriginType origin) {
+                    CompanionsType companions, Integer budget, OriginType origin, String imageUrl) {
         this.userId     = userId;
         this.title      = title;
         this.startDate  = startDate;
@@ -82,16 +89,22 @@ public class TripPlan extends BaseEntity {
         this.companions = companions;
         this.budget     = budget;
         this.origin     = origin != null ? origin : OriginType.MANUAL;
+        this.imageUrl   = (imageUrl != null && imageUrl.isBlank()) ? null : imageUrl;
     }
 
-    /** 메타 수정 */
+    /**
+     * 메타 수정.
+     * imageUrl: null이면 미변경, ""(빈 문자열)이면 제거, 그 외 값이면 교체.
+     * (companion imageUrl 정책과 동일하게 둔다.)
+     */
     public void updateMeta(String title, LocalDate startDate, LocalDate endDate,
-                           CompanionsType companions, Integer budget) {
+                           CompanionsType companions, Integer budget, String imageUrl) {
         this.title      = title;
         this.startDate  = startDate;
         this.endDate    = endDate;
         this.companions = companions;
         this.budget     = budget;
+        if (imageUrl != null) this.imageUrl = imageUrl.isBlank() ? null : imageUrl;
     }
 
     /** 공유 토큰 발급. 이미 발급된 경우 호출 측에서 재사용하므로 여기서는 단순 세팅만. */

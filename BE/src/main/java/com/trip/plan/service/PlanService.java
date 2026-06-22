@@ -70,6 +70,7 @@ public class PlanService {
                 .companions(req.companions())
                 .budget(req.budget())
                 .origin(req.origin())
+                .imageUrl(req.imageUrl())
                 .build();
 
         // 기간만큼 TripDay 자동 생성
@@ -274,7 +275,7 @@ public class PlanService {
             }
         }
 
-        plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget());
+        plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget(), req.imageUrl());
 
         indexPlanSafely(userId, plan.getId());
 

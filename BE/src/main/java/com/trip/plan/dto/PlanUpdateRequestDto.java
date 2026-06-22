@@ -22,5 +22,9 @@ public record PlanUpdateRequestDto(
 
         CompanionsType companions,
 
-        Integer budget
+        Integer budget,
+
+        // 대표 이미지 URL. null이면 미변경, ""이면 제거, 값이면 교체.
+        @Size(max = 500)
+        String imageUrl
 ) {}
