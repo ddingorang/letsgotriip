@@ -92,11 +92,33 @@
           :class="{ expanded: selectedPlanId === plan.id, selectable: compareMode, selected: isCompareSelected(plan.id) }"
         >
           <!-- Card header — click to expand/collapse (or select in compare mode) -->
-          <div class="plan-thumb" @click="onCardTap(plan)">
+          <!-- 대표 이미지가 있으면 썸네일 배경으로, 없으면 기존 그라데이션(기본 이미지) 유지 -->
+          <div class="plan-thumb" :class="{ 'has-img': !!plan.imageUrl }" @click="onCardTap(plan)">
+            <img
+              v-if="plan.imageUrl"
+              :src="plan.imageUrl"
+              class="thumb-img"
+              alt=""
+              loading="lazy"
+              @error="(e) => (e.target.style.display = 'none')"
+            />
             <div class="thumb-gradient" />
             <div v-if="compareMode" class="compare-check" :class="{ on: isCompareSelected(plan.id) }">
               <svg v-if="isCompareSelected(plan.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             </div>
+            <!-- 대표 이미지 변경(소유 계획) — 펼친 카드에서만 노출 -->
+            <button
+              v-if="!compareMode && selectedPlanId === plan.id"
+              class="thumb-edit-btn"
+              :disabled="imageUploading"
+              title="대표 이미지 변경"
+              @click.stop="pickPlanImage(plan)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
+              </svg>
+              {{ imageUploading && imageEditPlanId === plan.id ? '업로드 중…' : '사진' }}
+            </button>
             <div class="plan-dates">
               <span class="date-label">{{ formatDate(plan.startDate) }}</span>
               <span class="date-sep">–</span>
@@ -355,6 +377,16 @@
             class="companion-card"
             @click="router.push(`/companion/${comp.id}`)"
           >
+            <!-- 대표 이미지 썸네일 — 없으면 기본 그라데이션(comp-thumb-ph) -->
+            <div class="comp-thumb" :class="{ ph: !comp.imageUrl }">
+              <img
+                v-if="comp.imageUrl"
+                :src="comp.imageUrl"
+                alt=""
+                loading="lazy"
+                @error="(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('ph') }"
+              />
+            </div>
             <div class="comp-header">
               <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
               <span
@@ -548,6 +580,9 @@
       </div>
     </Transition>
 
+    <!-- 대표 이미지 업로드용 숨김 파일 입력 -->
+    <input ref="planImgInput" type="file" accept="image/*" class="hidden-file" @change="onPlanImageChange" />
+
     <!-- 편집 토스트(순서변경/이동 결과) -->
     <Transition name="fade">
       <div v-if="planToast.show" class="plan-toast">{{ planToast.text }}</div>
@@ -561,7 +596,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
 import { useCompanionStore } from '@/stores/companion.js'
-import { planApi, attractionApi } from '@/api/index.js'
+import { planApi, attractionApi, communityApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 import { useConfirm } from '@/composables/useConfirm.js'
 
@@ -660,6 +695,66 @@ function showPlanToast(text) {
   planToast.value = { show: true, text }
   if (planToastTimer) clearTimeout(planToastTimer)
   planToastTimer = setTimeout(() => { planToast.value.show = false }, 2600)
+}
+
+// ── 계획 대표 이미지 변경 ───────────────────────────────────────────────────────
+// 펼친 계획 카드의 썸네일에서 사진을 고르면 /community/images 로 업로드 후
+// PATCH /api/plans/{id} (imageUrl)로 저장한다. 업로드 엔드포인트는 동행/커뮤니티와 동일.
+const planImgInput = ref(null)
+const imageUploading = ref(false)
+const imageEditPlanId = ref(null)   // 현재 업로드 대상 계획 id(버튼 라벨 표시용)
+
+/** 사진 선택 트리거 — 어떤 계획에 적용할지 기억하고 파일 picker를 연다. */
+function pickPlanImage(plan) {
+  if (imageUploading.value) return
+  imageEditPlanId.value = plan.id
+  planImgInput.value?.click()
+}
+
+/** 파일 선택 → 업로드 → 계획 PATCH(imageUrl) → 목록/상세 반영 */
+async function onPlanImageChange(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''   // 같은 파일 재선택 허용
+  const planId = imageEditPlanId.value
+  if (!file || planId == null) return
+  if (file.size > 10 * 1024 * 1024) {
+    showPlanToast('이미지 크기는 10MB를 초과할 수 없어요.')
+    return
+  }
+  imageUploading.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const { data } = await communityApi.uploadImage(fd)
+    const imageUrl = data?.imageUrl
+    if (!imageUrl) {
+      showPlanToast('업로드 응답이 올바르지 않아요.')
+      return
+    }
+    // 낙관적 버전: 상세가 로드돼 있으면 그 version을, 없으면 목록의 version을 사용
+    const fromList = plans.value.find((p) => p.id === planId)
+    const expectedVersion = (planStore.current?.id === planId
+      ? planStore.current.version
+      : fromList?.version)
+    await planApi.updatePlan(planId, {
+      expectedVersion,
+      title: fromList?.title ?? planStore.current?.title,
+      startDate: fromList?.startDate ?? planStore.current?.startDate,
+      endDate: fromList?.endDate ?? planStore.current?.endDate,
+      companions: fromList?.companions ?? planStore.current?.companions ?? null,
+      budget: fromList?.budget ?? planStore.current?.budget ?? null,
+      imageUrl,
+    })
+    // 목록/상세 새로고침으로 새 imageUrl 반영
+    await planStore.loadPlans()
+    if (planStore.current?.id === planId) await planStore.loadPlan(planId)
+    showPlanToast('대표 이미지를 변경했어요')
+  } catch (err) {
+    showPlanToast(err?.response?.data?.message ?? '이미지 변경에 실패했어요.')
+  } finally {
+    imageUploading.value = false
+    imageEditPlanId.value = null
+  }
 }
 
 // 이동 가능한 일차(현재 일차 제외)
@@ -1480,20 +1575,58 @@ async function removePlace(planId, dayNo, place) {
   display: flex;
   align-items: flex-end;
   padding: 12px 16px;
+  overflow: hidden;
+}
+
+/* 대표 이미지 — 썸네일 배경을 채운다. 깨지면 onerror로 숨겨 기본 그라데이션이 드러난다. */
+.thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
 }
 
 .thumb-gradient {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.25) 100%);
+  z-index: 1;
 }
+/* 이미지가 있으면 텍스트 가독성을 위해 하단 그늘을 더 진하게 */
+.plan-thumb.has-img .thumb-gradient {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+/* 대표 이미지 변경 버튼 — 썸네일 우상단 */
+.thumb-edit-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+.thumb-edit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .plan-dates {
   display: flex;
   align-items: center;
   gap: 6px;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .date-label {
@@ -2325,6 +2458,26 @@ async function removePlace(planId, dayNo, place) {
   border-radius: var(--radius-lg);
   padding: 16px;
   cursor: pointer;
+  overflow: hidden;
+}
+
+/* 동행 카드 대표 이미지 — 카드 패딩을 상쇄해 상단 전체 폭 배너로 */
+.comp-thumb {
+  margin: -16px -16px 12px;
+  height: 96px;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-line-light);
+}
+.comp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* 이미지 없음(또는 깨짐) — 기본 그라데이션 placeholder */
+.comp-thumb.ph {
+  background: linear-gradient(135deg, #f7b690 0%, #e89a6c 100%);
 }
 
 .comp-header {

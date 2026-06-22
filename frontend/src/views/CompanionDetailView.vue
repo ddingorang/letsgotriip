@@ -79,7 +79,19 @@
             <span class="author-name">{{ comp.author?.nickname }}</span>
             <span class="author-sub">방장 · 동행 {{ comp.author?.tripCount }}회</span>
           </div>
-          <span v-if="!comp.isOwner" class="seat-count">
+          <!-- 팔로우 버튼 — 방장 본인이 아닐 때만. 낙관적 토글 + 실패 롤백 -->
+          <button
+            v-if="!comp.isOwner && authorUserId != null"
+            class="follow-btn"
+            :class="{ following: isFollowing }"
+            :disabled="followLoading"
+            @click.stop="toggleFollow"
+          >
+            <svg v-if="isFollowing" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            {{ isFollowing ? '팔로잉' : '팔로우' }}
+          </button>
+          <span v-else-if="!comp.isOwner" class="seat-count">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
             {{ comp.currentCount }}/{{ comp.maxCount }} 모집 인원
           </span>
@@ -271,6 +283,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
+import { followApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 
 const route = useRoute()
@@ -313,6 +326,43 @@ const heroStyle = computed(() => {
     backgroundPosition: 'center',
   }
 })
+
+// ── 작성자 팔로우 ────────────────────────────────────────────────────────────
+// 작성자 userId — 상세 응답(normalizeDetail 가 ...item 보존)의 authorId.
+const authorUserId = computed(() => comp.value.authorId ?? comp.value.author?.userId ?? null)
+const isFollowing = ref(false)
+const followLoading = ref(false)
+
+// 작성자가 바뀌면(상세 로드/이동) 팔로우 상태를 다시 조회한다. 방장 본인은 조회 생략.
+async function refreshFollowStatus() {
+  isFollowing.value = false
+  const uid = authorUserId.value
+  if (uid == null || comp.value.isOwner) return
+  try {
+    const { data } = await followApi.status(uid)
+    isFollowing.value = !!data?.following
+  } catch {
+    // 미로그인/실패 — 기본 false 유지(버튼은 보이되 누르면 안내)
+  }
+}
+
+// 낙관적 토글 — 즉시 UI 반영 후 실패 시 롤백.
+async function toggleFollow() {
+  const uid = authorUserId.value
+  if (uid == null || followLoading.value) return
+  const prev = isFollowing.value
+  isFollowing.value = !prev
+  followLoading.value = true
+  try {
+    const { data } = await followApi.toggle(uid)
+    if (typeof data?.following === 'boolean') isFollowing.value = data.following
+  } catch (e) {
+    isFollowing.value = prev   // 롤백
+    showShareToast(e?.response?.status === 401 ? '로그인이 필요해요.' : '잠시 후 다시 시도해 주세요.')
+  } finally {
+    followLoading.value = false
+  }
+}
 
 // 내 신청 상태/ID — origin 의 /applications/me 조회(getMyApplication) 결과를 보관.
 // 신청/취소 직후 낙관적으로 갱신하고, 상세 재조회로 서버 기준 동기화한다.
@@ -488,6 +538,7 @@ async function refreshMyApplication() {
 onMounted(async () => {
   await companionStore.getDetail(route.params.id)
   await refreshMyApplication()
+  await refreshFollowStatus()
   // 연결 계획 좌표가 없으면 모집 위치를 지오코딩해 단일 마커 준비
   geocodeRegion()
 })
@@ -496,6 +547,7 @@ onMounted(async () => {
 async function reloadDetail() {
   await companionStore.getDetail(route.params.id)
   await refreshMyApplication()
+  await refreshFollowStatus()
   geocodeRegion()
 }
 
@@ -687,6 +739,29 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: var(--color-ink-secondary);
 }
+
+/* 팔로우 버튼 — 기본은 peach 채움, 팔로잉 상태는 외곽선 */
+.follow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+.follow-btn.following {
+  background: var(--color-white);
+  color: var(--color-ink-secondary);
+  border: 1.5px solid var(--color-line);
+}
+.follow-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .owner-status-row {
   display: flex;
