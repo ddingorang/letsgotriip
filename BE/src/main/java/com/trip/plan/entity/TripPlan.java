@@ -68,6 +68,15 @@ public class TripPlan extends BaseEntity {
     @Column(nullable = false)
     private Long version;
 
+    // ── 동선(route-path) 영속 캐시 ────────────────────────────────────────────────
+    // 계산된 도로경로 JSON과, 그것을 계산한 시점의 version. version과 다르면 재계산한다.
+    // 벌크 UPDATE(JpaRepository.updateRoutePathCache)로만 갱신 → @Version을 건드리지 않는다.
+    @Column(name = "route_path_json", columnDefinition = "LONGTEXT")
+    private String routePathJson;
+
+    @Column(name = "route_path_version")
+    private Long routePathVersion;
+
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("dayNo ASC")
     private List<TripDay> days = new ArrayList<>();

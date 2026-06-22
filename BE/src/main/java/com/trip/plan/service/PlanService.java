@@ -237,14 +237,31 @@ public class PlanService {
 
         // ── 캐시 적중 — 계획이 안 바뀌면(version 동일) 카카오 길찾기 재호출 없이 반환 ──
         // version은 place 추가/삭제/교체 등 모든 하위 변경에서 증가하므로, 편집 시 자동 무효화된다.
-        final String cacheKey = "trip:routepath:" + planId + ":v" + plan.getVersion();
+        final Long version = plan.getVersion();
+        final String cacheKey = "trip:routepath:" + planId + ":v" + version;
+
+        // L1: Redis(빠름, 휘발성)
         try {
             String cached = stringRedisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
                 return objectMapper.readValue(cached, com.trip.plan.dto.RoutePathResponseDto.class);
             }
         } catch (Exception e) {
-            log.warn("route-path 캐시 읽기 실패 — planId={}, err={}", planId, e.getMessage());
+            log.warn("route-path Redis 읽기 실패 — planId={}, err={}", planId, e.getMessage());
+        }
+
+        // L2: DB 영속 캐시(계획에 저장 — 재시작/만료에도 보존). version이 맞으면 사용.
+        if (plan.getRoutePathJson() != null && version.equals(plan.getRoutePathVersion())) {
+            try {
+                com.trip.plan.dto.RoutePathResponseDto dbDto = objectMapper.readValue(
+                        plan.getRoutePathJson(), com.trip.plan.dto.RoutePathResponseDto.class);
+                // L1 재적재
+                try { stringRedisTemplate.opsForValue().set(cacheKey, plan.getRoutePathJson(),
+                        java.time.Duration.ofDays(7)); } catch (Exception ignore) { /* noop */ }
+                return dbDto;
+            } catch (Exception e) {
+                log.warn("route-path DB 캐시 역직렬화 실패 — planId={}, err={}", planId, e.getMessage());
+            }
         }
 
         boolean enabled = kakaoDirectionsClient.isEnabled();
@@ -280,13 +297,23 @@ public class PlanService {
         com.trip.plan.dto.RoutePathResponseDto dto =
                 new com.trip.plan.dto.RoutePathResponseDto(plan.getId(), enabled, days);
 
-        // ── 캐시 저장 — 키 미설정(enabled=false)이 아닐 때만. version을 키에 담아 편집 시 자동 폐기. ──
+        // ── 캐시 저장 — DB(영속) + Redis(L1). 키 미설정(enabled=false)이면 저장 안 함. ──
+        // DB 저장은 두 컬럼만 벌크 UPDATE → @Version 미증가(자기 무효화 루프 방지).
         if (enabled) {
             try {
-                stringRedisTemplate.opsForValue().set(
-                        cacheKey, objectMapper.writeValueAsString(dto), java.time.Duration.ofDays(7));
+                String json = objectMapper.writeValueAsString(dto);
+                try {
+                    planRepository.updateRoutePathCache(planId, json, version);
+                } catch (Exception e) {
+                    log.warn("route-path DB 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                }
+                try {
+                    stringRedisTemplate.opsForValue().set(cacheKey, json, java.time.Duration.ofDays(7));
+                } catch (Exception e) {
+                    log.warn("route-path Redis 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                }
             } catch (Exception e) {
-                log.warn("route-path 캐시 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                log.warn("route-path 직렬화 실패 — planId={}, err={}", planId, e.getMessage());
             }
         }
         return dto;
