@@ -4,6 +4,8 @@
       <RouterView />
     </main>
     <BottomNav v-if="showTabBar" />
+    <AppAlert />
+    <AppConfirm />
   </div>
 </template>
 
@@ -11,6 +13,8 @@
 import { computed, onMounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import BottomNav from '@/components/common/BottomNav.vue'
+import AppAlert from '@/components/common/AppAlert.vue'
+import AppConfirm from '@/components/common/AppConfirm.vue'
 import { useLocationStore } from '@/stores/location.js'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { contextApi } from '@/api/index.js'

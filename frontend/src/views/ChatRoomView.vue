@@ -264,6 +264,9 @@ import { useCompanionStore } from '@/stores/companion.js'
 import { useChatStore } from '@/stores/chat.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { chatApi, communityApi } from '@/api/index.js'
+import { useConfirm } from '@/composables/useConfirm.js'
+
+const $confirm = useConfirm().confirm
 
 const route = useRoute()
 const router = useRouter()
@@ -410,7 +413,7 @@ async function onRoomImageSelected(e) {
   e.target.value = ''
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    window.alert('이미지 파일만 업로드할 수 있어요.')
+    showToast('이미지 파일만 업로드할 수 있어요.')
     return
   }
   roomImageUploading.value = true
@@ -419,7 +422,7 @@ async function onRoomImageSelected(e) {
     const { data } = await chatApi.uploadRoomImage(roomId.value, file)
     const imageUrl = data?.imageUrl
     if (!imageUrl) {
-      window.alert('업로드 응답이 올바르지 않아요.')
+      showToast('업로드 응답이 올바르지 않아요.')
       return
     }
     // 미리보기 + 방 객체 갱신(헤더/목록에서도 즉시 반영)
@@ -427,7 +430,7 @@ async function onRoomImageSelected(e) {
     if (room.value) room.value.imageUrl = imageUrl
     showToast('방 이미지를 변경했어요.')
   } catch (err) {
-    window.alert(err.response?.data?.message ?? '이미지 업로드에 실패했어요.')
+    showToast(err.response?.data?.message ?? '이미지 업로드에 실패했어요.')
   } finally {
     roomImageUploading.value = false
   }
@@ -461,7 +464,7 @@ async function saveSettings() {
 const actionBusy = ref(false)
 async function kickParticipant(p) {
   if (actionBusy.value) return
-  if (!window.confirm(`${p.nickname} 님을 내보낼까요?`)) return
+  if (!await $confirm(`${p.nickname} 님을 내보낼까요?`)) return
   actionBusy.value = true
   try {
     await chatApi.kickParticipant(roomId.value, p.userId)
@@ -475,7 +478,7 @@ async function kickParticipant(p) {
 }
 async function transferHost(p) {
   if (actionBusy.value) return
-  if (!window.confirm(`${p.nickname} 님에게 방장을 위임할까요?`)) return
+  if (!await $confirm(`${p.nickname} 님에게 방장을 위임할까요?`)) return
   actionBusy.value = true
   try {
     await chatApi.transferHost(roomId.value, { newHostUserId: p.userId })
@@ -512,7 +515,7 @@ async function submitInvite() {
 const leaving = ref(false)
 async function leaveRoom() {
   if (leaving.value) return
-  if (!window.confirm('채팅방에서 나가시겠어요? 대화 내용을 더 이상 볼 수 없어요.')) return
+  if (!await $confirm('채팅방에서 나가시겠어요? 대화 내용을 더 이상 볼 수 없어요.')) return
   leaving.value = true
   try {
     await chatApi.leaveRoom(roomId.value)

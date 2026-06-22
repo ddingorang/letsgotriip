@@ -87,6 +87,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useDocumentsStore } from '@/stores/documents.js'
+import { useConfirm } from '@/composables/useConfirm.js'
+
+const $confirm = useConfirm().confirm
 
 const docStore = useDocumentsStore()
 const fileInput = ref(null)
@@ -123,7 +126,7 @@ async function onFileSelected(e) {
 // ── 삭제 ──────────────────────────────────────────────────────────────────────
 async function onDelete(doc) {
   if (deletingId.value) return
-  if (!window.confirm(`'${doc.filename}' 문서를 삭제할까요?`)) return
+  if (!await $confirm(`'${doc.filename}' 문서를 삭제할까요?`)) return
   deletingId.value = doc.id
   try {
     await docStore.remove(doc.id)

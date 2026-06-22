@@ -356,6 +356,9 @@ import { usePlanStore } from '@/stores/plan.js'
 import { useCompanionStore } from '@/stores/companion.js'
 import { planApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
+import { useConfirm } from '@/composables/useConfirm.js'
+
+const $confirm = useConfirm().confirm
 
 const router = useRouter()
 const planStore = usePlanStore()
@@ -642,7 +645,7 @@ const compareRows = computed(() => {
 
 /** 여행 계획 삭제 — 확인 후 deletePlan 호출 */
 async function confirmDeletePlan(plan) {
-  if (!window.confirm(`'${plan.title}' 여행 계획을 삭제할까요?`)) return
+  if (!await $confirm(`'${plan.title}' 여행 계획을 삭제할까요?`)) return
   try {
     await planStore.deletePlan(plan.id)
     if (selectedPlanId.value === plan.id) selectedPlanId.value = null

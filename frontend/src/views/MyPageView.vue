@@ -544,6 +544,9 @@ import { useNotificationStore } from '@/stores/notification.js'
 import { useGamificationStore } from '@/stores/gamification.js'
 import { http } from '@/api/http.js'
 import { favoriteApi, followApi, reviewApi, storyApi } from '@/api/index.js'
+import { useAlert } from '@/composables/useAlert.js'
+
+const $alert = useAlert()
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -651,7 +654,7 @@ async function createAlbum() {
     await http.post('/users/me/albums', { name, imageUrls: [] })
     await loadAlbums()
   } catch (e) {
-    window.alert(e.response?.data?.message ?? e.message ?? '앨범을 만들지 못했어요.')
+    $alert.error(e.response?.data?.message ?? e.message ?? '앨범을 만들지 못했어요.')
   } finally {
     albumCreating.value = false
   }

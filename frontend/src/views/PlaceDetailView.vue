@@ -287,6 +287,11 @@ import { usePlanStore } from '@/stores/plan.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { contextApi, reviewApi, favoriteApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
+import { useAlert } from '@/composables/useAlert.js'
+import { useConfirm } from '@/composables/useConfirm.js'
+
+const $alert = useAlert()
+const $confirm = useConfirm().confirm
 
 const route = useRoute()
 const router = useRouter()
@@ -461,7 +466,7 @@ async function submitReview() {
 }
 
 async function removeReview(review) {
-  if (!window.confirm('이 후기를 삭제할까요?')) return
+  if (!await $confirm('이 후기를 삭제할까요?')) return
   const contentId = route.params.id
   try {
     await reviewApi.remove(contentId, review.id)
@@ -557,7 +562,7 @@ async function addToPlan() {
 }
 
 function getRecommendation() {
-  alert('비슷한 여행지를 추천해드릴게요!')
+  $alert.info('비슷한 여행지를 추천해드릴게요!')
 }
 
 onMounted(async () => {
