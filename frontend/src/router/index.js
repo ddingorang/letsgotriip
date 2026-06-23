@@ -47,8 +47,7 @@ const router = createRouter({
     // ── Stories (내 여행 스토리) ────────────────────────────────────────────────
     { path: '/stories', name: 'stories', component: () => import('@/views/StoriesView.vue'), meta: { requiresAuth: true } },
 
-    // ── Groups (여행 그룹 / 단체할인) ───────────────────────────────────────────
-    { path: '/groups', name: 'groups', component: () => import('@/views/GroupsView.vue'), meta: { requiresAuth: true } },
+    // ── Groups (여행 그룹 / 단체할인) — 비활성(라우트 제거). GroupsView.vue 파일은 보존. ──
 
     // ── Analysis (카톡/음성 업로드 → 전처리) ────────────────────────────────────
     { path: '/analysis', name: 'analysis', component: () => import('@/views/AnalysisUploadView.vue'), meta: { tabBar: false, requiresAuth: true } },

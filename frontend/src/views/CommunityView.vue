@@ -22,7 +22,7 @@
     <!-- Main tabs -->
     <div class="main-tab-bar">
       <button
-        v-for="(tab, i) in ['공유게시판', '핫플', '동행']"
+        v-for="(tab, i) in ['공유게시판', '핫플']"
         :key="tab"
         :class="['main-tab', { active: activeMain === i }]"
         @click="activeMain = i"
@@ -175,82 +175,6 @@
       </button>
     </div>
 
-    <!-- ③ 동행 -->
-    <div v-show="activeMain === 2" class="tab-pane companion-pane">
-      <div class="scroll-content" @scroll="onCompanionScroll">
-        <div class="section-header">
-          <span class="section-title">참여 중인 방</span>
-          <button class="see-all-btn" @click="$router.push('/chat')">전체보기</button>
-        </div>
-        <div class="rooms-row">
-          <div
-            v-for="room in companionStore.myRooms.slice(0, 3)"
-            :key="room.id"
-            class="room-card"
-            @click="$router.push(`/chat/${room.id}`)"
-          >
-            <div class="room-avatar-area">
-              <img :src="seedImg('room-' + room.id, 240, 140)" :alt="room.title" />
-            </div>
-            <div class="room-bottom">
-              <div class="room-name">{{ room.title }}</div>
-              <div class="room-d-row">
-                <span v-if="room.daysLeft !== null" :class="['room-d', { urgent: room.daysLeft <= 3 }]">D-{{ room.daysLeft }}</span>
-                <span v-else class="room-d ended">종료</span>
-              </div>
-              <div v-if="room.unreadCount > 0" class="room-unread-badge">새 메시지 {{ room.unreadCount }}</div>
-              <div v-else class="room-read">읽음</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section-header" style="margin-top: 24px">
-          <span class="section-title">동행 모집</span>
-        </div>
-        <div class="companion-list">
-          <div
-            v-for="comp in companionStore.companions"
-            :key="comp.id"
-            class="comp-item"
-            @click="$router.push(`/companion/${comp.id}`)"
-          >
-            <div class="comp-thumb">
-              <img :src="comp.thumbnail || seedImg('comp-' + comp.id)" :alt="comp.title" @error="onThumbError($event, 'comp-' + comp.id)" />
-            </div>
-            <div class="comp-info">
-              <div class="comp-header-row">
-                <span :class="['status-badge', { urgent: comp.status === '마감임박' }]">{{ comp.status }}</span>
-                <span class="comp-date">{{ comp.dateRange }}</span>
-              </div>
-              <div class="comp-title">{{ comp.title }}</div>
-              <div class="comp-meta">
-                <span class="comp-loc">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /></svg>
-                  {{ comp.location }}
-                </span>
-                <span class="comp-people">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></svg>
-                  {{ comp.currentCount }}/{{ comp.maxCount }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-if="companionStore.loadingMore" class="loading-row">
-          <div class="spinner" />
-        </div>
-        <div
-          v-else-if="!companionStore.hasMore && companionStore.companions.length > 0"
-          class="end-msg"
-        >모든 동행을 불러왔어요</div>
-        <div class="bottom-spacer" />
-      </div>
-
-      <button class="fab" @click="$router.push('/companion/write')">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-      </button>
-    </div>
-
   </div>
 </template>
 
@@ -261,17 +185,15 @@ import PostCard from '@/components/community/PostCard.vue'
 import TripMap from '@/components/common/TripMap.vue'
 import { usePostsStore } from '@/stores/posts.js'
 import { useHotplaceStore } from '@/stores/hotplace.js'
-import { useCompanionStore } from '@/stores/companion.js'
 import { useNotificationStore } from '@/stores/notification.js'
 
 const postsStore = usePostsStore()
 const hotplaceStore = useHotplaceStore()
-const companionStore = useCompanionStore()
 const notifStore = useNotificationStore()
 const route = useRoute()
 
-// 진입 쿼리(?tab=companion|hotplace)로 초기 탭 선택 — 0:공유게시판 1:핫플 2:동행
-const TAB_INDEX = { board: 0, hotplace: 1, companion: 2 }
+// 진입 쿼리(?tab=hotplace)로 초기 탭 선택 — 0:공유게시판 1:핫플
+const TAB_INDEX = { board: 0, hotplace: 1 }
 const activeMain = ref(TAB_INDEX[route.query.tab] ?? 0)
 
 // 공유게시판
@@ -294,12 +216,6 @@ function selectFilter(f) {
 function onScroll(e) {
   const el = e.target
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) postsStore.fetchPosts()
-}
-
-// 동행 탭 무한스크롤 — 하단 근접 시 다음 페이지 로드(스토어가 hasMore/중복 호출 가드).
-function onCompanionScroll(e) {
-  const el = e.target
-  if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) companionStore.fetchMoreCompanions()
 }
 
 // 핫플
@@ -333,8 +249,6 @@ function onThumbError(e) {
 onMounted(() => {
   postsStore.fetchPosts(true)
   notifStore.load()
-  companionStore.fetchCompanions()
-  companionStore.fetchMyRooms()
   hotplaceStore.getList()
 })
 </script>
