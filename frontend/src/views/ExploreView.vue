@@ -490,36 +490,46 @@ function mapCurated(c) {
     likeCount: c.likeCount ?? 0,
   }
 }
+// 늦게 도착한 큐레이트 응답이 최신 태그 결과를 덮어쓰지 못하도록 요청 토큰을 둔다.
+let curatedReqId = 0
 async function fetchCurated(tag) {
   if (!tag) return
+  const myId = ++curatedReqId
   curatedLoading.value = true
   store.loading = true // 시트 스켈레톤 재사용
   try {
     const { data } = await attractionApi.curated({ tag, sort: 'like', page: 0, size: 50 })
+    if (myId !== curatedReqId) return // 더 최신 요청이 진행 중 — 무시
     const content = Array.isArray(data) ? data : (data?.content ?? [])
     curatedItems.value = content.map(mapCurated)
   } catch {
-    curatedItems.value = []
+    if (myId === curatedReqId) curatedItems.value = []
   } finally {
-    curatedLoading.value = false
-    store.loading = false
+    if (myId === curatedReqId) {
+      curatedLoading.value = false
+      store.loading = false
+    }
   }
 }
-// 태그모드 진입 — 큐레이트 조회 + 결과에 지도 맞춤.
+// 태그모드 진입 — 큐레이트 조회 + URL(?tag) 동기화. route query를 단일 진실로 유지.
 function setTag(tag) {
   if (!TAG_LABELS[tag]) return
   activeTag.value = tag
+  sortMode.value = 'default' // 태그모드 기본은 좋아요(인기)순 — 이전 거리/이름순 잔재 제거
   showMapSearchBtn.value = false
   mapFit.value = true
   if (searchQuery.value.trim() && !searchQuery.value.trim().startsWith('#')) searchQuery.value = ''
+  if (route.query.tag !== tag) router.replace({ path: '/explore', query: { tag } })
   fetchCurated(tag)
 }
-// 태그모드 해제 — 일반 탐색 복귀.
+// 태그모드 해제 — URL의 ?tag 제거 + 일반 탐색 복귀.
 function clearTag() {
   if (!activeTag.value) return
   activeTag.value = null
   curatedItems.value = []
+  curatedReqId++ // 진행 중 큐레이트 응답 무효화
   searchQuery.value = ''
+  if (route.query.tag) router.replace({ path: '/explore', query: {} })
   loadAttractions()
 }
 
@@ -585,8 +595,12 @@ function currentUi() {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
-  activeTag.value = null // 카테고리 선택 시 태그(인기순) 모드 해제
-  curatedItems.value = []
+  if (activeTag.value) { // 카테고리 선택 시 태그(인기순) 모드 해제 + URL ?tag 제거
+    activeTag.value = null
+    curatedItems.value = []
+    curatedReqId++
+    if (route.query.tag) router.replace({ path: '/explore', query: {} })
+  }
   showMapSearchBtn.value = false
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)

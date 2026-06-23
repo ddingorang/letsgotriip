@@ -36,7 +36,12 @@ public class AttractionCuratedService {
 
         boolean latest = "latest".equalsIgnoreCase(sort);
         String normalizedTag = tag == null ? "" : tag.trim().toLowerCase();
-        boolean hasTag = !normalizedTag.isEmpty() && VALID_TAGS.contains(normalizedTag);
+
+        // 태그가 주어졌으나 유효하지 않으면 전체로 폴백하지 않고 빈 결과를 반환한다(오인 노출 방지).
+        if (!normalizedTag.isEmpty() && !VALID_TAGS.contains(normalizedTag)) {
+            return Page.empty(pageable);
+        }
+        boolean hasTag = !normalizedTag.isEmpty();
 
         Page<com.trip.attraction.entity.Attraction> result;
         if (hasTag) {

@@ -23,28 +23,30 @@ public interface AttractionRepository extends JpaRepository<Attraction, Long> {
     //  "큐레이션" = tags 가 있는(배치된) 행만 대상. tags 없는 행은 제외.
     // ─────────────────────────────────────────────────────────────
 
+    // 정렬 키 동점 시 페이지 간 중복/누락 방지를 위해 a.id desc tie-breaker를 둔다.
+
     /** 특정 태그 — 좋아요순 */
     @Query("select a from Attraction a " +
            "where a.tags like concat('%,', :tag, ',%') " +
-           "order by a.likeCount desc")
+           "order by a.likeCount desc, a.id desc")
     Page<Attraction> findByTagOrderByLike(@Param("tag") String tag, Pageable pageable);
 
     /** 특정 태그 — 최신순(fetchedAt desc) */
     @Query("select a from Attraction a " +
            "where a.tags like concat('%,', :tag, ',%') " +
-           "order by a.fetchedAt desc")
+           "order by a.fetchedAt desc, a.id desc")
     Page<Attraction> findByTagOrderByLatest(@Param("tag") String tag, Pageable pageable);
 
     /** 전체 큐레이션(태그 보유) — 좋아요순 */
     @Query("select a from Attraction a " +
            "where a.tags is not null and a.tags <> '' " +
-           "order by a.likeCount desc")
+           "order by a.likeCount desc, a.id desc")
     Page<Attraction> findCuratedOrderByLike(Pageable pageable);
 
     /** 전체 큐레이션(태그 보유) — 최신순 */
     @Query("select a from Attraction a " +
            "where a.tags is not null and a.tags <> '' " +
-           "order by a.fetchedAt desc")
+           "order by a.fetchedAt desc, a.id desc")
     Page<Attraction> findCuratedOrderByLatest(Pageable pageable);
 
     /** 태그 보유 전체(reroll 좋아요 재부여용) */
