@@ -28,4 +28,7 @@ public interface HotPlaceRepository extends JpaRepository<HotPlace, Long> {
     List<HotPlace> searchByNameOrAddress(@Param("status") HotPlaceStatus status,
                                          @Param("keyword") String keyword,
                                          Pageable pageable);
+
+    /** 시드 reset — 마커 사용자가 등록한 핫플 */
+    List<HotPlace> findAllBySubmitter_IdIn(List<Long> submitterIds);
 }

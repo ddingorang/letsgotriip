@@ -116,6 +116,10 @@ services:
       COOKIE_SECURE: "false"
       CHAT_ENABLED: "true"
       SEED_ENABLED: "true"
+      # 스크립트 트리거형 시드 엔드포인트(/api/dev/seed) — 로컬 전용.
+      # ⚠ 운영 배포 시에는 SEED_API_ENABLED 를 지우거나 "false" 로 두어 엔드포인트를 비활성화할 것.
+      SEED_API_ENABLED: "true"
+      SEED_API_SECRET: "triip-local-seed"
       UPLOAD_BASE_DIR: /app/uploads
       # 프론트엔드 연동 (CORS / OAuth 리다이렉트)
       FE_ALLOWED_ORIGINS: http://localhost:5173

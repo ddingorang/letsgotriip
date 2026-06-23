@@ -47,6 +47,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/ws/**", "/ws-sockjs/**").permitAll() // WebSocket 핸드셰이크 인증 제외(인증은 STOMP CONNECT 프레임에서)
                         .requestMatchers("/auth/**").permitAll()
+                        // 개발용 시드 엔드포인트 — 컨트롤러가 자체적으로 app.seed.api.enabled + X-Seed-Secret 으로 게이팅한다.
+                        .requestMatchers("/api/dev/**").permitAll()
                         .requestMatchers("/login/**").permitAll()
                         .requestMatchers("/oauth2/**").permitAll()
                         .requestMatchers("/preprocessing/**").authenticated()

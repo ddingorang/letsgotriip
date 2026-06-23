@@ -34,4 +34,7 @@ public interface CompanionPostRepository extends JpaRepository<CompanionPost, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from CompanionPost p where p.id = :id")
     Optional<CompanionPost> findByIdForUpdate(@Param("id") Long id);
+
+    /** 시드 reset — 마커 사용자가 작성한 동행글(삭제 플래그 무관) */
+    List<CompanionPost> findAllByAuthor_IdIn(List<Long> authorIds);
 }
