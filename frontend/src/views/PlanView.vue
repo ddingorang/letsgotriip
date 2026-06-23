@@ -28,9 +28,16 @@
     <!-- 비교 모드 안내 배너 -->
     <div v-if="compareMode" class="compare-banner">
       <span class="compare-banner-text">
-        비교할 계획 두 개를 선택하세요 ({{ compareSelection.length }}/2)
+        비교할 계획을 선택하세요 ({{ compareSelection.length }}/{{ COMPARE_MAX }})
       </span>
-      <button class="compare-banner-cancel" @click="toggleCompareMode">취소</button>
+      <div class="compare-banner-actions">
+        <button
+          class="compare-banner-run"
+          :disabled="compareSelection.length < 2 || compareLoading"
+          @click="runCompare"
+        >{{ compareLoading ? '비교 중…' : `비교하기 (${compareSelection.length})` }}</button>
+        <button class="compare-banner-cancel" @click="toggleCompareMode">취소</button>
+      </div>
     </div>
 
     <div class="scroll-content">
@@ -85,11 +92,33 @@
           :class="{ expanded: selectedPlanId === plan.id, selectable: compareMode, selected: isCompareSelected(plan.id) }"
         >
           <!-- Card header — click to expand/collapse (or select in compare mode) -->
-          <div class="plan-thumb" @click="onCardTap(plan)">
+          <!-- 대표 이미지가 있으면 썸네일 배경으로, 없으면 기존 그라데이션(기본 이미지) 유지 -->
+          <div class="plan-thumb" :class="{ 'has-img': !!plan.imageUrl }" @click="onCardTap(plan)">
+            <img
+              v-if="plan.imageUrl"
+              :src="plan.imageUrl"
+              class="thumb-img"
+              alt=""
+              loading="lazy"
+              @error="(e) => (e.target.style.display = 'none')"
+            />
             <div class="thumb-gradient" />
             <div v-if="compareMode" class="compare-check" :class="{ on: isCompareSelected(plan.id) }">
               <svg v-if="isCompareSelected(plan.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             </div>
+            <!-- 대표 이미지 변경(소유 계획) — 펼친 카드에서만 노출 -->
+            <button
+              v-if="!compareMode && selectedPlanId === plan.id"
+              class="thumb-edit-btn"
+              :disabled="imageUploading"
+              title="대표 이미지 변경"
+              @click.stop="pickPlanImage(plan)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
+              </svg>
+              {{ imageUploading && imageEditPlanId === plan.id ? '업로드 중…' : '사진' }}
+            </button>
             <div class="plan-dates">
               <span class="date-label">{{ formatDate(plan.startDate) }}</span>
               <span class="date-sep">–</span>
@@ -143,6 +172,14 @@
                     <span v-if="day.summary" class="detail-day-summary">{{ day.summary }}</span>
                   </div>
                   <div class="detail-places">
+                    <!-- TransitionGroup: 이동/삭제/순서변경 시 행이 부드럽게 미끄러지도록(FLIP).
+                         드래그 중(dragDay)에는 트랜지션을 끄는 클래스를 줘 따라다니는 잔상/버벅임을 막는다. -->
+                    <TransitionGroup
+                      name="place"
+                      tag="div"
+                      class="detail-places-group"
+                      :class="{ 'is-dragging': dragDay === day.dayNo }"
+                    >
                     <div
                       v-for="(place, idx) in day.places ?? []"
                       :key="place.id ?? place.attraction?.contentId ?? idx"
@@ -179,6 +216,7 @@
                         </svg>
                       </button>
                     </div>
+                    </TransitionGroup>
                     <div v-if="!(day.places?.length)" class="detail-empty">일정이 없어요</div>
                     <!-- 장소 추가 — 검색해서 이 일차에 바로 담기 -->
                     <button
@@ -218,15 +256,17 @@
                 </div>
 
                 <div v-if="currentDayPlaces.length" class="plan-map-wrap">
-                  <TripMap :places="currentDayPlaces" :path="currentDayPath" :numbered="true" />
+                  <TripMap :places="currentDayPlaces" :path="currentDayLine" :path-dashed="currentDayDashed" :numbered="true" />
                 </div>
                 <p v-else class="day-empty-map">{{ selectedDay }}일차는 지도에 표시할 장소(좌표)가 없어요.</p>
 
                 <div class="map-actions">
                   <span v-if="currentDaySummary" class="route-summary">
                     {{ selectedDay }}일차 · 차량 {{ currentDaySummary.distanceKm }}km · 약 {{ currentDaySummary.durationMin }}분
+                    <span v-if="currentDayPartial" class="route-partial">· 일부 구간 직선 근사</span>
                   </span>
                   <span v-else-if="routePathLoading" class="route-summary muted">경로 계산 중…</span>
+                  <span v-else-if="currentDayDashed" class="route-summary muted">{{ selectedDay }}일차 · 직선 동선(도로경로 없음)</span>
                   <span v-else-if="currentDayPlaces.length" class="route-summary muted">{{ selectedDay }}일차 경로 없음</span>
                   <button
                     v-if="currentDayPlaces.length >= 1"
@@ -277,6 +317,16 @@
                 <button class="share-copy-btn" @click="copyShareUrl">{{ shareCopied ? '복사됨' : '복사' }}</button>
               </div>
 
+              <!-- 챗봇으로 다듬기 — 상세의 주요 액션. 이 계획 맥락으로 어시스턴트 진입 -->
+              <div class="detail-actions">
+                <button class="detail-action-btn assistant-btn" @click="goAssistant(plan.id)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  </svg>
+                  이 계획을 챗봇과 다듬기
+                </button>
+              </div>
+
               <!-- Action buttons -->
               <div class="detail-actions">
                 <button class="detail-action-btn optimize-btn" @click="goReport(plan.id)">
@@ -287,19 +337,13 @@
                   AI 동선 최적화
                 </button>
               </div>
-              <!-- 평가 받기 / 챗봇으로 수정 -->
+              <!-- 평가 받기 -->
               <div class="detail-actions secondary">
                 <button class="detail-sub-btn" @click="goReport(plan.id)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
                   </svg>
                   평가 받기
-                </button>
-                <button class="detail-sub-btn" @click="goAssistant(plan.id)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-                  </svg>
-                  챗봇으로 수정
                 </button>
               </div>
               <div class="detail-actions secondary">
@@ -334,6 +378,16 @@
             class="companion-card"
             @click="router.push(`/companion/${comp.id}`)"
           >
+            <!-- 대표 이미지 썸네일 — 없으면 기본 그라데이션(comp-thumb-ph) -->
+            <div class="comp-thumb" :class="{ ph: !comp.imageUrl }">
+              <img
+                v-if="comp.imageUrl"
+                :src="comp.imageUrl"
+                alt=""
+                loading="lazy"
+                @error="(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('ph') }"
+              />
+            </div>
             <div class="comp-header">
               <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
               <span
@@ -367,30 +421,41 @@
       <div class="bottom-spacer" />
     </div>
 
-    <!-- 비교 결과 모달 -->
+    <!-- 비교 결과 모달 — N개 계획을 가로 스크롤 표로 -->
     <Transition name="fade">
       <div v-if="compareResult" class="compare-overlay" @click.self="closeCompare">
         <div class="compare-sheet">
           <div class="compare-sheet-head">
-            <h3 class="compare-sheet-title">계획 비교</h3>
+            <h3 class="compare-sheet-title">계획 비교 ({{ compareResult.length }}개)</h3>
             <button class="compare-sheet-close" @click="closeCompare">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           </div>
-          <div class="compare-grid">
-            <div class="compare-col">
-              <div class="compare-plan-name">{{ compareResult.a.title }}</div>
-            </div>
-            <div class="compare-col-label" />
-            <div class="compare-col">
-              <div class="compare-plan-name">{{ compareResult.b.title }}</div>
-            </div>
-
-            <template v-for="row in compareRows" :key="row.key">
-              <div class="compare-val" :class="row.aClass">{{ row.a }}</div>
-              <div class="compare-metric">{{ row.label }}</div>
-              <div class="compare-val" :class="row.bClass">{{ row.b }}</div>
-            </template>
+          <!-- 가로 스크롤: 첫 열(지표 라벨) 고정 + 계획별 N열 -->
+          <div class="compare-scroll">
+            <table class="compare-table">
+              <thead>
+                <tr>
+                  <th class="compare-th-metric" />
+                  <th
+                    v-for="p in compareResult"
+                    :key="p.planId"
+                    class="compare-th-plan"
+                  >{{ p.title }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in compareRows" :key="row.key">
+                  <td class="compare-td-metric">{{ row.label }}</td>
+                  <td
+                    v-for="cell in row.cells"
+                    :key="cell.planId"
+                    class="compare-td-val"
+                    :class="{ better: cell.best }"
+                  >{{ cell.text }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -516,6 +581,9 @@
       </div>
     </Transition>
 
+    <!-- 대표 이미지 업로드용 숨김 파일 입력 -->
+    <input ref="planImgInput" type="file" accept="image/*" class="hidden-file" @change="onPlanImageChange" />
+
     <!-- 편집 토스트(순서변경/이동 결과) -->
     <Transition name="fade">
       <div v-if="planToast.show" class="plan-toast">{{ planToast.text }}</div>
@@ -529,7 +597,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
 import { useCompanionStore } from '@/stores/companion.js'
-import { planApi, attractionApi } from '@/api/index.js'
+import { planApi, attractionApi, communityApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 import { useConfirm } from '@/composables/useConfirm.js'
 
@@ -561,9 +629,11 @@ const shareLoading = ref(false)
 const shareCopied = ref(false)
 
 // ── 비교 ─────────────────────────────────────────────────────────────────────
+const COMPARE_MAX = 5              // 한 번에 비교 가능한 최대 계획 수
 const compareMode = ref(false)
-const compareSelection = ref([])   // 선택된 planId 최대 2개
-const compareResult = ref(null)    // { a: PlanStat, b: PlanStat }
+const compareSelection = ref([])   // 선택된 planId (2~COMPARE_MAX개)
+const compareResult = ref(null)    // PlanStat[] (요청한 순서 유지) 또는 null
+const compareLoading = ref(false)
 
 // ── 길찾기(도로 경로) ──────────────────────────────────────────────────────────
 // route-path 응답: { planId, enabled, days:[{ dayNo, distanceMeters, durationSeconds, path:[[lat,lng],...] }] }
@@ -626,6 +696,66 @@ function showPlanToast(text) {
   planToast.value = { show: true, text }
   if (planToastTimer) clearTimeout(planToastTimer)
   planToastTimer = setTimeout(() => { planToast.value.show = false }, 2600)
+}
+
+// ── 계획 대표 이미지 변경 ───────────────────────────────────────────────────────
+// 펼친 계획 카드의 썸네일에서 사진을 고르면 /community/images 로 업로드 후
+// PATCH /api/plans/{id} (imageUrl)로 저장한다. 업로드 엔드포인트는 동행/커뮤니티와 동일.
+const planImgInput = ref(null)
+const imageUploading = ref(false)
+const imageEditPlanId = ref(null)   // 현재 업로드 대상 계획 id(버튼 라벨 표시용)
+
+/** 사진 선택 트리거 — 어떤 계획에 적용할지 기억하고 파일 picker를 연다. */
+function pickPlanImage(plan) {
+  if (imageUploading.value) return
+  imageEditPlanId.value = plan.id
+  planImgInput.value?.click()
+}
+
+/** 파일 선택 → 업로드 → 계획 PATCH(imageUrl) → 목록/상세 반영 */
+async function onPlanImageChange(e) {
+  const file = e.target.files?.[0]
+  e.target.value = ''   // 같은 파일 재선택 허용
+  const planId = imageEditPlanId.value
+  if (!file || planId == null) return
+  if (file.size > 10 * 1024 * 1024) {
+    showPlanToast('이미지 크기는 10MB를 초과할 수 없어요.')
+    return
+  }
+  imageUploading.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const { data } = await communityApi.uploadImage(fd)
+    const imageUrl = data?.imageUrl
+    if (!imageUrl) {
+      showPlanToast('업로드 응답이 올바르지 않아요.')
+      return
+    }
+    // 낙관적 버전: 상세가 로드돼 있으면 그 version을, 없으면 목록의 version을 사용
+    const fromList = plans.value.find((p) => p.id === planId)
+    const expectedVersion = (planStore.current?.id === planId
+      ? planStore.current.version
+      : fromList?.version)
+    await planApi.updatePlan(planId, {
+      expectedVersion,
+      title: fromList?.title ?? planStore.current?.title,
+      startDate: fromList?.startDate ?? planStore.current?.startDate,
+      endDate: fromList?.endDate ?? planStore.current?.endDate,
+      companions: fromList?.companions ?? planStore.current?.companions ?? null,
+      budget: fromList?.budget ?? planStore.current?.budget ?? null,
+      imageUrl,
+    })
+    // 목록/상세 새로고침으로 새 imageUrl 반영
+    await planStore.loadPlans()
+    if (planStore.current?.id === planId) await planStore.loadPlan(planId)
+    showPlanToast('대표 이미지를 변경했어요')
+  } catch (err) {
+    showPlanToast(err?.response?.data?.message ?? '이미지 변경에 실패했어요.')
+  } finally {
+    imageUploading.value = false
+    imageEditPlanId.value = null
+  }
 }
 
 // 이동 가능한 일차(현재 일차 제외)
@@ -823,12 +953,34 @@ const currentDayPlaces = computed(() =>
   currentPlanPlaces.value.filter((p) => p.dayNo === selectedDay.value),
 )
 
-// 선택한 일차의 도로 경로선([lat,lng]…). 그 날 경로가 없으면 빈 배열.
+// 선택한 일차의 도로 경로선([lat,lng]…). 그 날 도로경로가 없으면 빈 배열.
 const currentDayPath = computed(() => {
   const rp = routePath.value
   if (!rp || rp.planId !== selectedPlanId.value || !rp.enabled) return []
   const day = (rp.days ?? []).find((d) => d.dayNo === selectedDay.value)
   return day?.path ?? []
+})
+
+// 지도에 그릴 동선 — 도로경로가 있으면 그것, 없으면(카카오 길찾기가 비도로 지점으로 실패한 날)
+// 장소들을 순서대로 잇는 '직선 근사 동선'으로 폴백한다(항상 동선이 보이도록).
+const currentDayLine = computed(() => {
+  const road = currentDayPath.value
+  if (road.length >= 2) return road
+  const pts = currentDayPlaces.value
+  if (pts.length >= 2) return pts.map((p) => [p.lat, p.lng])
+  return []
+})
+// 직선 폴백일 때만 true → 지도에서 점선으로 표시(도로경로가 아님을 명확히).
+const currentDayDashed = computed(
+  () => currentDayPath.value.length < 2 && currentDayPlaces.value.length >= 2,
+)
+// 도로경로는 있지만 일부 구간이 직선 근사(비도로 폴백)인 경우 — 서버 partial 플래그.
+// 실제 도로로 오인하지 않도록 안내 문구를 띄운다(정직성).
+const currentDayPartial = computed(() => {
+  const rp = routePath.value
+  if (!rp || rp.planId !== selectedPlanId.value || !rp.enabled) return false
+  const day = (rp.days ?? []).find((d) => d.dayNo === selectedDay.value)
+  return !!day?.partial && currentDayPath.value.length >= 2
 })
 
 // 선택한 일차의 차량 거리/시간 요약. 경로 없으면 null.
@@ -1017,6 +1169,7 @@ function toggleCompareMode() {
   compareMode.value = !compareMode.value
   compareSelection.value = []
   compareResult.value = null
+  compareLoading.value = false
   if (compareMode.value) {
     // 비교 모드 진입 시 펼친 카드/패널 정리
     selectedPlanId.value = null
@@ -1029,26 +1182,28 @@ function isCompareSelected(planId) {
   return compareSelection.value.includes(planId)
 }
 
-async function toggleCompareSelect(planId) {
+function toggleCompareSelect(planId) {
   const idx = compareSelection.value.indexOf(planId)
   if (idx >= 0) {
     compareSelection.value.splice(idx, 1)
     return
   }
-  if (compareSelection.value.length >= 2) return  // 최대 2개
+  if (compareSelection.value.length >= COMPARE_MAX) return  // 최대 COMPARE_MAX개
   compareSelection.value.push(planId)
-  if (compareSelection.value.length === 2) {
-    await runCompare()
-  }
+  // 자동 실행하지 않고 "비교하기" 버튼으로 실행 — N개 선택을 마칠 시간을 준다.
 }
 
 async function runCompare() {
-  const [aId, bId] = compareSelection.value
+  if (compareSelection.value.length < 2 || compareLoading.value) return
+  compareLoading.value = true
   try {
-    const { data } = await planApi.compare(aId, bId)
-    compareResult.value = data
+    const { data } = await planApi.compareMany(compareSelection.value)
+    // 백엔드 응답: { plans: PlanStat[] }
+    compareResult.value = Array.isArray(data?.plans) ? data.plans : []
   } catch {
     compareResult.value = null
+  } finally {
+    compareLoading.value = false
   }
 }
 
@@ -1058,29 +1213,42 @@ function closeCompare() {
   compareSelection.value = []
 }
 
-/** 비교 표 행 — 값이 더 좋은 쪽을 강조 (낮을수록 좋은 항목은 작은 값 강조) */
+/**
+ * 비교 표 행 — 지표별로 N개 계획의 값을 만들고, 각 행에서 최적값을 강조한다.
+ * lowerBetter=true 인 지표(이동거리·소요)는 최소값이, false(장소 수)는 최대값이 best.
+ * 동률이거나 비교 의미가 없는 지표(일정·예산)는 강조하지 않는다.
+ */
 const compareRows = computed(() => {
-  const r = compareResult.value
-  if (!r) return []
-  const a = r.a
-  const b = r.b
+  const list = compareResult.value
+  if (!Array.isArray(list) || !list.length) return []
   const dur = (m) => {
     const h = Math.floor(m / 60)
     const min = m % 60
     return h > 0 ? `${h}시간${min > 0 ? ' ' + min + '분' : ''}` : `${min}분`
   }
-  const rows = [
-    { key: 'days', label: '일정', a: `${a.totalDays}일`, b: `${b.totalDays}일`, aBetter: null, bBetter: null },
-    { key: 'places', label: '장소 수', a: `${a.totalPlaces}곳`, b: `${b.totalPlaces}곳`, aBetter: a.totalPlaces > b.totalPlaces, bBetter: b.totalPlaces > a.totalPlaces },
-    { key: 'dist', label: '총 이동거리', a: `${a.totalDistanceKm}km`, b: `${b.totalDistanceKm}km`, aBetter: a.totalDistanceKm < b.totalDistanceKm, bBetter: b.totalDistanceKm < a.totalDistanceKm },
-    { key: 'dur', label: '예상 소요', a: dur(a.totalDurationMin), b: dur(b.totalDurationMin), aBetter: a.totalDurationMin < b.totalDurationMin, bBetter: b.totalDurationMin < a.totalDurationMin },
-    { key: 'budget', label: '예산', a: a.budget != null ? formatWon(a.budget) : '-', b: b.budget != null ? formatWon(b.budget) : '-', aBetter: null, bBetter: null },
+  // metric: 각 계획에서 수치를 뽑는 함수, format: 표시 문자열, lowerBetter: 작을수록 좋은지(null=강조 없음)
+  const defs = [
+    { key: 'days', label: '일정', metric: (p) => p.totalDays, format: (p) => `${p.totalDays}일`, lowerBetter: null },
+    { key: 'places', label: '장소 수', metric: (p) => p.totalPlaces, format: (p) => `${p.totalPlaces}곳`, lowerBetter: false },
+    { key: 'dist', label: '총 이동거리', metric: (p) => p.totalDistanceKm, format: (p) => `${p.totalDistanceKm}km`, lowerBetter: true },
+    { key: 'dur', label: '예상 소요', metric: (p) => p.totalDurationMin, format: (p) => dur(p.totalDurationMin), lowerBetter: true },
+    { key: 'budget', label: '예산', metric: (p) => p.budget, format: (p) => (p.budget != null ? formatWon(p.budget) : '-'), lowerBetter: null },
   ]
-  return rows.map((row) => ({
-    ...row,
-    aClass: row.aBetter ? 'better' : '',
-    bClass: row.bBetter ? 'better' : '',
-  }))
+  return defs.map((def) => {
+    let bestVal = null
+    if (def.lowerBetter != null) {
+      const nums = list.map(def.metric).filter((v) => v != null && Number.isFinite(v))
+      if (nums.length) bestVal = def.lowerBetter ? Math.min(...nums) : Math.max(...nums)
+    }
+    // 최적값이 둘 이상이면(동률) 강조하지 않는다.
+    const bestCount = bestVal == null ? 0 : list.filter((p) => def.metric(p) === bestVal).length
+    const cells = list.map((p) => {
+      const v = def.metric(p)
+      const best = bestVal != null && bestCount === 1 && v === bestVal
+      return { planId: p.planId, text: def.format(p), best }
+    })
+    return { key: def.key, label: def.label, cells }
+  })
 })
 
 /** 여행 계획 삭제 — 확인 후 deletePlan 호출 */
@@ -1259,6 +1427,27 @@ async function removePlace(planId, dayNo, place) {
   color: var(--color-peach-pressed);
 }
 
+.compare-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.compare-banner-run {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--color-peach);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.compare-banner-run:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .compare-banner-cancel {
   font-size: 12.5px;
   font-weight: 600;
@@ -1395,20 +1584,58 @@ async function removePlace(planId, dayNo, place) {
   display: flex;
   align-items: flex-end;
   padding: 12px 16px;
+  overflow: hidden;
+}
+
+/* 대표 이미지 — 썸네일 배경을 채운다. 깨지면 onerror로 숨겨 기본 그라데이션이 드러난다. */
+.thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
 }
 
 .thumb-gradient {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.25) 100%);
+  z-index: 1;
 }
+/* 이미지가 있으면 텍스트 가독성을 위해 하단 그늘을 더 진하게 */
+.plan-thumb.has-img .thumb-gradient {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+/* 대표 이미지 변경 버튼 — 썸네일 우상단 */
+.thumb-edit-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+.thumb-edit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .plan-dates {
   display: flex;
   align-items: center;
   gap: 6px;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .date-label {
@@ -1531,6 +1758,15 @@ async function removePlace(planId, dayNo, place) {
   gap: 6px;
 }
 
+/* TransitionGroup 래퍼 — 기존 .detail-places의 세로 스택 레이아웃을 이어받는다.
+   position:relative 라야 leave 시 position:absolute로 빠지는 행이 이 안에 머문다. */
+.detail-places-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
 .detail-place-row {
   display: flex;
   align-items: center;
@@ -1540,6 +1776,36 @@ async function removePlace(planId, dayNo, place) {
   padding: 9px 12px;
   box-shadow: var(--shadow-card);
   transition: opacity 0.12s, box-shadow 0.12s;
+}
+
+/* ── 장소 행 트랜지션 (이동/추가/삭제 시 부드럽게) ───────────────────────────── */
+/* FLIP 이동 — 순서변경/다른 날 이동/삭제로 위치가 바뀌면 행이 미끄러진다 */
+.place-move {
+  transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* 진입 — 위에서 살짝 슬라이드 + 페이드 인 */
+.place-enter-active {
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.28s ease;
+}
+/* 이탈 — 페이드 + 슬라이드 아웃. position:absolute로 흐름에서 빠져 나머지가 자연스럽게 채워진다 */
+.place-leave-active {
+  transition: transform 0.26s ease, opacity 0.26s ease;
+  position: absolute;
+  width: 100%;
+  z-index: 0;
+}
+.place-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.place-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
+}
+/* 드래그 중에는 트랜지션을 꺼 포인터 추적과 충돌(잔상/버벅임)을 막는다 */
+.detail-places-group.is-dragging .detail-place-row,
+.detail-places-group.is-dragging.place-move {
+  transition: none;
 }
 /* 드래그 중인 행 — 들린 느낌(반투명 + 강조 테두리) */
 .detail-place-row.dragging {
@@ -1670,6 +1936,13 @@ async function removePlace(planId, dayNo, place) {
   background: linear-gradient(90deg, var(--color-peach) 0%, #f9a96a 100%);
   color: #fff;
   box-shadow: 0 3px 10px rgba(247, 143, 87, 0.3);
+}
+
+/* 챗봇으로 다듬기 — 주요 액션이지만 최적화 버튼과 위계 구분(보라 톤 그라데이션) */
+.assistant-btn {
+  background: linear-gradient(90deg, var(--color-ai, #7c5cf0) 0%, #9b7cf6 100%);
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(124, 92, 240, 0.28);
 }
 
 .detail-actions.secondary {
@@ -1902,6 +2175,12 @@ async function removePlace(planId, dayNo, place) {
   font-weight: 500;
 }
 
+/* 일부 구간 직선 근사 안내 — 실제 도로로 오인하지 않도록 옅게 강조 */
+.route-partial {
+  color: var(--color-ink-muted);
+  font-weight: 500;
+}
+
 .navi-btn {
   display: inline-flex;
   align-items: center;
@@ -2077,46 +2356,58 @@ async function removePlace(planId, dayNo, place) {
   color: var(--color-ink-muted);
 }
 
-.compare-grid {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 10px 8px;
-  align-items: center;
+/* N열 비교 표 — 가로 스크롤. 첫 열(지표 라벨)은 sticky로 고정 */
+.compare-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.compare-col {
-  text-align: center;
+.compare-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: max-content;
 }
 
-.compare-plan-name {
-  font-size: 13px;
+.compare-th-metric,
+.compare-td-metric {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-white);
+  text-align: left;
+  white-space: nowrap;
+  padding: 8px 12px 8px 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.compare-th-plan {
+  min-width: 96px;
+  padding: 0 8px 8px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--color-ink);
-  line-height: 1.35;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--color-peach-light);
-}
-
-.compare-col-label {
-  border-bottom: 2px solid transparent;
-}
-
-.compare-metric {
-  font-size: 11px;
-  color: var(--color-ink-muted);
   text-align: center;
+  line-height: 1.35;
+  border-bottom: 2px solid var(--color-peach-light);
   white-space: nowrap;
-  padding: 0 4px;
 }
 
-.compare-val {
+.compare-table tbody tr {
+  border-bottom: 1px solid var(--color-line-light);
+}
+
+.compare-td-val {
+  padding: 9px 8px;
   text-align: center;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--color-ink-secondary);
+  white-space: nowrap;
 }
 
-.compare-val.better {
+.compare-td-val.better {
   color: var(--color-peach-pressed);
   font-weight: 800;
 }
@@ -2182,6 +2473,26 @@ async function removePlace(planId, dayNo, place) {
   border-radius: var(--radius-lg);
   padding: 16px;
   cursor: pointer;
+  overflow: hidden;
+}
+
+/* 동행 카드 대표 이미지 — 카드 패딩을 상쇄해 상단 전체 폭 배너로 */
+.comp-thumb {
+  margin: -16px -16px 12px;
+  height: 96px;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-line-light);
+}
+.comp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* 이미지 없음(또는 깨짐) — 기본 그라데이션 placeholder */
+.comp-thumb.ph {
+  background: linear-gradient(135deg, #f7b690 0%, #e89a6c 100%);
 }
 
 .comp-header {

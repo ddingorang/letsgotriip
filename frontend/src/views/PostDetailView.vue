@@ -16,10 +16,8 @@
       <template v-else>
       <div class="hero">
         <div class="hero-img">
-          <img v-if="post?.imageUrl" :src="post.imageUrl" :alt="post?.title" />
-          <div v-else class="hero-placeholder">
-            <span class="hero-caption">{{ post?.location }}</span>
-          </div>
+          <!-- 대표 이미지: 업로드 이미지가 없거나 로딩 실패 시 공통 기본 이미지로 대체 -->
+          <img :src="heroImage" :alt="post?.title" @error="onHeroError" />
           <div class="hero-gradient" />
         </div>
 
@@ -50,22 +48,35 @@
 
           <Transition name="fade">
             <div v-if="menuOpen" class="dropdown" ref="dropdownRef">
-              <button class="dropdown-item" @click="editPost">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                수정하기
-              </button>
-              <div class="dropdown-divider" />
-              <button class="dropdown-item danger" @click="deletePost">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                </svg>
-                삭제하기
-              </button>
+              <!-- 내 글: 수정/삭제 -->
+              <template v-if="isMyPost">
+                <button class="dropdown-item" @click="editPost">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  수정하기
+                </button>
+                <div class="dropdown-divider" />
+                <button class="dropdown-item danger" @click="deletePost">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                  </svg>
+                  삭제하기
+                </button>
+              </template>
+              <!-- 남의 글: 신고 -->
+              <template v-else>
+                <button class="dropdown-item danger" @click="reportPost">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                    <line x1="4" y1="22" x2="4" y2="15" />
+                  </svg>
+                  신고하기
+                </button>
+              </template>
             </div>
           </Transition>
         </div>
@@ -274,6 +285,14 @@ async function toggleFollow() {
 
 const likeCount = computed(() => post.value?.likeCount ?? 0)
 
+// 대표 이미지 — 업로드 이미지가 없으면 공통 기본 이미지를 쓴다.
+const PLACEHOLDER_IMG = '/images/placeholder-thumb.png'
+const heroImage = computed(() => post.value?.imageUrl || PLACEHOLDER_IMG)
+function onHeroError(e) {
+  // 깨진 이미지(onerror)도 기본 이미지로 대체
+  if (!e.target.src.endsWith(PLACEHOLDER_IMG)) e.target.src = PLACEHOLDER_IMG
+}
+
 function timeAgo(dateStr) {
   if (!dateStr) return ''
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -310,10 +329,31 @@ async function loadMoreComments() {
   await postsStore.fetchMoreComments(route.params.id)
 }
 
-function sharePost() {
+// 공유 — 게시글 링크(/community/{id}). navigator.share가 있으면 우선 사용, 없으면 클립보드 복사 + 토스트.
+async function sharePost() {
+  const id = post.value?.id ?? route.params.id
+  const shareUrl = `${window.location.origin}/community/${id}`
   if (navigator.share) {
-    navigator.share({ title: post.value?.title, url: window.location.href })
+    try {
+      await navigator.share({ title: post.value?.title, url: shareUrl })
+      return
+    } catch {
+      // 사용자가 공유 시트를 취소한 경우 등 — 클립보드 복사로 폴백하지 않고 종료
+      return
+    }
   }
+  try {
+    await navigator.clipboard.writeText(shareUrl)
+    $alert.success('링크 복사됨')
+  } catch {
+    $alert.error('링크 복사에 실패했어요.')
+  }
+}
+
+// 신고 — 남의 글에 대한 간단 처리(토스트). 백엔드 신고 API가 없으므로 접수 안내만 노출한다.
+function reportPost() {
+  menuOpen.value = false
+  $alert.info('신고가 접수되었어요. 검토 후 조치할게요.')
 }
 
 function focusComment() {

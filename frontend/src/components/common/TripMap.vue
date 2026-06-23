@@ -17,6 +17,8 @@ const props = defineProps({
   categoryColors: { type: Object, default: () => ({}) },
   // 도로 경로선 — [[lat,lng], ...] 또는 [{lat,lng}, ...]. 비어있으면 선 미표시.
   path: { type: Array, default: () => [] },
+  // true면 경로선을 점선으로(도로경로 대신 장소를 직선으로 잇는 근사 동선 표시용).
+  pathDashed: { type: Boolean, default: false },
   fit: { type: Boolean, default: true }, // false면 places 변경 시 카메라 재설정 안 함
 })
 
@@ -102,7 +104,7 @@ function renderRoute(kakao) {
     strokeWeight: 5,
     strokeColor: '#F78F57',
     strokeOpacity: 0.85,
-    strokeStyle: 'solid',
+    strokeStyle: props.pathDashed ? 'shortdash' : 'solid',
   })
   routeLine.setMap(map)
 }
@@ -218,15 +220,21 @@ onMounted(async () => {
     })
     renderMarkers(kakao)
 
-    kakao.maps.event.addListener(map, 'dragend', () => {
+    // 현 지도 중심 + 가시영역(bounds) 을 함께 알린다(부모가 '현 지도 크기' 기준으로 조회).
+    const emitMove = () => {
       const c = map.getCenter()
-      emit('move', { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() })
-    })
-
-    kakao.maps.event.addListener(map, 'zoom_changed', () => {
-      const c = map.getCenter()
-      emit('move', { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() })
-    })
+      const payload = { lat: c.getLat(), lng: c.getLng(), level: map.getLevel() }
+      try {
+        const b = map.getBounds()
+        const sw = b.getSouthWest()
+        const ne = b.getNorthEast()
+        payload.swLat = sw.getLat(); payload.swLng = sw.getLng()
+        payload.neLat = ne.getLat(); payload.neLng = ne.getLng()
+      } catch { /* bounds 미지원 시 중심/레벨만 */ }
+      emit('move', payload)
+    }
+    kakao.maps.event.addListener(map, 'dragend', emitMove)
+    kakao.maps.event.addListener(map, 'zoom_changed', emitMove)
 
     // 탭 전환/폰트 로드 등으로 컨테이너 크기가 늦게 잡히는 경우 대비 — 재시도
     setTimeout(refresh, 60)

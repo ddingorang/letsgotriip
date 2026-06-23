@@ -43,6 +43,18 @@ public interface PlanRepository extends JpaRepository<TripPlan, Long> {
            "WHERE p.shareToken = :shareToken")
     Optional<TripPlan> findByShareToken(@Param("shareToken") String shareToken);
 
+    /**
+     * 동선(route-path) 영속 캐시 갱신 — 두 컬럼만 벌크 UPDATE.
+     * 벌크 JPQL UPDATE는 @Version을 자동 증가시키지 않으므로, 캐시 저장이 plan.version을
+     * 바꿔 자기 무효화하는 루프를 막는다. 읽기전용 트랜잭션(getRoutePath) 안에서 호출되므로
+     * REQUIRES_NEW로 별도 쓰기 트랜잭션을 연다.
+     */
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE TripPlan p SET p.routePathJson = :json, p.routePathVersion = :ver WHERE p.id = :id")
+    void updateRoutePathCache(@Param("id") Long id, @Param("json") String json, @Param("ver") Long ver);
+
     // ── 게임화(챌린지/뱃지) 집계 ────────────────────────────────
     long countByUserId(Long userId);
 

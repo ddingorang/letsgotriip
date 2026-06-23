@@ -22,5 +22,9 @@ public record PlanCreateRequestDto(
 
         Integer budget,
 
-        OriginType origin
+        OriginType origin,
+
+        // 대표 이미지 URL(선택). 없으면 프론트에서 기본 이미지로 표시.
+        @Size(max = 500)
+        String imageUrl
 ) {}

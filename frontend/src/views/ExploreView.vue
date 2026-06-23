@@ -56,20 +56,25 @@
     </div>
 
     <!-- ── Bottom sheet ──────────────────────────────────────────────────── -->
-    <div ref="bottomSheet" class="bottom-sheet" :class="{ expanded: sheetExpanded }">
-      <div class="sheet-handle" @click="sheetExpanded = !sheetExpanded" />
+    <div ref="bottomSheet" class="bottom-sheet" :class="{ dragging: sheetDragging }" :style="{ height: sheetH + 'vh' }">
+      <div class="sheet-handle-wrap" @pointerdown="onSheetPointerDown">
+        <div class="sheet-handle" />
+      </div>
       <div class="sheet-header">
         <h2 class="sheet-title">
           {{ sheetTitle }}
           <span class="count">{{ displayedPlaces.length }}</span>
         </h2>
-        <button class="sort-btn" :class="{ active: sortMode === 'distance' }" @click="toggleSort">
+        <button class="sort-btn" :class="{ active: sortMode !== 'default' }" @click="openSortSheet">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="7" y1="12" x2="17" y2="12" />
             <line x1="10" y1="18" x2="14" y2="18" />
           </svg>
           {{ sortLabel }}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
         </button>
       </div>
 
@@ -182,6 +187,35 @@
         </div>
       </template>
     </div>
+
+    <!-- ── 정렬 기준 바텀시트 ──────────────────────────────────────────────── -->
+    <transition name="sort-fade">
+      <div v-if="sortSheetOpen" class="sort-overlay" @click.self="closeSortSheet">
+        <div class="sort-sheet">
+          <div class="sort-sheet-handle" />
+          <h3 class="sort-sheet-title">정렬 기준</h3>
+          <button
+            v-for="opt in SORT_OPTIONS"
+            :key="opt.key"
+            class="sort-opt"
+            :class="{ active: sortMode === opt.key, disabled: opt.requiresLoc && !userLoc }"
+            @click="selectSort(opt.key)"
+          >
+            <span class="sort-opt-label">
+              {{ opt.label }}
+              <span v-if="opt.requiresLoc && !userLoc" class="sort-opt-hint">위치 권한 필요</span>
+            </span>
+            <svg
+              v-if="sortMode === opt.key"
+              width="16" height="16" viewBox="0 0 24 24"
+              fill="none" stroke="var(--color-peach)" stroke-width="2.5"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -200,8 +234,53 @@ const locationStore = useLocationStore()
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const searchQuery = ref('')
-const sheetExpanded = ref(false)
 const selectedPlace = ref(null)
+
+// ── 드래그 바텀시트 (높이 vh, 스냅 3단) ───────────────────────────────────────
+const SHEET_SNAPS = [26, 52, 82]   // 접힘 / 중간 / 펼침 (viewport height %)
+const sheetH = ref(48)             // 현재 시트 높이(vh) — 인라인 style로 바인딩
+const sheetDragging = ref(false)
+let dragStartY = 0
+let dragStartH = 0
+let dragMoved = 0
+
+function expandSheet() {
+  sheetH.value = SHEET_SNAPS[2]
+}
+function nearestSnap(v) {
+  return SHEET_SNAPS.reduce((best, s) => (Math.abs(s - v) < Math.abs(best - v) ? s : best), SHEET_SNAPS[0])
+}
+function onSheetPointerDown(e) {
+  e.preventDefault()
+  sheetDragging.value = true
+  dragStartY = e.clientY
+  dragStartH = sheetH.value
+  dragMoved = 0
+  try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* noop */ }
+  window.addEventListener('pointermove', onSheetPointerMove, { passive: false })
+  window.addEventListener('pointerup', onSheetPointerUp, { once: true })
+  window.addEventListener('pointercancel', onSheetPointerUp, { once: true })
+}
+function onSheetPointerMove(e) {
+  if (!sheetDragging.value) return
+  e.preventDefault()
+  dragMoved = Math.max(dragMoved, Math.abs(e.clientY - dragStartY))
+  const dyVh = ((dragStartY - e.clientY) / window.innerHeight) * 100 // 위로 끌면 +
+  sheetH.value = Math.min(88, Math.max(18, dragStartH + dyVh))
+}
+function onSheetPointerUp() {
+  window.removeEventListener('pointermove', onSheetPointerMove)
+  window.removeEventListener('pointerup', onSheetPointerUp)
+  window.removeEventListener('pointercancel', onSheetPointerUp)
+  sheetDragging.value = false
+  if (dragMoved < 8) {
+    // 거의 안 움직였으면 탭으로 간주 → 다음 스냅으로 순환
+    const idx = SHEET_SNAPS.indexOf(nearestSnap(sheetH.value))
+    sheetH.value = SHEET_SNAPS[(idx + 1) % SHEET_SNAPS.length]
+  } else {
+    sheetH.value = nearestSnap(sheetH.value)
+  }
+}
 const selectedCategory = ref('all')
 
 // 무한스크롤 — 바닥 센티넬이 보이면 다음 페이지를 누적 로드
@@ -240,7 +319,16 @@ const PAGE_SIZE = 30   // 거리순 정렬이 의미있도록 후보를 넉넉�
 
 // ── 현재 위치 / 정렬 ─────────────────────────────────────────────────────────
 const userLoc = ref(null)              // { lat, lng }
-const sortMode = ref('default')        // 'default' | 'distance'
+const sortMode = ref('default')        // 'default' | 'distance' | 'name'
+const sortSheetOpen = ref(false)       // 정렬 기준 바텀시트 표시 여부
+
+// 정렬 기준 정의 — key/label/설명. requiresLoc 인 항목은 위치 없으면 비활성.
+// NOTE: TourAPI 는 평점 데이터를 제공하지 않아(rating 항상 null) 평점순은 제외.
+const SORT_OPTIONS = [
+  { key: 'default',  label: '추천순',        requiresLoc: false },
+  { key: 'distance', label: '거리순',        requiresLoc: true  },
+  { key: 'name',     label: '이름순(가나다)', requiresLoc: false },
+]
 
 // 두 좌표 사이 거리(km) — Haversine
 function distanceKm(a, b) {
@@ -266,16 +354,25 @@ const displayedPlaces = computed(() => {
         (p.address && p.address.includes(q))
     )
   }
+  // 위치가 있으면 항상 _dist 를 계산해 row 에 거리 배지를 노출(정렬 여부와 무관).
+  if (userLoc.value) {
+    list = list.map((p) => ({
+      ...p,
+      _dist:
+        Number.isFinite(p.lat) && Number.isFinite(p.lng)
+          ? distanceKm(userLoc.value, p)
+          : Infinity,
+    }))
+  }
+  // 정렬 적용 — 원본을 변형하지 않도록 복사 후 정렬.
   if (sortMode.value === 'distance' && userLoc.value) {
-    list = [...list]
-      .map((p) => ({
-        ...p,
-        _dist:
-          Number.isFinite(p.lat) && Number.isFinite(p.lng)
-            ? distanceKm(userLoc.value, p)
-            : Infinity,
-      }))
-      .sort((a, b) => a._dist - b._dist)
+    // 거리순 — 가까운 순. 좌표 없는 항목(_dist=Infinity)은 뒤로.
+    list = [...list].sort((a, b) => a._dist - b._dist)
+  } else if (sortMode.value === 'name') {
+    // 이름순 — title 로캘 비교(가나다). 한글·영문·숫자 자연스러운 정렬.
+    list = [...list].sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko'),
+    )
   }
   return list
 })
@@ -298,30 +395,48 @@ function onMapMove(center) {
   showMapSearchBtn.value = true
 }
 
+// 현재 보고 있는 지도 영역 기준 조회 파라미터 — 중심 + '크기'(반경 m).
+// 반경은 보이는 사각형의 '내접원'(중심~가장 가까운 변까지)으로 잡아, 조회 원이 항상 화면 영역
+// 안쪽에 들어오게 한다(이전엔 중심~모서리=반대각선이라 화면보다 크게 조회됐음).
+// bounds 가 없으면(구형 SDK) 줌레벨로 반경을 근사한다.
+function mapAreaParams(extra = {}) {
+  const c = mapDragCenter.value
+  let radius
+  if (c.neLat != null && c.neLng != null) {
+    // 중심~북변(N-S 반높이), 중심~동변(E-W 반너비) 중 더 작은 값 = 내접원 반경.
+    const vertM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.neLat, lng: c.lng }) * 1000
+    const horizM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.lat, lng: c.neLng }) * 1000
+    radius = Math.round(Math.min(vertM, horizM))
+    radius = Math.min(Math.max(radius, 500), 20000) // TourAPI radius 상한 20km
+  } else {
+    radius = ZOOM_RADIUS[c.level ?? 9] ?? 20000
+  }
+  return {
+    page: 1,
+    size: PAGE_SIZE,
+    mapX: String(c.lng),
+    mapY: String(c.lat),
+    radius,
+    ...extra,
+  }
+}
+
 function searchByMapCenter() {
   if (!mapDragCenter.value) return
   showMapSearchBtn.value = false
   mapFit.value = false
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
-  const level = mapDragCenter.value.level ?? 9
-  const radius = ZOOM_RADIUS[level] ?? 20000
-  const params = {
-    page: 1,
-    size: PAGE_SIZE,
-    mapX: String(mapDragCenter.value.lng),
-    mapY: String(mapDragCenter.value.lat),
-    radius,
-    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
-  }
-  store.list(params, currentUi(), { forceLoading: true })
+  const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+  store.list(mapAreaParams(ct), currentUi(), { forceLoading: true })
 }
 
 // 지도 마커는 항상 시트와 동일한 집합을 표시 — 클릭(목록 row)과 지도 핀 불일치 방지.
 // (거리순일 때도 8개로 자르지 않고 전체를 핀으로 노출)
 const mapPlaces = computed(() => displayedPlaces.value)
 
-const sortLabel = computed(() =>
-  sortMode.value === 'distance' ? '거리순' : '기본순',
+// 현재 활성 정렬 기준의 라벨 (정렬 버튼에 표시)
+const sortLabel = computed(
+  () => SORT_OPTIONS.find((o) => o.key === sortMode.value)?.label ?? '추천순',
 )
 
 const CATEGORY_LABEL = { all: '플레이스', '12': '관광지', '15': '축제', '39': '음식점', '32': '숙박' }
@@ -331,14 +446,26 @@ const sheetTitle = computed(() => {
   return sortMode.value === 'distance' ? `내 주변 ${label}` : label
 })
 
-function toggleSort() {
-  if (sortMode.value === 'distance') {
-    sortMode.value = 'default'
-  } else if (userLoc.value) {
-    sortMode.value = 'distance'
-  } else {
-    locateUser(true)   // 위치 먼저 확보 후 거리순
+// 정렬 바텀시트 토글
+function openSortSheet() {
+  sortSheetOpen.value = true
+}
+function closeSortSheet() {
+  sortSheetOpen.value = false
+}
+
+// 정렬 기준 선택 — 거리순은 위치가 필요하므로 없으면 권한 요청 후 적용.
+function selectSort(key) {
+  const opt = SORT_OPTIONS.find((o) => o.key === key)
+  if (!opt) return
+  if (opt.requiresLoc && !userLoc.value) {
+    // 위치 미확보 — 권한 확보를 시도하고, 성공하면 거리순으로 전환(locateUser 내부 처리).
+    closeSortSheet()
+    locateUser(true)
+    return
   }
+  sortMode.value = key
+  closeSortSheet()
 }
 
 // 위치가 있으면 BE 좌표(반경 20km) 검색 파라미터 — 검색어 없을 때만 사용
@@ -382,15 +509,21 @@ function currentUi() {
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
   showMapSearchBtn.value = false
-  mapFit.value = true
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
-  const params = {
-    page: 1,
-    size: PAGE_SIZE,
-    ...locParams(),
-    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+  const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+
+  // 사용자가 정한 지도 영역이 우선 — 분류를 바꿔도 카메라를 결과에 맞춰 재조정하지 않고
+  // 현재 보고 있는 지도 영역(크기) 안에서만 다시 조회한다.
+  if (mapDragCenter.value) {
+    mapFit.value = false // 결과에 맞춰 줌/이동하지 않음(지도 크기 유지)
+    store.list(mapAreaParams(ct), currentUi(), { forceLoading: true })
+    return
   }
+
+  // 아직 지도를 움직인 적이 없으면(영역 미확정) 위치 기준 + 결과에 맞춰 카메라 fit.
+  mapFit.value = true
+  const params = { page: 1, size: PAGE_SIZE, ...locParams(), ...ct }
   // 카테고리 전환은 결과가 반드시 바뀌어야 하므로 즉시 로딩 표시(forceLoading)
   store.list(params, currentUi(), { forceLoading: true })
 }
@@ -407,7 +540,7 @@ function setRowRef(contentId, el) {
 function selectPlace(place) {
   selectedPlace.value = place
   // 시트를 펼쳐 항목이 보이도록 한 뒤, 해당 row 를 스크롤로 가시화
-  sheetExpanded.value = true
+  expandSheet()
   nextTick(() => {
     const el = rowRefs.get(String(place.contentId))
     if (el && typeof el.scrollIntoView === 'function') {
@@ -453,19 +586,24 @@ function onSearchInput() {
 function clearSearch() {
   searchQuery.value = ''
   showMapSearchBtn.value = false
-  mapFit.value = true
-  loadAttractions()
+  loadAttractions() // 현 지도 영역 기준으로 재조회(카메라 유지 여부는 loadAttractions가 결정)
 }
 
 function loadAttractions() {
-  mapFit.value = true
   const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
-  const params = {
-    page: 1,
-    size: PAGE_SIZE,
-    ...locParams(),
-    ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}),
+  const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
+
+  // 현재 보고 있는 지도 영역이 있으면 그 '크기'(반경) 기준으로 조회하고 카메라를 고정한다.
+  // (확대했는데도 고정 20km로 검색되던 문제 해결 — 검색은 항상 현 지도 영역 기준)
+  if (mapDragCenter.value) {
+    mapFit.value = false
+    store.list(mapAreaParams(ct), currentUi())
+    return
   }
+
+  // 지도 영역 미확정(최초 진입) — 위치 기준 + 결과에 맞춰 카메라 fit.
+  mapFit.value = true
+  const params = { page: 1, size: PAGE_SIZE, ...locParams(), ...ct }
   store.list(params, currentUi())
 }
 
@@ -557,7 +695,13 @@ watch(
   },
 )
 
-onBeforeUnmount(teardownObserver)
+onBeforeUnmount(() => {
+  teardownObserver()
+  // 드래그 도중 이탈 시 window 리스너 누수 방지
+  window.removeEventListener('pointermove', onSheetPointerMove)
+  window.removeEventListener('pointerup', onSheetPointerUp)
+  window.removeEventListener('pointercancel', onSheetPointerUp)
+})
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
@@ -673,23 +817,28 @@ onMounted(() => {
   background: var(--color-white);
   border-radius: 20px 20px 0 0;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
-  max-height: 40%;
+  height: 48vh;              /* JS가 인라인 style로 덮어씀(드래그) */
   overflow-y: auto;
-  transition: max-height 0.3s ease;
+  transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
 }
+/* 드래그 중엔 트랜지션을 꺼서 손가락을 즉시 따라오게 */
+.bottom-sheet.dragging { transition: none; }
 
-.bottom-sheet.expanded {
-  max-height: 50%;
+/* 핸들 — 히트영역 넓힌 래퍼로 감싸 드래그 쉽게 */
+.sheet-handle-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;       /* 핸들에서 시작한 터치는 스크롤이 아닌 드래그로 */
 }
-
+.sheet-handle-wrap:active { cursor: grabbing; }
 .sheet-handle {
-  width: 36px;
-  height: 4px;
+  width: 44px;
+  height: 5px;
   background: var(--color-line);
-  border-radius: 2px;
-  margin: 10px auto 0;
-  cursor: pointer;
+  border-radius: 3px;
 }
 
 .sheet-header {
@@ -729,6 +878,90 @@ onMounted(() => {
 .sort-btn.active {
   color: var(--color-peach);
   font-weight: 600;
+}
+
+/* ── 정렬 바텀시트 ────────────────────────────────────────────────────────── */
+.sort-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sort-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-white);
+  border-radius: 20px 20px 0 0;
+  padding: 0 16px calc(20px + env(safe-area-inset-bottom));
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.16);
+}
+
+.sort-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--color-line);
+  border-radius: 2px;
+  margin: 10px auto 6px;
+}
+
+.sort-sheet-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.3px;
+  padding: 8px 4px 6px;
+}
+
+.sort-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.3px;
+  border-top: 1px solid var(--color-line-light);
+  cursor: pointer;
+  text-align: left;
+}
+
+.sort-opt.active {
+  color: var(--color-peach);
+}
+
+.sort-opt.disabled {
+  color: var(--color-ink-muted);
+}
+
+.sort-opt-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-opt-hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  background: var(--color-surface);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+
+/* 오버레이 페이드 트랜지션 */
+.sort-fade-enter-active,
+.sort-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.sort-fade-enter-from,
+.sort-fade-leave-to {
+  opacity: 0;
 }
 
 .place-dist {

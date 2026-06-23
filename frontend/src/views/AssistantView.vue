@@ -17,7 +17,57 @@
           <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
         </svg>
       </button>
+      <button class="docs-btn" :class="{ on: mem.useRecords }" title="개인화 설정" @click="showSettings = !showSettings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+        </svg>
+      </button>
     </header>
+
+    <!-- 개인화(메모리) 설정 패널 — 챗봇이 내 기록을 얼마나 참고할지 -->
+    <Transition name="fade">
+      <div v-if="showSettings" class="mem-overlay" @click.self="showSettings = false">
+        <div class="mem-panel">
+          <div class="mem-head">
+            <span class="mem-title">개인화 — 내 기록 활용</span>
+            <button class="mem-close" @click="showSettings = false" aria-label="닫기">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+          <p class="mem-desc">챗봇이 답할 때 참고할 내 기록을 켜고 끌 수 있어요. 모두 끄면 내 기록을 보지 않아요.</p>
+
+          <label class="mem-row master">
+            <span class="mem-label">내 기록 활용</span>
+            <input type="checkbox" :checked="mem.useRecords" @change="toggle('useRecords', $event.target.checked)" />
+          </label>
+
+          <div class="mem-sub" :class="{ disabled: !mem.useRecords }">
+            <template v-for="opt in memOptions" :key="opt.key">
+              <label class="mem-row">
+                <span class="mem-label">{{ opt.label }}</span>
+                <input type="checkbox" :disabled="!mem.useRecords" :checked="mem[opt.key]" @change="toggle(opt.key, $event.target.checked)" />
+              </label>
+              <!-- '내 여행 계획'이 켜졌을 때 — 계획별 선택(비우면 전체) -->
+              <div v-if="opt.key === 'plans' && mem.useRecords && mem.plans" class="mem-plans">
+                <p v-if="!myPlans.length" class="mem-plans-empty">저장된 계획이 없어요</p>
+                <label v-for="p in myPlans" :key="p.id" class="mem-plan-row">
+                  <span class="mem-plan-title">{{ p.title }}</span>
+                  <input type="checkbox" :checked="isPlanOn(p.id)" @change="togglePlan(p.id, $event.target.checked)" />
+                </label>
+                <p v-if="myPlans.length" class="mem-plans-hint">
+                  {{ (mem.planIds && mem.planIds.length) ? '선택한 계획만 참고해요' : '전체 계획을 참고해요' }}
+                </p>
+              </div>
+            </template>
+          </div>
+
+          <label class="mem-row recall">
+            <span class="mem-label">대화·문서 기억(RAG)</span>
+            <input type="checkbox" :checked="mem.recall" @change="toggle('recall', $event.target.checked)" />
+          </label>
+        </div>
+      </div>
+    </Transition>
 
     <div class="msg-scroll" ref="msgScroll">
       <!-- 빈 상태 안내 -->
@@ -135,8 +185,7 @@
             </svg>
           </div>
           <div class="msg-col">
-            <div class="bubble incoming-bubble" :class="{ errored: msg.errored }">{{ msg.content
-              }}<span v-if="streaming && msg.id === messages[messages.length - 1]?.id" class="stream-caret" /></div>
+            <div class="bubble incoming-bubble md" :class="{ errored: msg.errored }"><span class="md-body" v-html="renderMarkdown(msg.content)" /><span v-if="streaming && msg.id === messages[messages.length - 1]?.id" class="stream-caret" /></div>
             <span v-if="msg.errored" class="partial-note">⚠ 응답이 중단된 부분 답변이에요.</span>
             <span class="msg-time">{{ msg.time }}</span>
           </div>
@@ -276,6 +325,8 @@
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAssistantStore } from '@/stores/assistant.js'
+import { usePlanStore } from '@/stores/plan.js'
+import { renderMarkdown } from '@/utils/markdown.js'
 import { useDocumentsStore } from '@/stores/documents.js'
 import { analysisApi } from '@/api/index.js'
 import PlanQuickForm from '@/components/assistant/PlanQuickForm.vue'
@@ -286,12 +337,12 @@ const documentsStore = useDocumentsStore()
 const msgScroll = ref(null)
 const inputText = ref('')
 
-// PlanView 의 "챗봇으로 수정"에서 진입 시(?planId=N) 입력창에 시드 메시지를 채운다.
-// 자동 전송하지 않고 사용자가 확인 후 보내도록 한다.
+// PlanView 의 "이 계획을 챗봇과 다듬기"에서 진입 시(?planId=N) 입력창에 시드 메시지를 채운다.
+// 자동 전송하지 않고 사용자가 확인 후 보내도록 한다(프리필 정도).
 onMounted(() => {
   const planId = route.query.planId
   if (planId != null && String(planId).trim() !== '' && !inputText.value) {
-    inputText.value = `내 계획(#${planId})을 수정/평가하고 싶어`
+    inputText.value = `내 여행 계획(planId: ${planId})을 다듬고 싶어요. 동선·일정을 살펴보고 개선점을 제안해줘.`
   }
 })
 
@@ -300,6 +351,41 @@ const loading = computed(() => assistantStore.loading)
 const streaming = computed(() => assistantStore.streaming)
 const error = computed(() => assistantStore.error)
 const planning = computed(() => assistantStore.planning)
+
+// ── 개인화(메모리) 설정 ─────────────────────────────────────────────────────────
+const showSettings = ref(false)
+const mem = computed(() => assistantStore.memoryPrefs)
+const memOptions = [
+  { key: 'plans', label: '내 여행 계획' },
+  { key: 'favorites', label: '찜한 곳' },
+  { key: 'reviews', label: '내 리뷰' },
+  { key: 'stories', label: '여행 스토리' },
+]
+function toggle(key, value) {
+  assistantStore.setMemoryPrefs({ [key]: value })
+}
+
+// ── 계획별 선택(planIds, 비우면 전체) ─────────────────────────────────────────
+const planStore = usePlanStore()
+const myPlans = computed(() => planStore.plans ?? [])
+function isPlanOn(id) {
+  const ids = mem.value.planIds
+  return !ids || ids.length === 0 || ids.includes(id)
+}
+function togglePlan(id, checked) {
+  const allIds = myPlans.value.map((p) => p.id)
+  let cur = (mem.value.planIds && mem.value.planIds.length) ? [...mem.value.planIds] : [...allIds]
+  if (checked) { if (!cur.includes(id)) cur.push(id) }
+  else { cur = cur.filter((x) => x !== id) }
+  // 전체 선택 상태면 canonical 빈 배열(=전체)로 저장
+  assistantStore.setMemoryPrefs({ planIds: cur.length === allIds.length ? [] : cur })
+}
+// 설정 열 때 내 계획 목록 로드(한 번)
+watch(showSettings, (open) => {
+  if (open && mem.value.useRecords && mem.value.plans && !myPlans.value.length) {
+    planStore.loadPlans().catch(() => {})
+  }
+})
 
 // 응답 진행 중(요청~첫토큰=loading, 첫토큰~종료=streaming) — 입력 잠금/중지 버튼 노출 기준
 const busy = computed(() => loading.value || streaming.value)
@@ -580,6 +666,34 @@ watch(
   border-radius: 4px 18px 18px 18px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.06);
 }
+/* ── 마크다운 렌더(어시스턴트 버블) ─────────────────────────────────────────── */
+.md-body { display: inline; }
+.incoming-bubble.md :deep(p) { margin: 0 0 6px; }
+.incoming-bubble.md :deep(p:last-child) { margin-bottom: 0; }
+.incoming-bubble.md :deep(h1),
+.incoming-bubble.md :deep(h2),
+.incoming-bubble.md :deep(h3) { font-size: 14.5px; font-weight: 800; margin: 8px 0 4px; }
+.incoming-bubble.md :deep(ul),
+.incoming-bubble.md :deep(ol) { margin: 4px 0 6px; padding-left: 18px; }
+.incoming-bubble.md :deep(li) { margin: 2px 0; }
+.incoming-bubble.md :deep(strong) { font-weight: 800; }
+.incoming-bubble.md :deep(em) { font-style: italic; }
+.incoming-bubble.md :deep(a) { color: var(--color-peach-pressed); text-decoration: underline; }
+.incoming-bubble.md :deep(code) {
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  background: var(--color-surface);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+.incoming-bubble.md :deep(pre) {
+  background: var(--color-surface);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.incoming-bubble.md :deep(pre code) { background: none; padding: 0; }
 .outgoing-bubble {
   background: var(--color-peach);
   color: white;
@@ -976,4 +1090,53 @@ watch(
   gap: 8px;
 }
 .plan-saved-link { font-size: 12px; font-weight: 700; color: var(--color-peach); white-space: nowrap; }
+
+/* ── 개인화(메모리) 설정 패널 ──────────────────────────────────────────────────── */
+.docs-btn.on { color: var(--color-peach); }
+.mem-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: flex-start; justify-content: flex-end;
+  padding: 56px 12px 0;
+}
+.mem-panel {
+  width: 100%; max-width: 320px;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  padding: 14px 16px 16px;
+}
+.mem-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.mem-title { font-size: 15px; font-weight: 800; color: var(--color-ink); letter-spacing: -0.3px; }
+.mem-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--color-ink-muted); }
+.mem-desc { font-size: 12px; color: var(--color-ink-muted); line-height: 1.5; margin-bottom: 10px; }
+.mem-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 2px; cursor: pointer;
+}
+.mem-row .mem-label { font-size: 13.5px; font-weight: 600; color: var(--color-ink); }
+.mem-row.master { border-top: 1px solid var(--color-line-light); }
+.mem-row.master .mem-label, .mem-row.recall .mem-label { font-weight: 800; }
+.mem-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--color-peach); }
+.mem-sub { padding-left: 10px; }
+.mem-plans {
+  margin: 2px 0 8px 8px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--color-line-light);
+  background: var(--color-surface);
+  border-radius: 6px;
+}
+.mem-plan-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 5px 2px; cursor: pointer;
+}
+.mem-plan-title {
+  font-size: 12.5px; color: var(--color-ink-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mem-plan-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--color-peach); flex-shrink: 0; }
+.mem-plans-empty, .mem-plans-hint { font-size: 11.5px; color: var(--color-ink-muted); padding: 2px; }
+.mem-plans-hint { margin-top: 2px; }
+.mem-sub.disabled { opacity: 0.45; }
+.mem-row.recall { border-top: 1px solid var(--color-line-light); margin-top: 4px; }
 </style>

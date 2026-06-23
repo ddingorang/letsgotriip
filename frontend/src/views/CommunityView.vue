@@ -68,7 +68,8 @@
         <div class="bottom-spacer" />
       </div>
 
-      <button class="fab" @click="$router.push('/community/write')">
+      <!-- 글쓰기 FAB — 게시글 유무와 무관하게 항상 노출(글 0개일 때만 보이던 진입점 보완) -->
+      <button class="fab" @click="$router.push('/community/write')" aria-label="글쓰기">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
       </button>
     </div>

@@ -1,11 +1,19 @@
 package com.trip.assistant;
 
+import com.trip.assistant.dto.AssistantChatRequest.MemoryPrefs;
 import com.trip.attraction.dto.AttractionSearchRequestDto;
 import com.trip.attraction.dto.AttractionTourApiResponse.AttractionItem;
 import com.trip.attraction.service.AttractionService;
 import com.trip.checklist.dto.ChecklistItemCreateRequest;
 import com.trip.checklist.dto.ChecklistItemResponse;
 import com.trip.checklist.service.ChecklistService;
+import com.trip.favorite.dto.FavoriteResponse;
+import com.trip.favorite.entity.FavoriteTargetType;
+import com.trip.favorite.service.FavoriteService;
+import com.trip.review.dto.MyReviewListResponse;
+import com.trip.review.service.ReviewService;
+import com.trip.story.dto.TravelStoryResponse;
+import com.trip.story.service.TravelStoryService;
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
 import com.trip.attraction.entity.Attraction;
@@ -36,6 +44,7 @@ import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -109,6 +118,10 @@ public class AssistantService {
     private final RecommendService recommendService;
     private final PlanService planService;
     private final ChecklistService checklistService;
+    // 사용자 기록 조회용(설정으로 on/off 되는 RecordTools가 사용)
+    private final FavoriteService favoriteService;
+    private final ReviewService reviewService;
+    private final TravelStoryService travelStoryService;
 
     /**
      * LLM 호출 워치독용 워커 풀. blocking 한 ChatClient 호출을 별도 스레드에서 실행하고
@@ -150,7 +163,7 @@ public class AssistantService {
      * @param conversationId 대화 식별자(기억 윈도우 키)
      * @param message        사용자 입력
      */
-    public String chat(Long userId, String conversationId, String message) {
+    public String chat(Long userId, String conversationId, String message, MemoryPrefs prefs) {
         // conversationId 형식/길이를 스레드 제출 전에 먼저 검증(잘못된 요청을 빨리 거절).
         validateConversationId(conversationId);
 
@@ -159,7 +172,7 @@ public class AssistantService {
         final Future<String> future;
         try {
             future = callExecutor.submit(() ->
-                    buildPrompt(userId, conversationId, message)
+                    buildPrompt(userId, conversationId, message, prefs)
                             .call()
                             .content());
         } catch (RejectedExecutionException e) {
@@ -204,13 +217,13 @@ public class AssistantService {
      * @param message        사용자 입력
      * @return 응답 텍스트 토큰 스트림
      */
-    public Flux<String> chatStream(Long userId, String conversationId, String message) {
+    public Flux<String> chatStream(Long userId, String conversationId, String message, MemoryPrefs prefs) {
         // 시작 전 검증 실패(잘못된 conversationId)는 예외로 전파해 컨트롤러가 일반 오류 응답을
         // 내도록 한다(스트림 시작 전이라 FE가 비스트리밍으로 폴백 가능). buildPrompt를 호출하기
         // 전에 검증해, 검증 예외가 리액티브 onError 토큰으로 위장되지 않게 한다.
         validateConversationId(conversationId);
 
-        return buildPrompt(userId, conversationId, message)
+        return buildPrompt(userId, conversationId, message, prefs)
                 .stream()
                 .content()
                 .filter(token -> token != null && !token.isEmpty())
@@ -236,30 +249,61 @@ public class AssistantService {
      * 동기/스트리밍 공통 ChatClient 프롬프트를 구성한다.
      * userId로 격리된 RAG 검색, conversationId 기억 윈도우, 시스템 프롬프트, 도구를 동일하게 적용한다.
      */
-    private ChatClient.ChatClientRequestSpec buildPrompt(Long userId, String conversationId, String message) {
-        // userId로 격리된 RAG 검색
-        SearchRequest searchRequest = SearchRequest.builder()
-                .filterExpression("userId == '" + userId + "'")
-                .topK(TOP_K)
-                .build();
+    private ChatClient.ChatClientRequestSpec buildPrompt(Long userId, String conversationId, String message,
+                                                         MemoryPrefs prefs) {
+        if (prefs == null) {
+            // 보수적 기본값 — 클라가 설정을 안 보낸 경우 개인기록·RAG를 노출하지 않는다(R2).
+            prefs = new MemoryPrefs(false, false, false, false, false, false, null);
+        }
 
-        QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
-                .searchRequest(searchRequest)
-                .build();
-
-        // 메모리 키를 "userId:conversationId"로 네임스페이스화한다.
-        // 클라가 보낸 conversationId를 그대로 키로 쓰면 다른 사용자가 같은 ID로
-        // 대화 기억을 공유·탈취할 수 있으므로 반드시 userId로 격리한다.
+        // 대화 기억(윈도우)은 항상 유지 — 멀티턴 대화의 기본. userId로 키 격리.
         MessageChatMemoryAdvisor memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory)
                 .conversationId(memoryKey(userId, conversationId))
                 .build();
 
-        return chatClientBuilder.build()
+        var spec = chatClientBuilder.build()
                 .prompt()
-                .system(SYSTEM_PROMPT)
-                .user(message)
-                .advisors(qaAdvisor, memoryAdvisor)
-                .tools(new AssistantTools(userId));
+                .system(SYSTEM_PROMPT + memoryNote(prefs))
+                .user(message);
+
+        // RAG 기억(내 문서/기록 검색 주입)은 recall이 켜졌을 때만 부착. userId로 격리.
+        if (prefs.wantRecall()) {
+            SearchRequest searchRequest = SearchRequest.builder()
+                    .filterExpression("userId == '" + userId + "'")
+                    .topK(TOP_K)
+                    .build();
+            QuestionAnswerAdvisor qaAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
+                    .searchRequest(searchRequest)
+                    .build();
+            spec = spec.advisors(qaAdvisor, memoryAdvisor);
+        } else {
+            spec = spec.advisors(memoryAdvisor);
+        }
+
+        // 도구: 핵심(검색·생성·편집)은 항상. 내 기록 조회 도구는 설정에 따라 장착.
+        List<Object> toolBeans = new ArrayList<>();
+        toolBeans.add(new AssistantTools(userId, prefs));
+        if (prefs.anyRecord()) {
+            toolBeans.add(new RecordTools(userId, prefs));
+        }
+        return spec.tools(toolBeans.toArray());
+    }
+
+    /** 현재 설정에서 어떤 내 기록을 쓸 수 있는지 시스템 프롬프트에 덧붙인다. */
+    private static String memoryNote(MemoryPrefs p) {
+        if (!p.anyRecord() && !p.wantRecall()) {
+            return "\n\n[개인화 설정] 사용자가 '내 기록 활용'을 꺼두었다. 내 계획·찜·리뷰·스토리 조회 도구는 사용할 수 없다. "
+                    + "그런 정보가 필요하면 사용자에게 직접 알려달라고 요청해라.";
+        }
+        StringBuilder sb = new StringBuilder("\n\n[개인화 설정] 조회 가능한 내 기록: ");
+        List<String> on = new java.util.ArrayList<>();
+        if (p.wantPlans())     on.add("여행계획");
+        if (p.wantFavorites()) on.add("찜");
+        if (p.wantReviews())   on.add("리뷰");
+        if (p.wantStories())   on.add("스토리");
+        sb.append(on.isEmpty() ? "(없음)" : String.join("·", on));
+        sb.append(". 꺼진 기록은 조회하지 말고, 필요하면 설정에서 켜달라고 안내해라.");
+        return sb.toString();
     }
 
     /**
@@ -290,10 +334,27 @@ public class AssistantService {
      */
     public class AssistantTools {
 
-        private final Long userId;
+        private static final String NOT_SELECTED =
+                "어시스턴트 설정에서 '활용 대상'으로 선택하지 않은 여행 계획이에요. "
+                + "설정에서 해당 계획을 선택하면 조회·수정할 수 있어요.";
 
-        AssistantTools(Long userId) {
+        private final Long userId;
+        private final MemoryPrefs prefs;
+
+        AssistantTools(Long userId, MemoryPrefs prefs) {
             this.userId = userId;
+            this.prefs = prefs;
+        }
+
+        /**
+         * planId가 사용자의 '활용 대상' 화이트리스트에 들어있는지(R1).
+         * 화이트리스트가 비어있으면(=전체) 모두 허용. 소유권은 별도로 PlanService가 검증한다.
+         * 화이트리스트가 지정된 경우, 선택하지 않은 계획은 조회/수정 도구가 손대지 않는다.
+         */
+        private boolean planAllowed(Long planId) {
+            if (planId == null) return true;
+            java.util.List<Long> allow = (prefs == null) ? java.util.List.of() : prefs.planIdsOrEmpty();
+            return allow.isEmpty() || allow.contains(planId);
         }
 
         @Tool(description = "키워드 또는 지역코드로 한국 관광지/맛집/문화시설을 검색한다. "
@@ -372,27 +433,6 @@ public class AssistantService {
             }
         }
 
-        @Tool(description = "현재 로그인한 사용자가 저장해 둔 여행 계획 목록을 요약해서 돌려준다(읽기 전용). "
-                + "사용자가 '내 여행 계획', '저장한 일정' 등을 물을 때 사용한다. "
-                + "각 항목은 계획 ID·제목·기간이다.")
-        public String getMyTravelPlans() {
-            try {
-                // 최신순(updatedAt desc) 상위 일부만 요약. userId는 서버가 주입(LLM 파라미터 아님).
-                Page<PlanSummaryResponseDto> plans = planService.getMyPlans(userId, 0, 10);
-                if (plans.isEmpty()) {
-                    return "저장된 여행 계획이 없습니다.";
-                }
-                return plans.getContent().stream()
-                        .map(p -> "- planId=" + p.id()
-                                + " | " + nvl(p.title())
-                                + " (" + p.startDate() + " ~ " + p.endDate() + ")")
-                        .collect(Collectors.joining("\n"));
-            } catch (Exception e) {
-                log.warn("도구 getMyTravelPlans 실패 — error={}", e.getMessage());
-                return "여행 계획을 불러오는 중 오류가 발생했습니다.";
-            }
-        }
-
         @Tool(description = "사용자의 특정 여행 계획(planId)을 동선·예산 관점에서 평가한다. "
                 + "사용자가 '내 ○○ 여행 평가해줘'처럼 요청하면 getMyTravelPlans로 planId를 찾은 뒤 호출.")
         public String evaluatePlan(
@@ -402,6 +442,7 @@ public class AssistantService {
                 if (planId == null) {
                     return "평가할 여행 계획 ID가 필요합니다. 먼저 어떤 여행을 평가할지 알려 주세요.";
                 }
+                if (!planAllowed(planId)) return NOT_SELECTED;
 
                 // 소유자 검증은 PlanService(verifyOwner)가 수행. userId는 서버가 주입(LLM 파라미터 아님).
                 RouteReportResponseDto route = planService.getRouteReport(userId, planId);
@@ -487,6 +528,7 @@ public class AssistantService {
                 if (planId == null || contentId == null || contentId.isBlank()) {
                     return "장소를 추가하려면 여행 계획 ID와 장소 contentId 가 필요해요.";
                 }
+                if (!planAllowed(planId)) return NOT_SELECTED;
                 // contentId 만으로는 contentType 을 알 수 없으므로, 상세조회로 유형을 추론해
                 // 스냅샷을 만든 뒤 그 contentType 으로 PlanService.addPlace 를 호출한다.
                 // (addPlace 가 소유자 검증·중복 검증을 내장한다. userId 는 서버가 주입.)
@@ -525,6 +567,7 @@ public class AssistantService {
                 if (planId == null || placeId == null) {
                     return "장소를 삭제하려면 여행 계획 ID와 장소 placeId 가 필요해요.";
                 }
+                if (!planAllowed(planId)) return NOT_SELECTED;
                 // PlanService.removePlace 가 소유자 검증을 내장. userId 는 서버가 주입(LLM 파라미터 아님).
                 PlanDetailResponseDto plan = planService.removePlace(userId, planId, dayNo, placeId);
                 return "여행 계획(planId=" + plan.id() + ")의 " + dayNo
@@ -564,9 +607,10 @@ public class AssistantService {
                     return "체크리스트로 만들 항목이 없습니다. 추가할 항목을 알려 주세요.";
                 }
 
-                // planId가 지정된 경우, 현재 사용자가 그 계획의 소유자인지 먼저 검증한다.
+                // planId가 지정된 경우, 활용 대상 화이트리스트(R1) → 소유권 순으로 검증한다.
                 // ChecklistService.create는 planId 소유권을 확인하지 않으므로, 검증 없이 저장하면
                 // 남의 계획 ID로 체크리스트를 묶을 수 있다. getDetail은 비소유/부재 시 예외를 던진다.
+                if (planId != null && !planAllowed(planId)) return NOT_SELECTED;
                 if (planId != null) {
                     try {
                         planService.getDetail(userId, planId);
@@ -599,6 +643,106 @@ public class AssistantService {
 
         private String nvl(String s) {
             return s == null ? "" : s;
+        }
+    }
+
+    /**
+     * 사용자 개인기록 조회 도구 묶음 — 설정(MemoryPrefs)으로 on/off 된다.
+     * 마스터(useRecords)가 꺼지면 이 묶음 자체가 프롬프트에 장착되지 않고,
+     * 켜진 상태에서도 소스별 플래그(plans/favorites/reviews/stories)가 꺼져 있으면 도구가 안내 문구를 돌려준다.
+     * userId는 서버가 주입(LLM 파라미터 아님) — 항상 인증 주체 본인 기록만 조회한다.
+     */
+    public class RecordTools {
+
+        private static final String OFF = "이 기록은 설정에서 꺼져 있어요. 어시스턴트 설정에서 켜면 조회할 수 있어요.";
+
+        private final Long userId;
+        private final MemoryPrefs prefs;
+
+        RecordTools(Long userId, MemoryPrefs prefs) {
+            this.userId = userId;
+            this.prefs = prefs;
+        }
+
+        @Tool(description = "현재 로그인한 사용자가 저장해 둔 여행 계획 목록을 요약해서 돌려준다(읽기 전용). "
+                + "사용자가 '내 여행 계획', '저장한 일정' 등을 물을 때 사용한다. 각 항목은 계획 ID·제목·기간이다.")
+        public String getMyTravelPlans() {
+            if (!prefs.wantPlans()) return OFF;
+            try {
+                Page<PlanSummaryResponseDto> plans = planService.getMyPlans(userId, 0, 30);
+                // 계획 화이트리스트(설정에서 선택)가 있으면 그 계획만. 비어있으면 전체.
+                // userId 소유 결과에서만 필터하므로 소유권은 그대로 보장된다.
+                java.util.List<Long> allow = prefs.planIdsOrEmpty();
+                var list = plans.getContent().stream()
+                        .filter(p -> allow.isEmpty() || allow.contains(p.id()))
+                        .toList();
+                if (list.isEmpty()) return "조회할 여행 계획이 없습니다.";
+                return list.stream()
+                        .map(p -> "- planId=" + p.id() + " | " + nvl(p.title())
+                                + " (" + p.startDate() + " ~ " + p.endDate() + ")")
+                        .collect(Collectors.joining("\n"));
+            } catch (Exception e) {
+                log.warn("도구 getMyTravelPlans 실패 — error={}", e.getMessage());
+                return "여행 계획을 불러오는 중 오류가 발생했습니다.";
+            }
+        }
+
+        @Tool(description = "현재 사용자가 찜한(즐겨찾기) 관광지 목록을 돌려준다(읽기 전용). "
+                + "'내가 찜한 곳', '저장한 장소'를 물을 때 사용한다.")
+        public String getMyFavorites() {
+            if (!prefs.wantFavorites()) return OFF;
+            try {
+                List<FavoriteResponse> favs = favoriteService.list(userId, FavoriteTargetType.ATTRACTION);
+                if (favs.isEmpty()) return "찜한 장소가 없습니다.";
+                return favs.stream().limit(20)
+                        .map(f -> "- " + nvl(f.targetName()) + " [contentId=" + nvl(f.targetId()) + "]")
+                        .collect(Collectors.joining("\n"));
+            } catch (Exception e) {
+                log.warn("도구 getMyFavorites 실패 — error={}", e.getMessage());
+                return "찜 목록을 불러오는 중 오류가 발생했습니다.";
+            }
+        }
+
+        @Tool(description = "현재 사용자가 작성한 여행 후기(리뷰) 목록을 돌려준다(읽기 전용). "
+                + "취향 파악이나 '내 리뷰'를 물을 때 사용한다. 각 항목은 장소명·별점·내용 요약이다.")
+        public String getMyReviews() {
+            if (!prefs.wantReviews()) return OFF;
+            try {
+                MyReviewListResponse res = reviewService.listByUser(userId);
+                if (res.reviews().isEmpty()) return "작성한 리뷰가 없습니다.";
+                String body = res.reviews().stream().limit(15)
+                        .map(r -> "- " + nvl(r.attractionName()) + " ★" + r.rating()
+                                + " : " + abbreviate(r.content(), 50))
+                        .collect(Collectors.joining("\n"));
+                return "총 " + res.reviewCount() + "개\n" + body;
+            } catch (Exception e) {
+                log.warn("도구 getMyReviews 실패 — error={}", e.getMessage());
+                return "리뷰를 불러오는 중 오류가 발생했습니다.";
+            }
+        }
+
+        @Tool(description = "현재 사용자의 여행 스토리(여행 전/후 기록) 목록을 돌려준다(읽기 전용). "
+                + "'내 여행 스토리', '지난 여행 기록'을 물을 때 사용한다. 각 항목은 제목·별점이다.")
+        public String getMyStories() {
+            if (!prefs.wantStories()) return OFF;
+            try {
+                List<TravelStoryResponse> stories = travelStoryService.listMy(userId);
+                if (stories.isEmpty()) return "작성한 여행 스토리가 없습니다.";
+                return stories.stream().limit(15)
+                        .map(s -> "- " + nvl(s.title())
+                                + (s.rating() != null ? " ★" + s.rating() : ""))
+                        .collect(Collectors.joining("\n"));
+            } catch (Exception e) {
+                log.warn("도구 getMyStories 실패 — error={}", e.getMessage());
+                return "여행 스토리를 불러오는 중 오류가 발생했습니다.";
+            }
+        }
+
+        private String nvl(String s) { return s == null ? "" : s; }
+        private String abbreviate(String s, int n) {
+            if (s == null) return "";
+            String t = s.replaceAll("\\s+", " ").trim();
+            return t.length() > n ? t.substring(0, n) + "…" : t;
         }
     }
 }

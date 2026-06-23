@@ -53,6 +53,9 @@ public class PlanService {
     private final EntityManager entityManager;
     private final UserDataIndexer userDataIndexer;
     private final com.trip.plan.client.KakaoDirectionsClient kakaoDirectionsClient;
+    // 동선(route-path) 캐시용 — 계획이 안 바뀌면(version 동일) 카카오 재호출 없이 반환
+    private final org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     // ─────────────────────────────────────────────────────────────
     // 생성
@@ -70,6 +73,7 @@ public class PlanService {
                 .companions(req.companions())
                 .budget(req.budget())
                 .origin(req.origin())
+                .imageUrl(req.imageUrl())
                 .build();
 
         // 기간만큼 TripDay 자동 생성
@@ -148,6 +152,29 @@ public class PlanService {
         return PlanCompareResponseDto.of(a, b);
     }
 
+    /**
+     * N개 계획 비교(모두 요청자 본인 소유여야 함, 아니면 PLAN_FORBIDDEN).
+     * 중복 id는 제거하고 요청 순서를 유지한다. 유효 id가 2개 미만이면 PLAN_COMPARE_BAD_REQUEST.
+     */
+    public PlanCompareResponseDto.PlanCompareListResponseDto compareMany(Long userId, List<Long> ids) {
+        // null 방어 + 중복 제거(요청 순서 유지)
+        List<Long> distinctIds = (ids == null ? List.<Long>of() : ids).stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (distinctIds.size() < 2) {
+            throw new PlanHandler(ResponseCode.PLAN_COMPARE_BAD_REQUEST);
+        }
+        List<TripPlan> plans = distinctIds.stream()
+                .map(id -> {
+                    TripPlan p = findPlanWithDays(id);
+                    verifyOwner(p, userId);   // 남의 계획이 섞이면 즉시 거부
+                    return p;
+                })
+                .toList();
+        return PlanCompareResponseDto.PlanCompareListResponseDto.of(plans);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // 예산 — 카테고리 기반 추정(데모)
     // ─────────────────────────────────────────────────────────────
@@ -209,8 +236,40 @@ public class PlanService {
         TripPlan plan = findPlanWithDays(planId);
         verifyOwner(plan, userId);
 
+        // ── 캐시 적중 — 계획이 안 바뀌면(version 동일) 카카오 길찾기 재호출 없이 반환 ──
+        // version은 place 추가/삭제/교체 등 모든 하위 변경에서 증가하므로, 편집 시 자동 무효화된다.
+        final Long version = plan.getVersion();
+        final String cacheKey = "trip:routepath:" + planId + ":v" + version;
+
+        // L1: Redis(빠름, 휘발성)
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (cached != null) {
+                return objectMapper.readValue(cached, com.trip.plan.dto.RoutePathResponseDto.class);
+            }
+        } catch (Exception e) {
+            log.warn("route-path Redis 읽기 실패 — planId={}, err={}", planId, e.getMessage());
+        }
+
+        // L2: DB 영속 캐시(계획에 저장 — 재시작/만료에도 보존). version이 맞으면 사용.
+        if (plan.getRoutePathJson() != null && version.equals(plan.getRoutePathVersion())) {
+            try {
+                com.trip.plan.dto.RoutePathResponseDto dbDto = objectMapper.readValue(
+                        plan.getRoutePathJson(), com.trip.plan.dto.RoutePathResponseDto.class);
+                // L1 재적재
+                try { stringRedisTemplate.opsForValue().set(cacheKey, plan.getRoutePathJson(),
+                        java.time.Duration.ofDays(7)); } catch (Exception ignore) { /* noop */ }
+                return dbDto;
+            } catch (Exception e) {
+                log.warn("route-path DB 캐시 역직렬화 실패 — planId={}, err={}", planId, e.getMessage());
+            }
+        }
+
         boolean enabled = kakaoDirectionsClient.isEnabled();
         List<com.trip.plan.dto.RoutePathResponseDto.DayPath> days = new ArrayList<>();
+        // 한 일자라도 직선 근사/조회실패가 섞이면 '근사 포함' — 카카오 일시장애로 만든 부정확한
+        // 경로를 plan.version 캐시에 장기 고착시키지 않도록 캐시 전략을 바꾼다(R4).
+        boolean anyApprox = false;
 
         for (TripDay day : plan.getDays()) {
             List<com.trip.plan.client.KakaoDirectionsClient.Point> points = new ArrayList<>();
@@ -221,21 +280,62 @@ public class PlanService {
                         a.getLatitude(), a.getLongitude()));
             }
             if (!enabled || points.size() < 2) {
+                // 좌표 부족/키 미설정 — 경로 없음(빈 path). 이는 '근사'가 아니라 안정 상태.
                 days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
-                        day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
+                        day.getDayNo(), 0, 0, 0, 0, false, java.util.List.of()));
                 continue;
             }
+            // 1) 하루 전체를 한 번에 조회(성공 시 전부 실제 도로경로).
             com.trip.plan.client.KakaoDirectionsClient.RouteResult r = kakaoDirectionsClient.route(points);
+            // 2) 실패(한 지점이라도 비도로면 전체 실패) 시 구간별로 재시도 — 되는 구간은 실제 도로,
+            //    안 되는 구간만 직선으로 이어 항상 동선이 보이게 한다.
+            if (r == null) r = kakaoDirectionsClient.routeStitched(points);
             if (r == null) {
+                // 도로/직선 폴백 모두 실패(예: API 전면 장애) — 전송 경로 없음 + 일시 실패로 간주.
+                anyApprox = true;
                 days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
-                        day.getDayNo(), 0, 0, 0, 0, java.util.List.of()));
+                        day.getDayNo(), 0, 0, 0, 0, true, java.util.List.of()));
             } else {
+                if (r.fallback()) anyApprox = true;
                 days.add(new com.trip.plan.dto.RoutePathResponseDto.DayPath(
                         day.getDayNo(), r.distanceMeters(), r.durationSeconds(),
-                        r.taxiFare(), r.tollFare(), r.path()));
+                        r.taxiFare(), r.tollFare(), r.fallback(), r.path()));
             }
         }
-        return new com.trip.plan.dto.RoutePathResponseDto(plan.getId(), enabled, days);
+        com.trip.plan.dto.RoutePathResponseDto dto =
+                new com.trip.plan.dto.RoutePathResponseDto(plan.getId(), enabled, days);
+
+        // ── 캐시 저장 ──────────────────────────────────────────────────────────────
+        // 전부 실제 도로경로면 DB(영속) + Redis 7일. 일부라도 직선 근사/조회실패가 섞이면
+        // DB 영속을 보류하고 Redis 단기(10분)만 — 카카오 회복 시 곧 재계산되도록(R4).
+        if (enabled) {
+            try {
+                String json = objectMapper.writeValueAsString(dto);
+                if (!anyApprox) {
+                    try {
+                        planRepository.updateRoutePathCache(planId, json, version);
+                    } catch (Exception e) {
+                        log.warn("route-path DB 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                    }
+                    try {
+                        stringRedisTemplate.opsForValue().set(cacheKey, json, java.time.Duration.ofDays(7));
+                    } catch (Exception e) {
+                        log.warn("route-path Redis 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                    }
+                } else {
+                    // 근사 포함 — DB 영속 보류, Redis 단기 캐시만(반복 조회 폭주는 막되 고착은 방지).
+                    try {
+                        stringRedisTemplate.opsForValue().set(cacheKey, json, java.time.Duration.ofMinutes(10));
+                    } catch (Exception e) {
+                        log.warn("route-path Redis 단기 저장 실패 — planId={}, err={}", planId, e.getMessage());
+                    }
+                    log.info("route-path 근사 포함 — 단기 캐시(10분)·DB 영속 보류. planId={}", planId);
+                }
+            } catch (Exception e) {
+                log.warn("route-path 직렬화 실패 — planId={}, err={}", planId, e.getMessage());
+            }
+        }
+        return dto;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -274,7 +374,7 @@ public class PlanService {
             }
         }
 
-        plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget());
+        plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget(), req.imageUrl());
 
         indexPlanSafely(userId, plan.getId());
 

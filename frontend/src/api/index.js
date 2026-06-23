@@ -219,8 +219,13 @@ export const planApi = {
   share: (planId) => http.post(`/api/plans/${planId}/share`),
   // 공유 토큰으로 공개 조회 (인증 불필요) → PlanDetailResponseDto
   getShared: (token) => http.get(`/api/plans/shared/${token}`),
-  // 두 계획 비교 (소유자) → PlanCompareResponseDto
+  // 두 계획 비교 (소유자) → PlanCompareResponseDto (레거시 2개 호환)
   compare: (aId, bId) => http.get('/api/plans/compare', { params: { aId, bId } }),
+  // N개 계획 비교 (소유자) → { plans: PlanStat[] }. ids는 배열 → ids=1,2,3 쿼리로 직렬화
+  compareMany: (ids) =>
+    http.get('/api/plans/compare-many', {
+      params: { ids: (ids ?? []).join(',') },
+    }),
   // 예산 추정 (소유자) → 일자별/총 예산
   getBudget: (planId) => http.get(`/api/plans/${planId}/budget`),
   // 일자별 자동차 도로 경로 (카카오 길찾기) → { planId, enabled, days:[{dayNo, distanceMeters, durationSeconds, taxiFare, tollFare, path:[[lat,lng],...]}] }
@@ -358,8 +363,8 @@ export const chatApi = {
 const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
 export const assistantApi = {
-  chat: ({ conversationId, message }) =>
-    http.post('/api/assistant/chat', { conversationId, message }, { timeout: 60_000 }),
+  chat: ({ conversationId, message, memory }) =>
+    http.post('/api/assistant/chat', { conversationId, message, memory }, { timeout: 60_000 }),
 
   /**
    * SSE 스트리밍 채팅. fetch + ReadableStream 으로 토큰을 점진 수신한다.
@@ -372,7 +377,7 @@ export const assistantApi = {
    * }} [handlers]
    * @returns {Promise<{ conversationId: string|null, reply: string, errored: boolean, errorMessage: string|null }>} 누적 결과
    */
-  async chatStream({ conversationId, message }, { onToken, onConversationId, onError, signal } = {}) {
+  async chatStream({ conversationId, message, memory }, { onToken, onConversationId, onError, signal } = {}) {
     let token = null
     try {
       token = useAuthStore().accessToken
@@ -387,7 +392,7 @@ export const assistantApi = {
       method: 'POST',
       headers,
       credentials: 'include',
-      body: JSON.stringify({ conversationId: conversationId ?? null, message }),
+      body: JSON.stringify({ conversationId: conversationId ?? null, message, memory }),
       signal,
     })
 
@@ -574,6 +579,28 @@ export const analysisApi = {
       timeout: 120_000,
     })
   },
+}
+
+// ── 여행별 체크리스트 헬퍼 (planId 스코프) ───────────────────────────────────
+// 기존 checklistApi는 그대로 두고, 여행(계획) 단위 조작용 편의 함수만 새로 추가한다.
+// planId가 null/undefined면 "여행 미지정(전체)" 으로 동작한다.
+// 보안: 서버가 planId 소유권을 검증하므로(남의 계획 거부) 프론트는 planId만 전달하면 된다.
+export const planChecklistApi = {
+  // 특정 여행의 체크리스트만 조회. planId 없으면 전체(미지정 포함) 조회.
+  list: (planId) =>
+    http.get('/api/checklists', { params: planId != null ? { planId } : {} }),
+  // 항목 생성 — planId가 있으면 그 여행에 묶어서 생성.
+  create: (title, { category = null, planId = null } = {}) =>
+    http.post('/api/checklists', { title, category, planId }),
+  // 완료/미완료 토글 (소유자만, 서버 검증).
+  toggle: (id) => http.patch(`/api/checklists/${id}/toggle`),
+  // 항목 삭제 (소유자만, 서버 검증).
+  remove: (id) => http.delete(`/api/checklists/${id}`),
+  // 템플릿을 특정 여행에 일괄 적용 — planId 선택.
+  applyTemplate: (templateKey, planId = null) =>
+    http.post('/api/checklists/apply', null, {
+      params: planId != null ? { templateKey, planId } : { templateKey },
+    }),
 }
 
 export default http

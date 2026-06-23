@@ -8,6 +8,7 @@ import com.trip.checklist.entity.ChecklistItem;
 import com.trip.checklist.repository.ChecklistItemRepository;
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
+import com.trip.plan.service.PlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,10 +22,25 @@ import java.util.List;
 public class ChecklistService {
 
     private final ChecklistItemRepository checklistItemRepository;
+    private final PlanService planService;
+
+    /**
+     * planId 소유권 검증 — planId가 있으면 그 계획이 인증 사용자 본인 것인지 확인한다.
+     * getDetail은 비소유/부재 시 PLAN_FORBIDDEN/PLAN_NOT_FOUND 예외를 던지므로,
+     * 남의 계획 ID로 체크리스트를 묶거나 조회하는 것을 원천 차단한다.
+     * planId가 null이면(=여행 미지정) 검증할 대상이 없으므로 통과시킨다.
+     */
+    private void verifyPlanOwnership(Long userId, Long planId) {
+        if (planId != null) {
+            planService.getDetail(userId, planId); // 비소유/부재 시 예외 → 조회·생성 거부
+        }
+    }
 
     /** 목록 조회 — planId가 있으면 해당 계획 한정, 없으면 전체 */
     @Transactional(readOnly = true)
     public List<ChecklistItemResponse> list(Long userId, Long planId) {
+        // 보안: planId로 필터하기 전에 그 계획이 본인 소유인지 검증(남의 여행 항목 노출 방지)
+        verifyPlanOwnership(userId, planId);
         List<ChecklistItem> items = (planId == null)
                 ? checklistItemRepository.findByUserIdOrderBySortOrderAscIdAsc(userId)
                 : checklistItemRepository.findByUserIdAndPlanIdOrderBySortOrderAscIdAsc(userId, planId);
@@ -35,6 +51,8 @@ public class ChecklistService {
 
     /** 항목 생성 */
     public ChecklistItemResponse create(Long userId, ChecklistItemCreateRequest request) {
+        // 보안: planId를 받을 때는 그 계획이 본인 소유인지 검증(남의 계획에 항목 묶기 방지)
+        verifyPlanOwnership(userId, request.planId());
         ChecklistItem item = ChecklistItem.builder()
                 .userId(userId)
                 .planId(request.planId())
@@ -78,6 +96,8 @@ public class ChecklistService {
 
     /** 템플릿을 사용자/계획 항목으로 일괄 생성 */
     public List<ChecklistItemResponse> applyTemplate(Long userId, String templateKey, Long planId) {
+        // 보안: 템플릿을 특정 계획에 붙일 때도 그 계획이 본인 소유인지 검증
+        verifyPlanOwnership(userId, planId);
         ChecklistTemplateResponse template = ChecklistTemplates.byKey(templateKey)
                 .orElseThrow(() -> new GeneralException(ResponseCode._BAD_REQUEST));
 

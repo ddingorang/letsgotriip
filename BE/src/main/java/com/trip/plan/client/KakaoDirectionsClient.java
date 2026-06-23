@@ -54,12 +54,17 @@ public class KakaoDirectionsClient {
     /** 좌표(위/경도) — 입력 순서대로 출발→경유→도착으로 이어진다. */
     public record Point(double lat, double lng) {}
 
-    /** 길찾기 결과 — path 는 도로를 따라가는 [lat,lng] 좌표열. */
+    /**
+     * 길찾기 결과 — path 는 도로를 따라가는 [lat,lng] 좌표열.
+     * fallback=true 면 일부 구간을 직선으로 근사했거나(비도로 등) 좌표 상한 초과로 일부 장소가 빠진,
+     * "불완전/근사" 경로다. 호출부는 이 경우 단기 캐시만 하고 DB 영속을 보류해 카카오 회복 시 재계산되게 한다.
+     */
     public record RouteResult(
             int distanceMeters,
             int durationSeconds,
             int taxiFare,
             int tollFare,
+            boolean fallback,
             List<double[]> path
     ) {}
 
@@ -72,7 +77,13 @@ public class KakaoDirectionsClient {
             return null;
         }
         // 상한 초과 시 앞에서부터 MAX_POINTS 만큼만 사용(데모 — 하루 일정은 통상 그 이하).
-        List<Point> pts = points.size() > MAX_POINTS ? points.subList(0, MAX_POINTS) : points;
+        // 절단되면 일부 장소가 경로에서 빠지므로 '불완전(fallback)'으로 표시한다(R3).
+        boolean truncated = points.size() > MAX_POINTS;
+        if (truncated) {
+            log.warn("카카오 길찾기 좌표 {}개 > 상한 {} — 앞 {}개만 사용(일부 장소 경로 누락)",
+                    points.size(), MAX_POINTS, MAX_POINTS);
+        }
+        List<Point> pts = truncated ? points.subList(0, MAX_POINTS) : points;
 
         Point origin = pts.get(0);
         Point dest = pts.get(pts.size() - 1);
@@ -106,14 +117,75 @@ public class KakaoDirectionsClient {
                 log.warn("카카오 길찾기 실패: code={} msg={}", r.resultCode(), r.resultMsg());
                 return null;
             }
-            return toResult(r);
+            return toResult(r, truncated);
         } catch (Exception e) {
             log.warn("카카오 길찾기 호출 실패: {}", e.getMessage());
             return null;
         }
     }
 
-    private RouteResult toResult(KakaoRoute r) {
+    /**
+     * 구간별 길찾기 — 연속한 두 장소씩 도로경로를 조회해 이어붙인다.
+     * 한 지점이 비도로(코드 106/107 등)라 그 구간이 실패하면 그 구간만 직선으로 잇고,
+     * 나머지는 실제 도로경로 값을 유지한다("되는 건 실제로"). 좌표 2개 미만/키 미설정이면 null.
+     * 거리/시간은 실패 구간만 직선거리(Haversine)·약 40km/h로 근사 합산한다.
+     */
+    public RouteResult routeStitched(List<Point> points) {
+        if (!isEnabled() || points == null || points.size() < 2) {
+            return null;
+        }
+        boolean truncated = points.size() > MAX_POINTS;
+        if (truncated) {
+            log.warn("동선 구간폴백 좌표 {}개 > 상한 {} — 앞 {}개만 사용(일부 장소 누락)",
+                    points.size(), MAX_POINTS, MAX_POINTS);
+        }
+        List<Point> pts = truncated ? points.subList(0, MAX_POINTS) : points;
+        List<double[]> path = new ArrayList<>();
+        int dist = 0, dur = 0, taxi = 0, toll = 0;
+        boolean anyFallback = truncated; // 절단됐거나, 한 구간이라도 직선 근사면 '불완전'
+        for (int i = 0; i + 1 < pts.size(); i++) {
+            Point a = pts.get(i), b = pts.get(i + 1);
+            RouteResult seg = route(List.of(a, b)); // 단일 구간(출발→도착, 경유 없음)
+            if (seg != null && seg.path() != null && seg.path().size() >= 2) {
+                appendPath(path, seg.path());
+                dist += seg.distanceMeters();
+                dur  += seg.durationSeconds();
+                taxi += seg.taxiFare();
+                toll += seg.tollFare();
+            } else {
+                // 직선 폴백 — 두 점을 직접 잇고 거리/시간은 근사
+                anyFallback = true;
+                appendPath(path, List.of(new double[]{a.lat(), a.lng()}, new double[]{b.lat(), b.lng()}));
+                int d = (int) haversineMeters(a, b);
+                dist += d;
+                dur  += (int) (d / 11.1); // 약 40km/h
+            }
+        }
+        return path.size() < 2 ? null : new RouteResult(dist, dur, taxi, toll, anyFallback, path);
+    }
+
+    /** 경로 좌표열을 이어붙인다. 직전 끝점과 새 구간 첫점이 같으면 중복을 건너뛴다. */
+    private void appendPath(List<double[]> acc, List<double[]> seg) {
+        int start = 0;
+        if (!acc.isEmpty() && !seg.isEmpty()) {
+            double[] last = acc.get(acc.size() - 1);
+            double[] first = seg.get(0);
+            if (Math.abs(last[0] - first[0]) < 1e-7 && Math.abs(last[1] - first[1]) < 1e-7) start = 1;
+        }
+        for (int i = start; i < seg.size(); i++) acc.add(seg.get(i));
+    }
+
+    private double haversineMeters(Point a, Point b) {
+        final double R = 6371000;
+        double dLat = Math.toRadians(b.lat() - a.lat());
+        double dLng = Math.toRadians(b.lng() - a.lng());
+        double s = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(a.lat())) * Math.cos(Math.toRadians(b.lat()))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+    }
+
+    private RouteResult toResult(KakaoRoute r, boolean fallback) {
         List<double[]> path = new ArrayList<>();
         if (r.sections() != null) {
             for (KakaoSection s : r.sections()) {
@@ -133,7 +205,7 @@ public class KakaoDirectionsClient {
         int dur = sum != null ? sum.duration() : 0;
         int taxi = (sum != null && sum.fare() != null) ? sum.fare().taxi() : 0;
         int toll = (sum != null && sum.fare() != null) ? sum.fare().toll() : 0;
-        return new RouteResult(dist, dur, taxi, toll, path);
+        return new RouteResult(dist, dur, taxi, toll, fallback, path);
     }
 
     // ── 카카오 응답(역직렬화 전용) ──────────────────────────────────────────────

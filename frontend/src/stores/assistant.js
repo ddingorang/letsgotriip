@@ -22,6 +22,25 @@ export const useAssistantStore = defineStore('assistant', () => {
   // 계획 폼 제출 → recommendApi.create 진행 중 여부(폼/버튼 잠금용)
   const planning = ref(false)
 
+  // ── 개인화(메모리) 설정 — 챗봇이 내 기록을 얼마나 참고할지 ──────────────────────
+  // localStorage 영속. 매 요청 body.memory 로 전송. 서버는 userId 기준으로만 조회(보안).
+  const MEM_KEY = 'triip.assistantMemory'
+  // planIds: 활용할 계획 화이트리스트(빈 배열이면 전체). 'plans'가 켜진 경우에만 의미.
+  const DEFAULT_MEM = { useRecords: true, plans: true, favorites: true, reviews: true, stories: true, recall: true, planIds: [] }
+  function loadMem() {
+    try {
+      const raw = localStorage.getItem(MEM_KEY)
+      return raw ? { ...DEFAULT_MEM, ...JSON.parse(raw) } : { ...DEFAULT_MEM }
+    } catch {
+      return { ...DEFAULT_MEM }
+    }
+  }
+  const memoryPrefs = ref(loadMem())
+  function setMemoryPrefs(patch) {
+    memoryPrefs.value = { ...memoryPrefs.value, ...patch }
+    try { localStorage.setItem(MEM_KEY, JSON.stringify(memoryPrefs.value)) } catch { /* noop */ }
+  }
+
   // 진행 중인 스트리밍 취소용 컨트롤러
   let abortController = null
 
@@ -83,7 +102,7 @@ export const useAssistantStore = defineStore('assistant', () => {
 
     try {
       const result = await assistantApi.chatStream(
-        { conversationId: conversationId.value, message: text },
+        { conversationId: conversationId.value, message: text, memory: memoryPrefs.value },
         {
           onConversationId: (id) => {
             if (id) conversationId.value = id
@@ -134,6 +153,7 @@ export const useAssistantStore = defineStore('assistant', () => {
           const { data } = await assistantApi.chat({
             conversationId: conversationId.value,
             message: text,
+            memory: memoryPrefs.value,
           })
           if (data?.conversationId) conversationId.value = data.conversationId
           const reply = data?.reply ?? ''
@@ -250,6 +270,8 @@ export const useAssistantStore = defineStore('assistant', () => {
     streaming,
     planning,
     error,
+    memoryPrefs,
+    setMemoryPrefs,
     send,
     cancel,
     reset,
