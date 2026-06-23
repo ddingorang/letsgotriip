@@ -53,4 +53,22 @@ public class DevAttractionBatchController {
         log.info("[DevAttractionBatch] 배치 종료 — {}", counts);
         return ResponseEntity.ok(counts);
     }
+
+    /**
+     * 이미 수집된 관광지의 데모 좋아요 수를 자연스러운 분포로 재부여(덮어쓰기). TourAPI 재호출 없음.
+     * POST /api/dev/attractions/relike — 시연 직전 인기수를 자연스럽게 다듬을 때.
+     */
+    @PostMapping("/relike")
+    public ResponseEntity<Map<String, Integer>> relike(
+            @RequestHeader(value = "X-Seed-Secret", required = false) String secret) {
+        if (!apiEnabled) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        if (apiSecret == null || apiSecret.isBlank() || !apiSecret.equals(secret)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "invalid seed secret");
+        }
+        int n = attractionBatchService.reroll();
+        log.info("[DevAttractionBatch] 좋아요 재부여(relike) — {}건", n);
+        return ResponseEntity.ok(Map.of("rerolled", n));
+    }
 }

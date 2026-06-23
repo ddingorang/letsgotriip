@@ -157,13 +157,34 @@ public class AttractionBatchService {
         return true;
     }
 
-    /** 데모 인기도 — 10~999, 약 10%는 1000~2000으로 부스트 */
+    /**
+     * 데모 인기도 — 자연스러운 롱테일 분포. 대부분 낮고(수십~수백) 소수만 높다(현실적 인기 곡선).
+     * pow(u, 2.6)으로 0쪽에 강하게 치우치게 만들고, 작은 비정수 지터로 100/500 같은 라운드 숫자가
+     * 뭉치지 않게 한다(이전: 상한 2000 근처에 부자연스럽게 몰림).
+     */
     private int fakeLikeCount() {
         ThreadLocalRandom r = ThreadLocalRandom.current();
-        if (r.nextInt(100) < 10) {
-            return 1000 + r.nextInt(1001); // 부스트
+        // 지수 분포 — 전형적 인기 롱테일. 중앙값 ~125, 대부분 수십~수백, 소수만 수천.
+        //  (median=−ln(0.5)·180≈125, 99%≈830, 상위 극소수만 1500+)
+        double u = r.nextDouble();
+        int likes = (int) Math.round(-Math.log(1.0 - u) * 180.0);
+        likes = Math.min(likes, 3000);   // 비현실적 극단값 clamp
+        likes += r.nextInt(1, 9);        // 소량 지터(라운드 숫자 방지)
+        return likes;
+    }
+
+    /**
+     * 이미 수집된(태그 보유) 관광지의 데모 좋아요 수를 자연스러운 분포로 다시 부여한다(덮어쓰기).
+     * TourAPI 재호출 없이 DB만 갱신 — 시연 직전 인기수를 자연스럽게 다듬을 때 사용.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public int reroll() {
+        List<com.trip.attraction.entity.Attraction> tagged = attractionRepository.findAllTagged();
+        for (com.trip.attraction.entity.Attraction a : tagged) {
+            a.applyDemoLikeCount(fakeLikeCount());
         }
-        return 10 + r.nextInt(990);
+        log.info("[AttractionBatch] 좋아요 재부여(reroll) 완료 — {}건", tagged.size());
+        return tagged.size();
     }
 
     // ─────────────────────────────────────────────────────────────

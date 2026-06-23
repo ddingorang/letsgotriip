@@ -40,7 +40,23 @@
       </div>
     </div>
 
+    <!-- 페이지 탭 — 내 계획 / 동행 구하기 -->
+    <div class="page-tab-bar">
+      <button
+        class="page-tab"
+        :class="{ active: pageTab === 'plans' }"
+        @click="pageTab = 'plans'"
+      >내 계획</button>
+      <button
+        class="page-tab"
+        :class="{ active: pageTab === 'companion' }"
+        @click="pageTab = 'companion'"
+      >동행 구하기</button>
+    </div>
+
     <div class="scroll-content">
+      <!-- ── 내 계획 탭 ──────────────────────────────────────────────── -->
+      <div v-show="pageTab === 'plans'">
       <!-- ── Loading state ────────────────────────────────────────────── -->
       <div v-if="listLoading && plans.length === 0" class="state-block">
         <div class="skeleton-card" />
@@ -399,15 +415,16 @@
         </div>
       </div>
 
-      <!-- ── Companion section ────────────────────────────────────────── -->
-      <div class="companion-section">
+      </div>
+      <!-- ── 동행 구하기 탭 ──────────────────────────────────────────── -->
+      <div v-show="pageTab === 'companion'" class="companion-section">
         <div class="section-header">
           <h2 class="section-title">동행 구하기</h2>
-          <button class="see-all" @click="router.push({ path: '/community', query: { tab: 'companion' } })">전체보기</button>
+          <button class="see-all" @click="router.push('/companion/write')">모집하기</button>
         </div>
         <div v-if="companions.length" class="companion-list">
           <div
-            v-for="comp in companions.slice(0, 3)"
+            v-for="comp in companions"
             :key="comp.id"
             class="companion-card"
             @click="router.push(`/companion/${comp.id}`)"
@@ -446,8 +463,8 @@
         <!-- 동행 목록 비어있음(미로그인/없음/로드 실패) — 가짜 목업 대신 빈상태 노출 -->
         <div v-else class="companion-empty">
           <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
-          <button class="companion-empty-btn" @click="router.push({ path: '/community', query: { tab: 'companion' } })">
-            동행 둘러보기
+          <button class="companion-empty-btn" @click="router.push('/companion/write')">
+            동행 모집하기
           </button>
         </div>
       </div>
@@ -644,6 +661,9 @@ const companionStore = useCompanionStore()
 const { plans } = storeToRefs(planStore)
 // 동행 목록도 store 기준으로 반응성 유지(하드코딩 목업 제거 → 실 API 연동)
 const { companions } = storeToRefs(companionStore)
+
+// 페이지 상단 탭 — '내 계획' | '동행 구하기'
+const pageTab = ref('plans')
 
 const selectedPlanId = ref(null)
 
@@ -1532,6 +1552,30 @@ async function removePlace(planId, dayNo, place) {
 .compare-check.on {
   background: white;
   border-color: white;
+}
+
+/* ── 페이지 탭 (내 계획 / 동행 구하기) ──────────────────────────────────── */
+.page-tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 20px 0;
+  border-bottom: 1px solid var(--color-line-light);
+  flex-shrink: 0;
+}
+.page-tab {
+  flex: 1;
+  padding: 12px 0 11px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.3px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.page-tab.active {
+  color: var(--color-peach);
+  border-bottom-color: var(--color-peach);
 }
 
 .scroll-content {

@@ -134,6 +134,11 @@ public class Attraction {
         }
     }
 
+    /** 데모 좋아요 수 강제 재부여(덮어쓰기) — reroll 전용. */
+    public void applyDemoLikeCount(int value) {
+        this.likeCount = Math.max(0, value);
+    }
+
     /**
      * 태그를 멱등하게 추가한다. 내부 저장은 ",food,night," 형태(앞뒤·구분 콤마).
      * 이미 포함된 키는 무시한다.

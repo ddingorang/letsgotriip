@@ -9,15 +9,15 @@
       <span class="nav-label">탐색</span>
     </RouterLink>
 
-    <!-- Center FAB → 계획 페이지(거기서 AI로 계획 추가) -->
+    <!-- Center FAB → 계획 페이지(내 계획·동행 / AI로 계획 추가) -->
     <RouterLink to="/plan" class="nav-item nav-ai">
       <span class="nav-ai-btn">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          <rect x="3" y="4" width="18" height="18" rx="2"/>
+          <path d="M16 2v4M8 2v4M3 10h18"/>
         </svg>
       </span>
-      <span class="nav-label">AI</span>
+      <span class="nav-label">계획</span>
     </RouterLink>
 
     <RouterLink to="/community" class="nav-item" :class="{ active: isActive('/community') }">

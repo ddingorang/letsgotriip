@@ -46,4 +46,8 @@ public interface AttractionRepository extends JpaRepository<Attraction, Long> {
            "where a.tags is not null and a.tags <> '' " +
            "order by a.fetchedAt desc")
     Page<Attraction> findCuratedOrderByLatest(Pageable pageable);
+
+    /** 태그 보유 전체(reroll 좋아요 재부여용) */
+    @Query("select a from Attraction a where a.tags is not null and a.tags <> ''")
+    java.util.List<Attraction> findAllTagged();
 }
