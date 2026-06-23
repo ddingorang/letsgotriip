@@ -119,6 +119,21 @@
             <div v-if="selectedPlanId === plan.id" class="plan-detail">
               <div class="detail-divider" />
 
+              <!-- 상세 탭바 — 일정 / 동선 / 예산 (분류가 길게 쌓이지 않게 한 번에 하나만) -->
+              <div class="detail-tabs" role="tablist">
+                <button
+                  v-for="t in planTabs"
+                  :key="t.key"
+                  class="detail-tab"
+                  :class="{ active: tabFor(plan.id) === t.key }"
+                  role="tab"
+                  :aria-selected="tabFor(plan.id) === t.key"
+                  @click="setTab(plan.id, t.key)"
+                >{{ t.label }}</button>
+              </div>
+
+              <!-- ── 탭: 일정 ─────────────────────────────────────────────── -->
+              <div v-show="tabFor(plan.id) === 'plan'" class="tab-panel">
               <!-- 편집 도움말 — 한 번만(세션) 노출 -->
               <div v-if="showEditHint" class="edit-hint">
                 <span class="edit-hint-text">
@@ -196,7 +211,12 @@
                 </div>
               </template>
               <div v-else class="detail-loading">상세 정보를 불러오는 중...</div>
+              </div>
+              <!-- ── /탭: 일정 ────────────────────────────────────────────── -->
 
+              <!-- ── 탭: 동선/지도 ──────────────────────────────────────────
+                   Kakao 지도는 언마운트→재마운트 시 깨질 수 있어 v-show로 항상 마운트 유지 -->
+              <div v-show="tabFor(plan.id) === 'route'" class="tab-panel">
               <!-- 일정 지도 — 일차별로 분리. 선택한 일차의 장소+경로만 표시 -->
               <div v-if="planDayNumbers.length" class="plan-map-section">
                 <!-- 일차 선택 (이전 ‹ · 칩 · › 다음) -->
@@ -240,7 +260,12 @@
                   </button>
                 </div>
               </div>
+              <p v-else class="day-empty-map">동선을 표시할 일정이 아직 없어요.</p>
+              </div>
+              <!-- ── /탭: 동선/지도 ───────────────────────────────────────── -->
 
+              <!-- ── 탭: 예산 ─────────────────────────────────────────────── -->
+              <div v-show="tabFor(plan.id) === 'budget'" class="tab-panel">
               <!-- 예산 패널 -->
               <div v-if="budget && budget.planId === plan.id" class="budget-panel">
                 <div class="budget-head">
@@ -265,6 +290,15 @@
                 </div>
                 <p v-if="budget.note" class="budget-note">{{ budget.note }}</p>
               </div>
+              <!-- 예산 미로드 — 아래 '예산 보기'로 불러오라는 안내 -->
+              <div v-else class="budget-empty">
+                <p class="budget-empty-text">{{ budgetLoading ? '예산을 계산하는 중…' : '아래 \'예산 보기\'를 누르면 예상 예산을 계산해요.' }}</p>
+                <button class="budget-empty-btn" :disabled="budgetLoading" @click="loadBudget(plan.id)">
+                  {{ budgetLoading ? '계산 중...' : '예산 보기' }}
+                </button>
+              </div>
+              </div>
+              <!-- ── /탭: 예산 ────────────────────────────────────────────── -->
 
               <!-- 공유 링크 -->
               <div v-if="shareInfo && shareInfo.planId === plan.id" class="share-panel">
@@ -570,6 +604,22 @@ const compareResult = ref(null)    // { a: PlanStat, b: PlanStat }
 const routePath = ref(null)        // { planId, enabled, days }
 const routePathLoading = ref(false)
 const selectedDay = ref(1)         // 지도에 표시 중인 일차(1부터). 계획 펼칠 때 첫 일차로 초기화
+
+// ── 계획 상세 탭 ───────────────────────────────────────────────────────────────
+// 분류(일정·동선·예산)가 길게 쌓이지 않도록 펼친 계획 내부를 탭으로 나눈다.
+// 계획별로 활성 탭을 따로 기억(planId → 'plan'|'route'|'budget'), 기본은 '일정'.
+const planTabs = [
+  { key: 'plan', label: '일정' },
+  { key: 'route', label: '동선' },
+  { key: 'budget', label: '예산' },
+]
+const activeTab = ref({})          // { [planId]: 'plan'|'route'|'budget' }
+function tabFor(planId) {
+  return activeTab.value[planId] ?? 'plan'
+}
+function setTab(planId, key) {
+  activeTab.value = { ...activeTab.value, [planId]: key }
+}
 
 // ── 장소 드래그 정렬 상태 ──────────────────────────────────────────────────────
 const dragDay = ref(null)          // 드래그 중인 일차 dayNo (같은 일차 내에서만 정렬 허용)
@@ -1492,6 +1542,57 @@ async function removePlace(planId, dayNo, place) {
   background: var(--color-line-light);
   margin-bottom: 14px;
 }
+
+/* ── 상세 탭바(일정·동선·예산) ─────────────────────────────────────────────── */
+.detail-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.detail-tab {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 0;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-ink-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.detail-tab.active {
+  background: var(--color-peach);
+  color: #fff;
+}
+
+/* 탭 패널 — 비활성 탭(v-show=false)은 숨고 활성 탭만 보인다 */
+.tab-panel {
+  min-height: 1px;
+}
+
+/* 예산 미로드 안내 */
+.budget-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+.budget-empty-text {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  text-align: center;
+}
+.budget-empty-btn {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: #fff;
+  cursor: pointer;
+}
+.budget-empty-btn:disabled { opacity: 0.55; cursor: default; }
 
 .detail-loading {
   font-size: 13px;
