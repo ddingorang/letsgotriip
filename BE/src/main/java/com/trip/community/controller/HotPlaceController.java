@@ -32,6 +32,14 @@ public class HotPlaceController {
         return ResponseEntity.ok(hotPlaceService.getApprovedHotPlaces(pageable));
     }
 
+    /** 인기순 핫플 — '지금 뜨는 여행지'(좋아요 높은 순). 공개. */
+    @GetMapping("/popular")
+    public ResponseEntity<Page<HotPlaceSummaryResponse>> getPopularHotPlaces(
+            @PageableDefault(size = 10) Pageable pageable
+    ) {
+        return ResponseEntity.ok(hotPlaceService.getPopularHotPlaces(pageable));
+    }
+
     @GetMapping("/{hotPlaceId}")
     public ResponseEntity<HotPlaceResponse> getHotPlace(
             @PathVariable Long hotPlaceId,

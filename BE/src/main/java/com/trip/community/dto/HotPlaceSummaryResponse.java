@@ -14,6 +14,7 @@ public record HotPlaceSummaryResponse(
         Double longitude,
         HotPlaceCategory category,
         String thumbnailUrl,
+        int likeCount,
         LocalDateTime createdAt
 ) {
     public static HotPlaceSummaryResponse of(HotPlace hotPlace, String thumbnailUrl) {
@@ -25,6 +26,7 @@ public record HotPlaceSummaryResponse(
                 hotPlace.getLongitude(),
                 hotPlace.getCategory(),
                 thumbnailUrl,
+                hotPlace.getLikeCount(),
                 hotPlace.getCreatedAt()
         );
     }

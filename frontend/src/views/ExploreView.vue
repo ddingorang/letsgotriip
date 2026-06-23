@@ -22,6 +22,15 @@
           </svg>
         </button>
       </div>
+      <!-- '#' 입력 시 태그 제안 — 탭하면 해당 태그(인기순)로 -->
+      <div v-if="tagSuggestions.length" class="tag-suggest">
+        <button
+          v-for="t in tagSuggestions"
+          :key="t.key"
+          class="tag-suggest-item"
+          @click="applyTagSuggest(t.key)"
+        >#{{ t.label }}</button>
+      </div>
     </div>
 
     <!-- ── Category chips ────────────────────────────────────────────────── -->
@@ -533,6 +542,20 @@ function clearTag() {
   loadAttractions()
 }
 
+// '#' 입력 시 태그 제안 목록(입력 텍스트로 필터).
+const tagSuggestions = computed(() => {
+  const q = searchQuery.value.trim()
+  if (!q.startsWith('#')) return []
+  const term = q.slice(1).trim().toLowerCase()
+  return Object.entries(TAG_LABELS)
+    .filter(([key, label]) => !term || label.includes(term) || key.includes(term))
+    .map(([key, label]) => ({ key, label }))
+})
+function applyTagSuggest(key) {
+  searchQuery.value = ''
+  setTag(key)
+}
+
 // 정렬 바텀시트 토글
 function openSortSheet() {
   sortSheetOpen.value = true
@@ -863,6 +886,22 @@ onMounted(() => {
   background: var(--color-surface);
   border-radius: var(--radius-full);
   padding: 11px 16px;
+}
+
+/* '#' 태그 제안 */
+.tag-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 4px 2px;
+}
+.tag-suggest-item {
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach);
+  background: var(--color-peach-light);
 }
 
 .search-input {

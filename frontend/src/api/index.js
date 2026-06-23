@@ -260,6 +260,8 @@ export const recommendApi = {
 // ── Hotplace (BE: /community/hotplaces) ───────────────────────────────────────
 export const hotplaceApi = {
   getList: (params) => http.get('/api/community/hotplaces', { params }),
+  // 인기순 핫플 — 홈 '지금 뜨는 여행지'(좋아요 높은 순)
+  popular: (params) => http.get('/api/community/hotplaces/popular', { params }),
   getDetail: (id) => http.get(`/api/community/hotplaces/${id}`),
   // BE has no /area endpoint; fall back to the list endpoint with params
   getByArea: (params) => http.get('/api/community/hotplaces', { params }),

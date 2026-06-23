@@ -347,15 +347,18 @@ public class SeedService {
             var p2 = communityService.createPost(seoul.getId(), new PostCreateRequest(
                     "서울 고궁 야간개장 일정 공유합니다",
                     "경복궁 야간개장 예매 꿀팁이랑 동선 정리. 미리 예매 필수예요!",
-                    PostCategory.TIP, List.of()));
+                    PostCategory.TIP,
+                    List.of("https://tong.visitkorea.or.kr/cms/resource/23/2678623_image2_1.jpg")));
             var p3 = communityService.createPost(jeju.getId(), new PostCreateRequest(
                     "혼자 제주 2박3일 뚜벅이 후기",
                     "버스랑 도보로만 다녔는데 생각보다 충분했어요. 다닌 코스 공유합니다!",
-                    PostCategory.REVIEW, List.of()));
+                    PostCategory.REVIEW,
+                    List.of("https://tong.visitkorea.or.kr/cms/resource/53/2869753_image2_1.jpg")));
             var p4 = communityService.createPost(busan.getId(), new PostCreateRequest(
                     "부산 야경 명소 어디가 제일 좋나요?",
                     "이번 주말 부산 가는데 야경 보기 좋은 곳 추천 부탁드려요 🙏",
-                    PostCategory.QUESTION, List.of()));
+                    PostCategory.QUESTION,
+                    List.of("https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg")));
 
             // 게시글별 좋아요/스크랩(여러 사용자) + 댓글
             engage(p1.id(), "제주 흑돼지 맛집 BEST 5", List.of(jeju, busan, seoul),
@@ -369,13 +372,33 @@ public class SeedService {
             return 4;
         });
 
-        // ── 핫플(자동 APPROVED) ─────────────────────────────────────────
+        // ── 핫플(자동 APPROVED) + 좋아요 — '지금 뜨는 여행지' 추천 정렬용 ──────────
         safe(counts, "hotPlaces", () -> {
-            hotPlaceService.register(busan.getId(), new HotPlaceCreateRequest(
-                    "흰여울문화마을", "부산광역시 영도구 흰여울길", 35.0789, 129.0468,
+            seedHotPlace(busan, "흰여울문화마을", "부산광역시 영도구 흰여울길", 35.0789, 129.0468,
                     HotPlaceCategory.ATTRACTION, "영화 촬영지로 유명한 바다 절벽 마을.",
-                    List.of("https://tong.visitkorea.or.kr/cms/resource/19/2576419_image2_1.jpg")));
-            return 1;
+                    "https://tong.visitkorea.or.kr/cms/resource/19/2576419_image2_1.jpg", 1240);
+            seedHotPlace(jeju, "성산일출봉", "제주특별자치도 서귀포시 성산읍 일출로", 33.4581, 126.9425,
+                    HotPlaceCategory.NATURE, "유네스코 세계자연유산. 일출 명소.",
+                    "https://tong.visitkorea.or.kr/cms/resource/08/2871008_image2_1.JPG", 1080);
+            seedHotPlace(seoul, "북촌한옥마을", "서울특별시 종로구 계동길", 37.5826, 126.9831,
+                    HotPlaceCategory.ATTRACTION, "전통 한옥이 늘어선 골목.",
+                    "https://tong.visitkorea.or.kr/cms/resource/23/2678623_image2_1.jpg", 870);
+            seedHotPlace(jeju, "협재해수욕장", "제주특별자치도 제주시 한림읍 협재리", 33.3940, 126.2396,
+                    HotPlaceCategory.NATURE, "에메랄드빛 바다와 비양도 전망.",
+                    "https://tong.visitkorea.or.kr/cms/resource/53/2869753_image2_1.jpg", 760);
+            seedHotPlace(busan, "감천문화마을", "부산광역시 사하구 감내2로", 35.0975, 129.0107,
+                    HotPlaceCategory.ATTRACTION, "알록달록 산비탈 예술 마을.",
+                    "https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg", 640);
+            seedHotPlace(foodie, "광장시장 먹자골목", "서울특별시 종로구 창경궁로", 37.5701, 126.9999,
+                    HotPlaceCategory.RESTAURANT, "빈대떡·마약김밥 등 길거리 먹거리.",
+                    "https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg", 520);
+            seedHotPlace(seoul, "남산서울타워", "서울특별시 용산구 남산공원길", 37.5512, 126.9882,
+                    HotPlaceCategory.ATTRACTION, "서울 야경 1번지.",
+                    "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 410);
+            seedHotPlace(jeju, "오설록 티 뮤지엄", "제주특별자치도 서귀포시 안덕면 신화역사로", 33.3056, 126.2895,
+                    HotPlaceCategory.CAFE, "녹차밭 카페 겸 박물관.",
+                    "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 280);
+            return 8;
         });
 
         // ── 동행 모집글(+ 채팅방 자동 생성) ──────────────────────────────
@@ -493,6 +516,14 @@ public class SeedService {
             try { communityService.createComment(postId, sc.user().getId(), new CommentCreateRequest(sc.content())); }
             catch (Exception ignore) { /* best-effort */ }
         }
+    }
+
+    /** 핫플 등록(자동 APPROVED) 후 데모 좋아요 수를 부여한다('지금 뜨는 여행지' 정렬용). */
+    private void seedHotPlace(User submitter, String name, String addr, double lat, double lng,
+                             HotPlaceCategory cat, String desc, String imageUrl, int likeCount) {
+        var resp = hotPlaceService.register(submitter.getId(), new HotPlaceCreateRequest(
+                name, addr, lat, lng, cat, desc, List.of(imageUrl)));
+        hotPlaceRepository.findById(resp.id()).ifPresent(hp -> hp.applyDemoLikeCount(likeCount));
     }
 
     private User saveUser(String nickname, String localPart) {

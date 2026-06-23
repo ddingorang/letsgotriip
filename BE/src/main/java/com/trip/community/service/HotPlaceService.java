@@ -37,6 +37,12 @@ public class HotPlaceService {
                 .map(hp -> HotPlaceSummaryResponse.of(hp, getThumbnail(hp.getId())));
     }
 
+    /** 인기순 핫플('지금 뜨는 여행지' 추천) — 좋아요 높은 순. */
+    public Page<HotPlaceSummaryResponse> getPopularHotPlaces(Pageable pageable) {
+        return hotPlaceRepository.findAllByStatusOrderByLikeCountDescIdDesc(HotPlaceStatus.APPROVED, pageable)
+                .map(hp -> HotPlaceSummaryResponse.of(hp, getThumbnail(hp.getId())));
+    }
+
     public HotPlaceResponse getHotPlace(Long hotPlaceId, Long userId) {
         HotPlace hotPlace = findHotPlace(hotPlaceId);
 
