@@ -134,6 +134,43 @@
         </button>
       </div>
 
+      <!-- ── Image gallery ─────────────────────────────────────────────────── -->
+      <div v-if="imagesLoading || placeImages.length" class="gallery-section">
+        <h2 class="section-title">사진</h2>
+        <div class="gallery-grid" ref="galleryScroll" @wheel.prevent="e => galleryScroll.scrollLeft += e.deltaY">
+          <template v-if="imagesLoading">
+            <div v-for="n in 4" :key="n" class="gallery-item gallery-skeleton" />
+          </template>
+          <template v-else>
+            <div
+              v-for="img in placeImages"
+              :key="img.serialNum"
+              class="gallery-item"
+              @click="openLightbox(img)"
+            >
+              <img :src="img.smallImageUrl" :alt="img.imgName" loading="lazy" />
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- ── Lightbox ───────────────────────────────────────────────────────── -->
+      <Transition name="fade">
+        <div v-if="lightbox.open" class="lightbox-overlay" @click.self="lightbox.open = false">
+          <button class="lightbox-close" @click="lightbox.open = false" aria-label="닫기">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+          <button v-if="lightbox.index > 0" class="lightbox-nav lightbox-prev" @click="lightbox.index--" aria-label="이전">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <img class="lightbox-img" :src="placeImages[lightbox.index]?.originImgUrl" :alt="placeImages[lightbox.index]?.imgName" />
+          <button v-if="lightbox.index < placeImages.length - 1" class="lightbox-nav lightbox-next" @click="lightbox.index++" aria-label="다음">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+          </button>
+          <div class="lightbox-counter">{{ lightbox.index + 1 }} / {{ placeImages.length }}</div>
+        </div>
+      </Transition>
+
       <!-- ── Mini map ──────────────────────────────────────────────────────── -->
       <div class="map-section">
         <h2 class="section-title">위치</h2>
@@ -368,7 +405,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { usePlanStore } from '@/stores/plan.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { contextApi, reviewApi, favoriteApi } from '@/api/index.js'
+import { contextApi, reviewApi, favoriteApi, attractionApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 import { useAlert } from '@/composables/useAlert.js'
 import { useConfirm } from '@/composables/useConfirm.js'
@@ -389,6 +426,16 @@ const overviewVisible = computed(() => {
   if (overviewExpanded.value || text.length <= OVERVIEW_LIMIT) return text
   return text.slice(0, OVERVIEW_LIMIT) + '…'
 })
+
+const placeImages = ref([])
+const imagesLoading = ref(true)
+const galleryScroll = ref(null)
+const lightbox = reactive({ open: false, index: 0 })
+
+function openLightbox(img) {
+  lightbox.index = placeImages.value.indexOf(img)
+  lightbox.open = true
+}
 
 const bookmarked = ref(false)
 const bookmarkLoading = ref(false)
@@ -768,22 +815,32 @@ onMounted(async () => {
   const contentId = route.params.id
   if (!contentId) return
   loading.value = true
+  imagesLoading.value = true
   fetchError.value = null
-  try {
-    place.value = await store.fetchDetail(contentId)
-    // fetchDetail sets store.error on failure and returns mock — check if it errored
-    if (store.error) {
-      fetchError.value = store.error
-    }
-  } catch (e) {
-    fetchError.value = e?.message ?? '정보를 불러올 수 없습니다.'
+
+  // place 상세 + 이미지 병렬 요청
+  const [detailResult, imagesResult] = await Promise.allSettled([
+    store.fetchDetail(contentId),
+    attractionApi.images(contentId),
+  ])
+
+  if (detailResult.status === 'fulfilled') {
+    place.value = detailResult.value
+    if (store.error) fetchError.value = store.error
+  } else {
+    fetchError.value = detailResult.reason?.message ?? '정보를 불러올 수 없습니다.'
     place.value = store.currentAttraction
-  } finally {
-    loading.value = false
   }
-  // 좌표가 있으면 날씨/충전소 맥락 정보 로드 (실패 시 위젯 숨김)
+  loading.value = false
+
+  placeImages.value = imagesResult.status === 'fulfilled'
+    ? (Array.isArray(imagesResult.value?.data) ? imagesResult.value.data : [])
+    : []
+  imagesLoading.value = false
+
+  // 좌표가 있으면 날씨/충전소 맥락 정보 로드
   if (hasCoords.value) loadContext()
-  // 리뷰 목록 + 찜 상태 수화 (공개 리뷰는 항상, 찜은 로그인 시)
+  // 리뷰 목록 + 찜 상태 수화
   loadReviews()
   loadBookmark()
 })
@@ -796,6 +853,7 @@ onMounted(async () => {
   height: 100%;
   overflow: hidden;
   background: var(--color-white);
+  position: relative;
 }
 
 .scroll-area {
@@ -1012,6 +1070,101 @@ onMounted(async () => {
   font-size: 13px;
   font-weight: 600;
   color: var(--color-peach);
+}
+
+/* ── Gallery ──────────────────────────────────────────────────────────────── */
+.gallery-section {
+  padding: 20px 20px 4px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+
+.gallery-grid {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.gallery-item {
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--color-surface);
+}
+
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.gallery-item:active img {
+  transform: scale(0.96);
+}
+
+.gallery-skeleton {
+  background: linear-gradient(90deg, #efe6e4 25%, #e7e0d8 50%, #efe6e4 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+/* ── Lightbox ──────────────────────────────────────────────────────────────── */
+.lightbox-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.lightbox-img {
+  max-width: 92%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 56px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+}
+
+.lightbox-prev { left: 12px; }
+.lightbox-next { right: 12px; }
+
+.lightbox-counter {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-mono);
 }
 
 /* ── Actions ──────────────────────────────────────────────────────────────── */

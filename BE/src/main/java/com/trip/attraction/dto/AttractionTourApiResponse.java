@@ -66,6 +66,16 @@ public record AttractionTourApiResponse(
             @JsonProperty("rnum")  String rnum
     ) {}
 
+    /** detailImage2 이미지 아이템 */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ImageItem(
+            @JsonAlias("contentid")     String contentId,
+            @JsonAlias("originimgurl")  String originImgUrl,
+            @JsonAlias("smallimageurl") String smallImageUrl,
+            @JsonAlias("imgname")       String imgName,
+            @JsonAlias("serialnum")     String serialNum
+    ) {}
+
     /**
      * TourAPI 응답의 items 필드 파싱.
      * 결과 없으면 빈 문자열 "", 1건이면 단일 객체, N건이면 배열로 옴.
@@ -100,6 +110,29 @@ public record AttractionTourApiResponse(
 
             // 단일 객체인 경우
             return List.of(mapper.convertValue(itemNode, AttractionItem.class));
+        }
+    }
+
+    /** detailImage2 전용 역직렬화기 — ImageItem 리스트로 파싱 */
+    public static class ImageItemsDeserializer extends StdDeserializer<List<ImageItem>> {
+
+        public ImageItemsDeserializer() {
+            super(List.class);
+        }
+
+        @Override
+        public List<ImageItem> deserialize(JsonParser p, DeserializationContext ctx) throws IOException {
+            if (p.currentToken() == JsonToken.VALUE_STRING) return List.of();
+            ObjectMapper mapper = (ObjectMapper) p.getCodec();
+            JsonNode root = mapper.readTree(p);
+            JsonNode itemNode = root.get("item");
+            if (itemNode == null || itemNode.isNull()) return List.of();
+            if (itemNode.isArray()) {
+                return mapper.convertValue(
+                        itemNode,
+                        mapper.getTypeFactory().constructCollectionType(List.class, ImageItem.class));
+            }
+            return List.of(mapper.convertValue(itemNode, ImageItem.class));
         }
     }
 

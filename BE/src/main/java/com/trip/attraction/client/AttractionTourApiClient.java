@@ -1,7 +1,9 @@
 package com.trip.attraction.client;
 
+import com.trip.attraction.dto.AttractionImageResponse;
 import com.trip.attraction.dto.AttractionTourApiResponse;
 import com.trip.attraction.dto.AttractionTourApiResponse.AttractionItem;
+import com.trip.attraction.dto.AttractionTourApiResponse.ImageItem;
 import com.trip.attraction.dto.AreaTourApiResponse;
 import com.trip.global.config.TourApiProperties;
 import jakarta.annotation.PostConstruct;
@@ -152,6 +154,31 @@ public class AttractionTourApiClient {
 
         List<AttractionItem> items = extractItems(resp, "detailCommon2");
         return items.isEmpty() ? null : items.get(0);
+    }
+
+    // ──────────────────────────────────────────────
+    // detailImage2 — 추가 이미지 목록 조회
+    // ──────────────────────────────────────────────
+    public List<ImageItem> fetchImages(String contentId) {
+        AttractionImageResponse resp = restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/detailImage2")
+                        .queryParam("serviceKey", props.getKey())
+                        .queryParam("MobileOS",   "ETC")
+                        .queryParam("MobileApp",  "TripApp")
+                        .queryParam("_type",      "json")
+                        .queryParam("imageYN",    "Y")
+                        .queryParam("contentId",  contentId)
+                        .build())
+                .retrieve()
+                .body(AttractionImageResponse.class);
+
+        if (resp == null || resp.response() == null || resp.response().body() == null) {
+            log.warn("TourAPI detailImage2 빈 응답 contentId={}", contentId);
+            return List.of();
+        }
+        List<ImageItem> items = resp.response().body().items();
+        return items != null ? items : List.of();
     }
 
     // ──────────────────────────────────────────────

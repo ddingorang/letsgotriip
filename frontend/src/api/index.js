@@ -56,6 +56,7 @@ export const attractionApi = {
   list: (params) => http.get('/api/attractions', { params }),
   areas: () => http.get('/api/attractions/areas'),
   detail: (contentId) => http.get(`/api/attractions/${contentId}`),
+  images: (contentId) => http.get(`/api/attractions/${contentId}/images`),
 }
 
 // ── Reviews (관광지 리뷰, BE: /api/attractions/{contentId}/reviews) ────────────
