@@ -8,12 +8,12 @@
           <!-- Loading skeleton -->
           <div v-if="loading" class="img-placeholder skeleton-bg" />
           <!-- Real image -->
-          <div v-else-if="place?.imageUrl" class="img-wrapper">
-            <img :src="place.imageUrl" :alt="place?.name" @error="(e) => e.target.parentElement.style.display='none'" />
-          </div>
-          <!-- Fallback placeholder -->
-          <div v-else class="img-placeholder">
-            <span class="img-caption">{{ place?.address }}</span>
+          <div v-else class="img-wrapper">
+            <img
+              :src="place?.imageUrl || '/images/placeholder-thumb.png'"
+              :alt="place?.name"
+              @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
+            />
           </div>
           <div class="hero-gradient" />
         </div>

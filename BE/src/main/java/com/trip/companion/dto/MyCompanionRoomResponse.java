@@ -12,7 +12,8 @@ public record MyCompanionRoomResponse(
         String region,
         LocalDate travelDate,
         Long daysLeft,
-        boolean isHost
+        boolean isHost,
+        String imageUrl
 ) {
     public static MyCompanionRoomResponse of(CompanionPost post, boolean isHost) {
         long days = ChronoUnit.DAYS.between(LocalDate.now(), post.getTravelDate());
@@ -22,7 +23,8 @@ public record MyCompanionRoomResponse(
                 post.getRegion(),
                 post.getTravelDate(),
                 days >= 0 ? days : null,
-                isHost
+                isHost,
+                post.getImageUrl()
         );
     }
 }

@@ -127,6 +127,7 @@ export const useCompanionStore = defineStore('companion', () => {
         region: r.region,
         daysLeft: r.daysLeft ?? null,
         isHost: r.isHost,
+        imageUrl: r.imageUrl ?? null,
         // BE MyCompanionRoomResponse 에는 마지막 메시지/읽지 않은 수가 없어 기본값으로 정합화.
         // ended: 여행일이 지났으면(daysLeft 가 null) 종료 처리.
         ended: r.ended ?? (r.daysLeft == null),

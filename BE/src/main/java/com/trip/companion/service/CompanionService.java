@@ -313,10 +313,12 @@ public class CompanionService {
             throw new GeneralException(ResponseCode._FORBIDDEN);
         }
 
-        // 승인된 신청은 이미 채팅방 멤버십이 생성되었으므로 단순 삭제 시 멤버십이 잔존한다.
-        // → PENDING(또는 REJECTED) 상태만 취소 허용, APPROVED는 거부.
+        // APPROVED 상태인 경우 채팅방 멤버십도 함께 소프트 탈퇴 처리한다.
         if (application.getStatus() == ApplicationStatus.APPROVED) {
-            throw new GeneralException(ResponseCode.COMPANION_APPROVED_CANCEL);
+            Long chatRoomId = post.getChatRoom().getId();
+            chatRoomMembershipRepository.findByChatRoomIdAndUserId(chatRoomId, userId)
+                    .filter(m -> m.getLeftAt() == null)
+                    .ifPresent(m -> m.leave(java.time.LocalDateTime.now()));
         }
 
         companionApplicationRepository.delete(application);
