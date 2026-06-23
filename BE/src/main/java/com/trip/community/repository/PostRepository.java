@@ -24,4 +24,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> findAllByDeletedFalseAndTitleContainingIgnoreCaseOrderByIdDesc(String title, Pageable pageable);
 
     Optional<Post> findByIdAndDeletedFalse(Long id);
+
+    /** 시드 reset — 마커 사용자가 작성한 모든 게시글(삭제 플래그 무관) */
+    List<Post> findAllByAuthor_IdIn(List<Long> authorIds);
 }

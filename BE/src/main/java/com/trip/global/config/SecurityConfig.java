@@ -47,6 +47,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/ws/**", "/ws-sockjs/**").permitAll() // WebSocket 핸드셰이크 인증 제외(인증은 STOMP CONNECT 프레임에서)
                         .requestMatchers("/auth/**").permitAll()
+                        // 개발용 시드 엔드포인트 — 컨트롤러가 자체적으로 app.seed.api.enabled + X-Seed-Secret 으로 게이팅한다.
+                        .requestMatchers("/api/dev/**").permitAll()
                         .requestMatchers("/login/**").permitAll()
                         .requestMatchers("/oauth2/**").permitAll()
                         .requestMatchers("/preprocessing/**").authenticated()
@@ -56,6 +58,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/attractions/*/reviews").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/attractions/*/reviews/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/attractions/*/reviews/**").authenticated()
+                        // 관광지 좋아요(하트) 토글은 인증 필수 (GET 상태/큐레이션은 아래 attractions GET permitAll 로 공개)
+                        .requestMatchers(HttpMethod.POST, "/api/attractions/*/like").authenticated()
                         // 비회원 공개 조회 (탐색 도메인)
                         .requestMatchers(HttpMethod.GET, "/api/festivals/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/attractions/**").permitAll()
@@ -81,6 +85,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces/pending").hasRole("ADMIN")
                         // 핫플 승인/거절은 매처 레벨에서 ADMIN 강제 — GET hotplaces permitAll 와일드카드보다 먼저 선언
                         .requestMatchers(HttpMethod.POST, "/community/hotplaces/*/approve", "/community/hotplaces/*/reject").hasRole("ADMIN")
+                        // 핫플 좋아요(하트) — 토글은 인증, 상태조회는 공개(비로그인 liked=false). GET hotplaces/* 보다 먼저.
+                        .requestMatchers(HttpMethod.POST, "/community/hotplaces/*/like").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/community/hotplaces/*/like").permitAll()
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces", "/community/hotplaces/*").permitAll()
                         // 동행 — 내 참여 방은 인증 필수 (공개 매처보다 먼저 선언해 /my가 permitAll에 포함되지 않도록)
                         .requestMatchers(HttpMethod.GET, "/companion/posts/my").authenticated()

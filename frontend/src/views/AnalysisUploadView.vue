@@ -110,7 +110,19 @@
           </div>
         </dl>
 
-        <!-- 전사/원문 미리보기 (카카오 .txt 는 클라이언트에서 읽어 표시) -->
+        <!-- 추출된 여행 취향 — LLM이 전사문에서 분석한 결과 -->
+        <div v-if="result.themes && result.themes.length" class="themes">
+          <span class="themes-title">분석된 여행 취향</span>
+          <div class="themes-chips">
+            <span v-for="t in result.themes" :key="t" class="theme-chip">#{{ t }}</span>
+          </div>
+          <p class="themes-note">취향에 자동 반영했어요 — 마이페이지·추천에 활용돼요.</p>
+        </div>
+        <p v-else class="themes-note">
+          전사는 완료했지만 뚜렷한 취향이 드러나지 않았어요. (전사 내용은 챗봇 분석에 반영돼요)
+        </p>
+
+        <!-- 전사/원문 미리보기 (서버에서 PII 마스킹된 전사문) -->
         <div v-if="result.preview" class="transcript">
           <div class="transcript-head">
             <span class="transcript-title">{{ result.previewTitle }}</span>
@@ -119,9 +131,6 @@
           <pre class="transcript-body">{{ result.preview }}</pre>
           <p v-if="result.truncated" class="transcript-more">… 일부만 표시했어요 (전체 내용은 분석에 사용돼요)</p>
         </div>
-        <p v-else class="transcript-note">
-          업로드한 파일의 텍스트 추출과 분석은 서버에서 처리됐어요. 추출된 전사 내용은 취향 분석에 자동으로 반영돼요.
-        </p>
 
         <button class="again-btn" @click="resetForAnother">다른 파일 업로드</button>
       </section>
@@ -242,12 +251,6 @@ async function onUpload() {
   uploadPct.value = 0
   phase.value = 'uploading'
 
-  // 카카오 .txt 는 브라우저에서 원문을 미리 읽어 결과 미리보기로 쓴다.
-  let previewPayload = null
-  if (currentMode === 'kakao') {
-    previewPayload = await readTextPreview(file).catch(() => null)
-  }
-
   // analysisApi.uploadXxx 래퍼는 file 인자만 받아 진행률 콜백을 전달할 수 없으므로,
   // 업로드 단계 동안 진행 바를 부드럽게 채우는 의사(疑似) 진행을 사용한다.
   // 실제 응답이 오면 즉시 processing → 완료로 전환된다.
@@ -265,8 +268,7 @@ async function onUpload() {
     phase.value = 'processing'
     uploadPct.value = 100
 
-    const dataId = extractDataId(res)
-    result.value = buildResult(currentMode, file, dataId, previewPayload)
+    result.value = buildResult(currentMode, file, res)
     clearFile()
     showToast('분석을 등록했어요.')
   } catch (err) {
@@ -278,37 +280,21 @@ async function onUpload() {
   }
 }
 
-function extractDataId(res) {
-  // BE 응답 본문은 Long(dataId) 자체. axios → res.data 가 숫자.
-  const d = res?.data
-  if (d == null) return null
-  if (typeof d === 'number') return d
-  if (typeof d === 'object') return d.dataId ?? d.id ?? null
-  const n = Number(d)
-  return Number.isNaN(n) ? d : n
-}
-
-function buildResult(currentMode, file, dataId, previewPayload) {
+// BE 응답: { dataId, transcriptPreview, transcriptChars, truncated, themeKeys, themeLabels }
+// (전사문은 서버에서 PII 마스킹됨 — 클라 원문 미리보기보다 안전)
+function buildResult(currentMode, file, res) {
+  const d = (res && typeof res.data === 'object') ? res.data : {}
   const modeLabel = currentMode === 'voice' ? '음성 통화' : '카카오톡 대화'
-  const base = {
+  return {
     modeLabel,
     fileName: file.name,
-    dataId: dataId ?? '—',
-    preview: null,
-    previewTitle: '',
-    previewChars: 0,
-    truncated: false,
+    dataId: d.dataId ?? '—',
+    preview: d.transcriptPreview || null,
+    previewTitle: currentMode === 'voice' ? '음성 전사 미리보기' : '대화 원문 미리보기',
+    previewChars: d.transcriptChars ?? 0,
+    truncated: !!d.truncated,
+    themes: Array.isArray(d.themeLabels) ? d.themeLabels : [],
   }
-  if (previewPayload) {
-    return {
-      ...base,
-      preview: previewPayload.text,
-      previewTitle: '대화 원문 미리보기',
-      previewChars: previewPayload.totalChars,
-      truncated: previewPayload.truncated,
-    }
-  }
-  return base
 }
 
 // 카카오 .txt 미리보기 (최대 4000자)
@@ -578,6 +564,23 @@ function prettySize(bytes) {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
+/* 분석된 여행 취향 칩 */
+.themes {
+  border-top: 1px solid var(--color-line-light);
+  padding-top: 14px;
+}
+.themes-title { font-size: 13px; font-weight: 700; color: var(--color-ink); }
+.themes-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+.theme-chip {
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach);
+  background: var(--color-peach-light);
+}
+.themes-note { font-size: 12px; color: var(--color-ink-muted); }
 
 .transcript {
   border-top: 1px solid var(--color-line-light);

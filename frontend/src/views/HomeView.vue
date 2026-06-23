@@ -34,7 +34,7 @@
       </div>
 
       <div class="category-row">
-        <button v-for="cat in categories" :key="cat.label" class="category-chip" @click="$router.push('/explore')">
+        <button v-for="cat in categories" :key="cat.label" class="category-chip" @click="$router.push({ path: '/explore', query: { tag: cat.tag } })">
           <span class="cat-icon" v-html="cat.icon" />
           <span class="cat-label">{{ cat.label }}</span>
         </button>
@@ -47,13 +47,13 @@
         </div>
         <div class="horizontal-scroll" ref="hScroll" @wheel.prevent="onHScroll">
           <!-- 로딩 중(데이터 도착 전)엔 스켈레톤 — 빈 줄로 "고장난 것처럼" 보이지 않게 -->
-          <template v-if="attractionStore.loading && !places.length">
+          <template v-if="trendingLoading && !places.length">
             <div v-for="n in 3" :key="'sk' + n" class="place-skeleton" />
           </template>
           <template v-else>
-            <PlaceCard v-for="place in places" :key="place.id" :place="place" :rank="place.rank" @click="$router.push(`/place/${place.id}`)" @bookmark="toggleBookmark(place.id)" />
+            <PlaceCard v-for="place in places" :key="place.id" :place="place" :rank="place.rank" @click="$router.push(`/hotplace/${place.id}`)" />
           </template>
-          <p v-if="!attractionStore.loading && !places.length" class="trending-empty">표시할 여행지를 불러오지 못했어요.</p>
+          <p v-if="!trendingLoading && !places.length" class="trending-empty">표시할 여행지를 불러오지 못했어요.</p>
         </div>
       </section>
 
@@ -113,15 +113,38 @@ import { useAttractionStore } from '@/stores/attraction.js'
 import { usePostsStore } from '@/stores/posts.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useLocationStore } from '@/stores/location.js'
-import { contextApi } from '@/api/index.js'
+import { contextApi, hotplaceApi } from '@/api/index.js'
 
 const attractionStore = useAttractionStore()
 const postsStore = usePostsStore()
 const authStore = useAuthStore()
 const locationStore = useLocationStore()
 
-// 지금 뜨는 여행지 — TourAPI 관광지(내 주변 우선, 실패 시 제주 인기)
-const places = computed(() => attractionStore.attractions.slice(0, 10))
+// 지금 뜨는 여행지 — 핫플(게시글) 중 좋아요 높은 순(진짜 추천순).
+const trending = ref([])
+const trendingLoading = ref(false)
+const places = computed(() => trending.value)
+
+async function loadTrending() {
+  trendingLoading.value = true
+  try {
+    const { data } = await hotplaceApi.popular({ size: 10 })
+    const content = Array.isArray(data) ? data : (data?.content ?? [])
+    trending.value = content.map((h, i) => ({
+      id: h.id,
+      name: h.name,
+      address: h.address,
+      imageUrl: h.thumbnailUrl,
+      category: h.category,
+      likeCount: h.likeCount,
+      rank: i + 1,
+    }))
+  } catch {
+    trending.value = []
+  } finally {
+    trendingLoading.value = false
+  }
+}
 const posts = computed(() => postsStore.posts)
 const locationLabel = ref('현재 위치 · 제주특별자치도')
 
@@ -166,18 +189,22 @@ function onAvatarError() {
 const categories = [
   {
     label: '맛집',
+    tag: 'food',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
   },
   {
     label: '문화·역사',
+    tag: 'culture',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1v3H9zM14 9h1v3h-1zM9 15h1v6H9zM14 15h1v6h-1z"/></svg>`,
   },
   {
     label: '액티비티',
+    tag: 'activity',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>`,
   },
   {
     label: '야경',
+    tag: 'night',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`,
   },
 ]
@@ -187,31 +214,20 @@ function toggleBookmark(id) {
   if (place) place.bookmarked = !place.bookmarked
 }
 
-// 제주 인기 관광지 — 위치 거부/미지원 시 폴백
+// 헤더 위치 라벨만 갱신(트렌딩 데이터는 핫플 인기순 loadTrending 이 담당).
 function loadJejuPopular() {
   locationLabel.value = '추천 · 제주특별자치도'
-  attractionStore.list({ areaCode: 39, contentTypeId: 12, size: 10 })
 }
-
-// 내 주변 관광지 우선 — 공유 location store 사용(앱 시작 시 프리페치된 좌표 재사용).
-// 위치 확보되면 근처(캐시 적중 시 즉시 표시), 아니면 제주 인기 폴백.
 function loadNearbyAttractions() {
   locationStore.ensureLocation().then((coords) => {
-    if (!coords) return loadJejuPopular()
-    locationLabel.value = '현재 위치 · 내 주변'
-    attractionStore.list({
-      mapX: coords.lng,
-      mapY: coords.lat,
-      radius: 20000,
-      contentTypeId: 12,
-      size: 10,
-    })
+    locationLabel.value = coords ? '현재 위치 · 내 주변' : '추천 · 제주특별자치도'
   })
 }
 
 onMounted(() => {
   postsStore.fetchPosts(true)
-  loadNearbyAttractions()
+  loadTrending()          // 지금 뜨는 여행지 = 인기 핫플(좋아요순)
+  loadNearbyAttractions() // 위치 라벨용(현재 위치/제주)
   loadNews()
 })
 </script>

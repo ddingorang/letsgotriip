@@ -2,6 +2,7 @@ package com.trip.review.repository;
 
 import com.trip.review.entity.AttractionReview;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -9,6 +10,11 @@ import java.util.List;
 import java.util.Optional;
 
 public interface AttractionReviewRepository extends JpaRepository<AttractionReview, Long> {
+
+    /** 시드 reset — 마커 사용자 소유 리뷰 일괄 삭제 */
+    @Modifying
+    @Query("DELETE FROM AttractionReview r WHERE r.userId IN :userIds")
+    int deleteByUserIdIn(@Param("userIds") List<Long> userIds);
 
     /** 특정 관광지 리뷰 최신순 */
     List<AttractionReview> findByContentIdOrderByCreatedAtDesc(String contentId);

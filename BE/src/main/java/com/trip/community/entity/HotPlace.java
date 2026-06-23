@@ -48,6 +48,19 @@ public class HotPlace extends BaseEntity {
     @Builder.Default
     private HotPlaceStatus status = HotPlaceStatus.PENDING;
 
+    /** 인기수(좋아요) — '지금 뜨는 여행지' 추천 정렬용. 데모는 시드에서 부여. */
+    @Column(nullable = false)
+    @Builder.Default
+    private int likeCount = 0;
+
+    /** 데모 인기수 부여(시드 전용). */
+    public void applyDemoLikeCount(int value) {
+        this.likeCount = Math.max(0, value);
+    }
+
+    public void incLike() { this.likeCount++; }
+    public void decLike() { if (this.likeCount > 0) this.likeCount--; }
+
     public void approve() {
         this.status = HotPlaceStatus.APPROVED;
     }

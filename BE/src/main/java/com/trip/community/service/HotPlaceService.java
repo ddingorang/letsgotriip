@@ -37,6 +37,12 @@ public class HotPlaceService {
                 .map(hp -> HotPlaceSummaryResponse.of(hp, getThumbnail(hp.getId())));
     }
 
+    /** 인기순 핫플('지금 뜨는 여행지' 추천) — 좋아요 높은 순. */
+    public Page<HotPlaceSummaryResponse> getPopularHotPlaces(Pageable pageable) {
+        return hotPlaceRepository.findAllByStatusOrderByLikeCountDescIdDesc(HotPlaceStatus.APPROVED, pageable)
+                .map(hp -> HotPlaceSummaryResponse.of(hp, getThumbnail(hp.getId())));
+    }
+
     public HotPlaceResponse getHotPlace(Long hotPlaceId, Long userId) {
         HotPlace hotPlace = findHotPlace(hotPlaceId);
 
@@ -63,8 +69,8 @@ public class HotPlaceService {
     public HotPlaceResponse register(Long userId, HotPlaceCreateRequest request) {
         User submitter = findUser(userId);
 
-        // 관리자 승인 대기 정책: 신규 등록은 PENDING 으로 저장하여 관리자 승인 전까지
-        // 공개 목록/지도에 노출되지 않는다. (approve/reject/getPending 관리자 플로우와 연동)
+        // 자유 등록 정책: 신규 등록은 관리자 승인 없이 APPROVED 로 저장하여
+        // 즉시 공개 목록/지도에 노출된다. (approve/reject/getPending 관리자 플로우는 유지하나 미사용)
         HotPlace hotPlace = hotPlaceRepository.save(HotPlace.builder()
                 .submitter(submitter)
                 .name(request.name())
@@ -73,7 +79,7 @@ public class HotPlaceService {
                 .longitude(request.longitude())
                 .category(request.category())
                 .description(request.description())
-                .status(HotPlaceStatus.PENDING)
+                .status(HotPlaceStatus.APPROVED)
                 .build());
 
         List<String> imageUrls = savePhotos(hotPlace, request.imageUrls());

@@ -37,7 +37,7 @@
                 <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
               </svg>
             </button>
-            <button class="ghost-btn" @click="menuOpen = !menuOpen">
+            <button class="ghost-btn" @click.stop="menuOpen = !menuOpen">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
                 <circle cx="12" cy="5" r="1" fill="white" />
                 <circle cx="12" cy="12" r="1" fill="white" />

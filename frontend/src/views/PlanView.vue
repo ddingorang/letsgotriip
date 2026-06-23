@@ -40,7 +40,23 @@
       </div>
     </div>
 
+    <!-- 페이지 탭 — 내 계획 / 동행 구하기 -->
+    <div class="page-tab-bar">
+      <button
+        class="page-tab"
+        :class="{ active: pageTab === 'plans' }"
+        @click="pageTab = 'plans'"
+      >내 계획</button>
+      <button
+        class="page-tab"
+        :class="{ active: pageTab === 'companion' }"
+        @click="pageTab = 'companion'"
+      >동행 구하기</button>
+    </div>
+
     <div class="scroll-content">
+      <!-- ── 내 계획 탭 ──────────────────────────────────────────────── -->
+      <div v-show="pageTab === 'plans'">
       <!-- ── Loading state ────────────────────────────────────────────── -->
       <div v-if="listLoading && plans.length === 0" class="state-block">
         <div class="skeleton-card" />
@@ -148,6 +164,21 @@
             <div v-if="selectedPlanId === plan.id" class="plan-detail">
               <div class="detail-divider" />
 
+              <!-- 상세 탭바 — 일정 / 동선 / 예산 (분류가 길게 쌓이지 않게 한 번에 하나만) -->
+              <div class="detail-tabs" role="tablist">
+                <button
+                  v-for="t in planTabs"
+                  :key="t.key"
+                  class="detail-tab"
+                  :class="{ active: tabFor(plan.id) === t.key }"
+                  role="tab"
+                  :aria-selected="tabFor(plan.id) === t.key"
+                  @click="setTab(plan.id, t.key)"
+                >{{ t.label }}</button>
+              </div>
+
+              <!-- ── 탭: 일정 ─────────────────────────────────────────────── -->
+              <div v-show="tabFor(plan.id) === 'plan'" class="tab-panel">
               <!-- 편집 도움말 — 한 번만(세션) 노출 -->
               <div v-if="showEditHint" class="edit-hint">
                 <span class="edit-hint-text">
@@ -234,7 +265,12 @@
                 </div>
               </template>
               <div v-else class="detail-loading">상세 정보를 불러오는 중...</div>
+              </div>
+              <!-- ── /탭: 일정 ────────────────────────────────────────────── -->
 
+              <!-- ── 탭: 동선/지도 ──────────────────────────────────────────
+                   Kakao 지도는 언마운트→재마운트 시 깨질 수 있어 v-show로 항상 마운트 유지 -->
+              <div v-show="tabFor(plan.id) === 'route'" class="tab-panel">
               <!-- 일정 지도 — 일차별로 분리. 선택한 일차의 장소+경로만 표시 -->
               <div v-if="planDayNumbers.length" class="plan-map-section">
                 <!-- 일차 선택 (이전 ‹ · 칩 · › 다음) -->
@@ -280,7 +316,12 @@
                   </button>
                 </div>
               </div>
+              <p v-else class="day-empty-map">동선을 표시할 일정이 아직 없어요.</p>
+              </div>
+              <!-- ── /탭: 동선/지도 ───────────────────────────────────────── -->
 
+              <!-- ── 탭: 예산 ─────────────────────────────────────────────── -->
+              <div v-show="tabFor(plan.id) === 'budget'" class="tab-panel">
               <!-- 예산 패널 -->
               <div v-if="budget && budget.planId === plan.id" class="budget-panel">
                 <div class="budget-head">
@@ -305,6 +346,15 @@
                 </div>
                 <p v-if="budget.note" class="budget-note">{{ budget.note }}</p>
               </div>
+              <!-- 예산 미로드 — 아래 '예산 보기'로 불러오라는 안내 -->
+              <div v-else class="budget-empty">
+                <p class="budget-empty-text">{{ budgetLoading ? '예산을 계산하는 중…' : '아래 \'예산 보기\'를 누르면 예상 예산을 계산해요.' }}</p>
+                <button class="budget-empty-btn" :disabled="budgetLoading" @click="loadBudget(plan.id)">
+                  {{ budgetLoading ? '계산 중...' : '예산 보기' }}
+                </button>
+              </div>
+              </div>
+              <!-- ── /탭: 예산 ────────────────────────────────────────────── -->
 
               <!-- 공유 링크 -->
               <div v-if="shareInfo && shareInfo.planId === plan.id" class="share-panel">
@@ -365,15 +415,16 @@
         </div>
       </div>
 
-      <!-- ── Companion section ────────────────────────────────────────── -->
-      <div class="companion-section">
+      </div>
+      <!-- ── 동행 구하기 탭 ──────────────────────────────────────────── -->
+      <div v-show="pageTab === 'companion'" class="companion-section">
         <div class="section-header">
           <h2 class="section-title">동행 구하기</h2>
-          <button class="see-all" @click="router.push({ path: '/community', query: { tab: 'companion' } })">전체보기</button>
+          <button class="see-all" @click="router.push('/companion/write')">모집하기</button>
         </div>
         <div v-if="companions.length" class="companion-list">
           <div
-            v-for="comp in companions.slice(0, 3)"
+            v-for="comp in companions"
             :key="comp.id"
             class="companion-card"
             @click="router.push(`/companion/${comp.id}`)"
@@ -412,8 +463,8 @@
         <!-- 동행 목록 비어있음(미로그인/없음/로드 실패) — 가짜 목업 대신 빈상태 노출 -->
         <div v-else class="companion-empty">
           <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
-          <button class="companion-empty-btn" @click="router.push({ path: '/community', query: { tab: 'companion' } })">
-            동행 둘러보기
+          <button class="companion-empty-btn" @click="router.push('/companion/write')">
+            동행 모집하기
           </button>
         </div>
       </div>
@@ -614,6 +665,9 @@ const { plans } = storeToRefs(planStore)
 // 동행 목록도 store 기준으로 반응성 유지(하드코딩 목업 제거 → 실 API 연동)
 const { companions } = storeToRefs(companionStore)
 
+// 페이지 상단 탭 — '내 계획' | '동행 구하기'
+const pageTab = ref('plans')
+
 const selectedPlanId = ref(null)
 
 // ── 계획 목록 로드 상태 ───────────────────────────────────────────────────────
@@ -643,6 +697,22 @@ const compareLoading = ref(false)
 const routePath = ref(null)        // { planId, enabled, days }
 const routePathLoading = ref(false)
 const selectedDay = ref(1)         // 지도에 표시 중인 일차(1부터). 계획 펼칠 때 첫 일차로 초기화
+
+// ── 계획 상세 탭 ───────────────────────────────────────────────────────────────
+// 분류(일정·동선·예산)가 길게 쌓이지 않도록 펼친 계획 내부를 탭으로 나눈다.
+// 계획별로 활성 탭을 따로 기억(planId → 'plan'|'route'|'budget'), 기본은 '일정'.
+const planTabs = [
+  { key: 'plan', label: '일정' },
+  { key: 'route', label: '동선' },
+  { key: 'budget', label: '예산' },
+]
+const activeTab = ref({})          // { [planId]: 'plan'|'route'|'budget' }
+function tabFor(planId) {
+  return activeTab.value[planId] ?? 'plan'
+}
+function setTab(planId, key) {
+  activeTab.value = { ...activeTab.value, [planId]: key }
+}
 
 // ── 장소 드래그 정렬 상태 ──────────────────────────────────────────────────────
 const dragDay = ref(null)          // 드래그 중인 일차 dayNo (같은 일차 내에서만 정렬 허용)
@@ -1487,6 +1557,30 @@ async function removePlace(planId, dayNo, place) {
   border-color: white;
 }
 
+/* ── 페이지 탭 (내 계획 / 동행 구하기) ──────────────────────────────────── */
+.page-tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 4px 20px 0;
+  border-bottom: 1px solid var(--color-line-light);
+  flex-shrink: 0;
+}
+.page-tab {
+  flex: 1;
+  padding: 12px 0 11px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  letter-spacing: -0.3px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.page-tab.active {
+  color: var(--color-peach);
+  border-bottom-color: var(--color-peach);
+}
+
 .scroll-content {
   flex: 1;
   overflow-y: auto;
@@ -1722,6 +1816,57 @@ async function removePlace(planId, dayNo, place) {
   background: var(--color-line-light);
   margin-bottom: 14px;
 }
+
+/* ── 상세 탭바(일정·동선·예산) ─────────────────────────────────────────────── */
+.detail-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.detail-tab {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 0;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-ink-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.detail-tab.active {
+  background: var(--color-peach);
+  color: #fff;
+}
+
+/* 탭 패널 — 비활성 탭(v-show=false)은 숨고 활성 탭만 보인다 */
+.tab-panel {
+  min-height: 1px;
+}
+
+/* 예산 미로드 안내 */
+.budget-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+.budget-empty-text {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  text-align: center;
+}
+.budget-empty-btn {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach);
+  color: #fff;
+  cursor: pointer;
+}
+.budget-empty-btn:disabled { opacity: 0.55; cursor: default; }
 
 .detail-loading {
   font-size: 13px;

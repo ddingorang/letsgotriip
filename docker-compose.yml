@@ -21,6 +21,9 @@ services:
       - "13306:3306"   # winnat 예약(3307) 회피 — 내부는 3306
     volumes:
       - mysql-data:/var/lib/mysql
+      # 빈 볼륨 첫 기동 시 db/init/*.sql 을 bulk 로드(시드+2천배치 스냅샷) → 스키마생성·런타임시드 생략, 빠른 기동.
+      # 데이터가 이미 있으면(볼륨 유지) 무시된다. 재생성: ./scripts/db-dump.sh
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
       interval: 10s
@@ -116,6 +119,14 @@ services:
       COOKIE_SECURE: "false"
       CHAT_ENABLED: "true"
       SEED_ENABLED: "true"
+      # 스크립트 트리거형 시드 엔드포인트(/api/dev/seed) — 로컬 전용.
+      # ⚠ 운영 배포 시에는 SEED_API_ENABLED 를 지우거나 "false" 로 두어 엔드포인트를 비활성화할 것.
+      SEED_API_ENABLED: "true"
+      SEED_API_SECRET: "triip-local-seed"
+      # 부팅 자동 시드: db/init 덤프가 데이터를 제공하므로 false(켜둬도 멱등이라 skip되지만 명확히 off).
+      # 덤프 없이 빈 DB로 시작하고 싶으면 db/init/01-seed.sql 제거 후 "true" 로.
+      SEED_BOOT_ENABLED: "false"
+      SEED_BOOT_PROFILE: "demo"
       UPLOAD_BASE_DIR: /app/uploads
       # 프론트엔드 연동 (CORS / OAuth 리다이렉트)
       FE_ALLOWED_ORIGINS: http://localhost:5173

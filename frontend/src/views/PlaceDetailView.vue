@@ -23,11 +23,21 @@
               <path d="M19 12H5M12 5l-7 7 7 7" />
             </svg>
           </button>
-          <button class="ghost-btn" :disabled="bookmarkLoading" @click="toggleBookmark">
-            <svg width="22" height="22" viewBox="0 0 24 24" :fill="bookmarked ? 'white' : 'none'" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-            </svg>
-          </button>
+          <div class="top-actions">
+            <!-- 좋아요(하트) — 공개 인기수. 스크랩(찜)과 별개 -->
+            <button class="ghost-btn like-btn" :disabled="likeLoading" @click="toggleLike">
+              <svg width="22" height="22" viewBox="0 0 24 24" :fill="liked ? '#ff5a7a' : 'none'" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 10-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z" />
+              </svg>
+              <span v-if="likeCount > 0" class="like-count">{{ likeCount }}</span>
+            </button>
+            <!-- 스크랩(찜) — 내 저장목록 -->
+            <button class="ghost-btn" :disabled="bookmarkLoading" @click="toggleBookmark">
+              <svg width="22" height="22" viewBox="0 0 24 24" :fill="bookmarked ? 'white' : 'none'" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="hero-info">
           <div v-if="place?.category" class="rank-badge">{{ place.category }}</div>
@@ -439,6 +449,10 @@ function openLightbox(img) {
 
 const bookmarked = ref(false)
 const bookmarkLoading = ref(false)
+// 좋아요(하트) — 공개 인기수. 스크랩(찜)과 별개.
+const liked = ref(false)
+const likeCount = ref(0)
+const likeLoading = ref(false)
 const place = ref(null)
 const loading = ref(false)
 const fetchError = ref(null)
@@ -633,6 +647,46 @@ async function toggleBookmark() {
     bookmarked.value = prev         // 실패 롤백
   } finally {
     bookmarkLoading.value = false
+  }
+}
+
+// 좋아요(하트) 토글 — 스크랩과 별개. 낙관적 갱신, 실패 롤백.
+async function toggleLike() {
+  if (!authStore.isAuthenticated) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  const contentId = route.params.id
+  if (!contentId) return
+  const ct = place.value?.contentTypeId ?? 12
+  const prevLiked = liked.value
+  const prevCount = likeCount.value
+  liked.value = !prevLiked
+  likeCount.value = prevCount + (prevLiked ? -1 : 1)
+  likeLoading.value = true
+  try {
+    const { data } = await attractionApi.likeToggle(contentId, ct, place.value?.name)
+    liked.value = !!data?.liked
+    if (Number.isFinite(data?.likeCount)) likeCount.value = data.likeCount
+  } catch {
+    liked.value = prevLiked
+    likeCount.value = prevCount
+  } finally {
+    likeLoading.value = false
+  }
+}
+
+// 초기 좋아요 상태/수 수화(비로그인도 수 조회).
+async function loadLike() {
+  const contentId = route.params.id
+  if (!contentId) return
+  const ct = place.value?.contentTypeId ?? 12
+  try {
+    const { data } = await attractionApi.likeState(contentId, ct)
+    liked.value = !!data?.liked
+    likeCount.value = Number.isFinite(data?.likeCount) ? data.likeCount : 0
+  } catch {
+    /* noop — 좋아요 비표시 */
   }
 }
 
@@ -840,9 +894,10 @@ onMounted(async () => {
 
   // 좌표가 있으면 날씨/충전소 맥락 정보 로드
   if (hasCoords.value) loadContext()
-  // 리뷰 목록 + 찜 상태 수화
+  // 리뷰 목록 + 찜/좋아요 상태 수화 (공개 리뷰·좋아요수는 항상, 찜·좋아요여부는 로그인 시)
   loadReviews()
   loadBookmark()
+  loadLike()
 })
 </script>
 
@@ -942,6 +997,24 @@ onMounted(async () => {
   justify-content: center;
   width: 36px;
   height: 36px;
+}
+
+/* 헤더 우측 액션(좋아요·찜) 그룹 */
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.like-btn {
+  width: auto;
+  gap: 3px;
+  padding: 0 4px;
+}
+.like-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .hero-info {

@@ -48,6 +48,18 @@ public class PlanService {
     private static final int MAX_PLAN_DAYS = 14;
     private static final int MAX_PAGE_SIZE = 50;
 
+    /** 지역코드 → 지역명 — AI 추천 계획 기본 제목 생성용("39 여행" 대신 "제주 여행"). */
+    private static final java.util.Map<String, String> AREA_NAMES = java.util.Map.ofEntries(
+            java.util.Map.entry("1", "서울"), java.util.Map.entry("2", "인천"),
+            java.util.Map.entry("3", "대전"), java.util.Map.entry("4", "대구"),
+            java.util.Map.entry("5", "광주"), java.util.Map.entry("6", "부산"),
+            java.util.Map.entry("7", "울산"), java.util.Map.entry("8", "세종"),
+            java.util.Map.entry("31", "경기"), java.util.Map.entry("32", "강원"),
+            java.util.Map.entry("33", "충북"), java.util.Map.entry("34", "충남"),
+            java.util.Map.entry("35", "경북"), java.util.Map.entry("36", "경남"),
+            java.util.Map.entry("37", "전북"), java.util.Map.entry("38", "전남"),
+            java.util.Map.entry("39", "제주"));
+
     private final PlanRepository planRepository;
     private final AttractionService attractionService;
     private final EntityManager entityManager;
@@ -515,9 +527,10 @@ public class PlanService {
 
     @Transactional
     public PlanDetailResponseDto createFromDraft(Long userId, ItineraryDraft draft, RecommendRequestDto req) {
+        String areaName = AREA_NAMES.getOrDefault(req.areaCode(), req.areaCode());
         String title = (req.title() != null && !req.title().isBlank())
                 ? req.title()
-                : req.areaCode() + " 여행 (" + req.startDate() + " ~ " + req.endDate() + ")";
+                : areaName + " 여행 (" + req.startDate() + " ~ " + req.endDate() + ")";
 
         CompanionsType companions = null;
         if (req.companions() != null && !req.companions().isBlank()) {

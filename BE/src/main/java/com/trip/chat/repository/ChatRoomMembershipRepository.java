@@ -3,6 +3,7 @@ package com.trip.chat.repository;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,6 +13,11 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ChatRoomMembershipRepository extends JpaRepository<ChatRoomMembership, Long> {
+
+    /** 시드 reset — 주어진 채팅방들의 멤버십 일괄 삭제 */
+    @Modifying
+    @Query("DELETE FROM ChatRoomMembership m WHERE m.chatRoom.id IN :chatRoomIds")
+    int deleteByChatRoomIdIn(@Param("chatRoomIds") List<Long> chatRoomIds);
 
     Optional<ChatRoomMembership> findByUserIdAndChatRoom(Long userId, ChatRoom chatRoom);
     List<ChatRoomMembership> findByChatRoomId(Long chatRoomId);

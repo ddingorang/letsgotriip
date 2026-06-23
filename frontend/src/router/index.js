@@ -47,8 +47,7 @@ const router = createRouter({
     // ── Stories (내 여행 스토리) ────────────────────────────────────────────────
     { path: '/stories', name: 'stories', component: () => import('@/views/StoriesView.vue'), meta: { requiresAuth: true } },
 
-    // ── Groups (여행 그룹 / 단체할인) ───────────────────────────────────────────
-    { path: '/groups', name: 'groups', component: () => import('@/views/GroupsView.vue'), meta: { requiresAuth: true } },
+    // ── Groups (여행 그룹 / 단체할인) — 비활성(라우트 제거). GroupsView.vue 파일은 보존. ──
 
     // ── Analysis (카톡/음성 업로드 → 전처리) ────────────────────────────────────
     { path: '/analysis', name: 'analysis', component: () => import('@/views/AnalysisUploadView.vue'), meta: { tabBar: false, requiresAuth: true } },
@@ -80,8 +79,8 @@ const router = createRouter({
     { path: '/ai', name: 'ai-input', component: () => import('@/views/AiInputView.vue'), meta: { requiresAuth: true } },
     { path: '/ai/result', name: 'ai-result', component: () => import('@/views/AiResultView.vue'), meta: { tabBar: false, requiresAuth: true } },
 
-    // ── Payment / Confirmation ────────────────────────────────────────────────
-    { path: '/payment', name: 'payment', component: () => import('@/views/PaymentView.vue'), meta: { tabBar: false } },
+    // ── Confirmation ──────────────────────────────────────────────────────────
+    // 결제(payment) 페이지는 비활성화됨 — 라우트 제거 (PaymentView.vue 파일은 유지)
     { path: '/confirmation', name: 'confirmation', component: () => import('@/views/ConfirmationView.vue'), meta: { tabBar: false } },
 
     // ── Badges / Checklist ────────────────────────────────────────────────────
@@ -89,7 +88,7 @@ const router = createRouter({
     { path: '/checklist', name: 'checklist', component: () => import('@/views/ChecklistView.vue'), meta: { requiresAuth: true } },
 
     // ── Admin (관리자 대시보드) ─────────────────────────────────────────────────
-    { path: '/admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { requiresAuth: true, requiresAdmin: true, tabBar: false } },
+    // 관리자(admin) 페이지는 비활성화됨 — 라우트 제거 (AdminView.vue 파일은 유지)
   ],
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) return savedPosition
@@ -107,11 +106,6 @@ router.beforeEach(async (to) => {
 
   if (!auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
-  }
-
-  // ADMIN 역할 게이팅 — 인증됐더라도 관리자만 진입
-  if (to.meta.requiresAdmin && auth.user?.userRole !== 'ADMIN') {
-    return { path: '/mypage' }
   }
   return true
 })

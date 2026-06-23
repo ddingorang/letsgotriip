@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -54,6 +55,9 @@ public interface PlanRepository extends JpaRepository<TripPlan, Long> {
     @org.springframework.data.jpa.repository.Modifying
     @Query("UPDATE TripPlan p SET p.routePathJson = :json, p.routePathVersion = :ver WHERE p.id = :id")
     void updateRoutePathCache(@Param("id") Long id, @Param("json") String json, @Param("ver") Long ver);
+
+    /** 시드 reset — 마커 사용자들의 모든 계획(연관 days/places 는 cascade 로 함께 삭제됨) */
+    List<TripPlan> findByUserIdIn(List<Long> userIds);
 
     // ── 게임화(챌린지/뱃지) 집계 ────────────────────────────────
     long countByUserId(Long userId);

@@ -125,6 +125,15 @@ app:
   # 데모 데이터 시드 토글 — DataSeeder(@ConditionalOnProperty)가 사용
   seed:
     enabled: ${SEED_ENABLED:true}
+    # 스크립트 트리거형 dev 엔드포인트 게이트(/api/dev/seed, /api/dev/attractions/batch) —
+    # 운영은 비활성(미설정/false) 유지. enabled=true 이고 X-Seed-Secret 헤더가 secret 과 일치할 때만 동작.
+    api:
+      enabled: ${SEED_API_ENABLED:false}
+      secret: ${SEED_API_SECRET:}
+    # 부팅 시 자동 1회 데모 시드(멱등) — "서버가 켜지면 데이터가 비어있지 않게". 운영은 미설정(false).
+    boot:
+      enabled: ${SEED_BOOT_ENABLED:false}
+      profile: ${SEED_BOOT_PROFILE:demo}
 
 # OpenAI (Whisper STT — preprocessing 도메인)
 openai:

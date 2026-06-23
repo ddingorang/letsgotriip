@@ -3,6 +3,7 @@ package com.trip.community.repository;
 
 import com.trip.community.entity.PostLike;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,6 +11,11 @@ import java.util.List;
 import java.util.Optional;
 
 public interface PostLikeRepository extends JpaRepository<PostLike, Long> {
+
+    /** 시드 reset — 주어진 게시글들의 좋아요 일괄 삭제 */
+    @Modifying
+    @Query("DELETE FROM PostLike pl WHERE pl.post.id IN :postIds")
+    int deleteByPostIdIn(@Param("postIds") List<Long> postIds);
 
     boolean existsByPostIdAndUserId(Long postId, Long userId);
 

@@ -56,6 +56,15 @@ export const attractionApi = {
   list: (params) => http.get('/api/attractions', { params }),
   areas: () => http.get('/api/attractions/areas'),
   detail: (contentId) => http.get(`/api/attractions/${contentId}`),
+  // 태그 큐레이션(맛집/문화/액티비티/야경) — 좋아요(인기)순 기본. params: { tag, sort:'like'|'latest', page, size }
+  curated: (params) => http.get('/api/attractions/curated', { params }),
+  // 좋아요(하트) 토글 — 스크랩(찜)과 별개. 인증 필요. → { liked, likeCount }
+  likeToggle: (contentId, contentType, name) =>
+    http.post(`/api/attractions/${contentId}/like`, null, { params: { contentType, name } }),
+  // 좋아요 상태 조회(비로그인 시 liked=false) → { liked, likeCount }
+  likeState: (contentId, contentType) =>
+    http.get(`/api/attractions/${contentId}/like`, { params: { contentType } }),
+  // 장소 상세 이미지 갤러리(master) → [{ imageUrl, ... }]
   images: (contentId) => http.get(`/api/attractions/${contentId}/images`),
 }
 
@@ -253,6 +262,11 @@ export const recommendApi = {
 // ── Hotplace (BE: /community/hotplaces) ───────────────────────────────────────
 export const hotplaceApi = {
   getList: (params) => http.get('/api/community/hotplaces', { params }),
+  // 인기순 핫플 — 홈 '지금 뜨는 여행지'(좋아요 높은 순)
+  popular: (params) => http.get('/api/community/hotplaces/popular', { params }),
+  // 핫플 좋아요(하트) — 찜과 별개. → { liked, likeCount }
+  likeToggle: (id) => http.post(`/api/community/hotplaces/${id}/like`),
+  likeState: (id) => http.get(`/api/community/hotplaces/${id}/like`),
   getDetail: (id) => http.get(`/api/community/hotplaces/${id}`),
   // BE has no /area endpoint; fall back to the list endpoint with params
   getByArea: (params) => http.get('/api/community/hotplaces', { params }),
