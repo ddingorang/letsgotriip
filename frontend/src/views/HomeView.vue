@@ -45,7 +45,7 @@
           <h2 class="section-title">지금 뜨는 여행지</h2>
           <button class="see-all" @click="$router.push('/explore')">전체보기</button>
         </div>
-        <div class="horizontal-scroll">
+        <div class="horizontal-scroll" ref="hScroll" @wheel.prevent="onHScroll">
           <!-- 로딩 중(데이터 도착 전)엔 스켈레톤 — 빈 줄로 "고장난 것처럼" 보이지 않게 -->
           <template v-if="attractionStore.loading && !places.length">
             <div v-for="n in 3" :key="'sk' + n" class="place-skeleton" />
@@ -150,6 +150,9 @@ async function loadNews() {
 }
 
 // 업로드한 프로필만 표시 — BE 기본값(/images/default-profile.png)은 실제 파일이 없어 깨지므로 placeholder 처리
+const hScroll = ref(null)
+const onHScroll = (e) => { hScroll.value.scrollLeft += e.deltaY }
+
 const avatarBroken = ref(false)
 const avatarUrl = computed(() => {
   if (avatarBroken.value) return null
@@ -351,7 +354,7 @@ onMounted(() => {
 .horizontal-scroll {
   display: flex;
   gap: 12px;
-  padding: 0 20px;
+  padding: 0 20px 8px;
   overflow-x: auto;
 }
 

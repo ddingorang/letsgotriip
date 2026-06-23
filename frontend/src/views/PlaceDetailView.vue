@@ -83,7 +83,10 @@
       <!-- ── Overview / description ────────────────────────────────────────── -->
       <div v-if="place?.overview" class="overview-section">
         <h2 class="section-title">소개</h2>
-        <p class="overview-text">{{ place.overview }}</p>
+        <p class="overview-text">{{ overviewVisible }}</p>
+        <button v-if="place.overview.length > OVERVIEW_LIMIT" class="overview-toggle" @click="overviewExpanded = !overviewExpanded">
+          {{ overviewExpanded ? '접기' : '더 보기' }}
+        </button>
       </div>
 
       <!-- ── 담기 완료 토스트 ──────────────────────────────────────────────── -->
@@ -378,6 +381,14 @@ const router = useRouter()
 const store = useAttractionStore()
 const planStore = usePlanStore()
 const authStore = useAuthStore()
+
+const OVERVIEW_LIMIT = 300
+const overviewExpanded = ref(false)
+const overviewVisible = computed(() => {
+  const text = place.value?.overview ?? ''
+  if (overviewExpanded.value || text.length <= OVERVIEW_LIMIT) return text
+  return text.slice(0, OVERVIEW_LIMIT) + '…'
+})
 
 const bookmarked = ref(false)
 const bookmarkLoading = ref(false)
@@ -994,6 +1005,13 @@ onMounted(async () => {
   color: var(--color-ink-secondary);
   line-height: 1.7;
   letter-spacing: -0.2px;
+}
+
+.overview-toggle {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach);
 }
 
 /* ── Actions ──────────────────────────────────────────────────────────────── */
