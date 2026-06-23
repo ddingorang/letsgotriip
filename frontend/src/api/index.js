@@ -56,6 +56,14 @@ export const attractionApi = {
   list: (params) => http.get('/api/attractions', { params }),
   areas: () => http.get('/api/attractions/areas'),
   detail: (contentId) => http.get(`/api/attractions/${contentId}`),
+  // 태그 큐레이션(맛집/문화/액티비티/야경) — 좋아요(인기)순 기본. params: { tag, sort:'like'|'latest', page, size }
+  curated: (params) => http.get('/api/attractions/curated', { params }),
+  // 좋아요(하트) 토글 — 스크랩(찜)과 별개. 인증 필요. → { liked, likeCount }
+  likeToggle: (contentId, contentType, name) =>
+    http.post(`/api/attractions/${contentId}/like`, null, { params: { contentType, name } }),
+  // 좋아요 상태 조회(비로그인 시 liked=false) → { liked, likeCount }
+  likeState: (contentId, contentType) =>
+    http.get(`/api/attractions/${contentId}/like`, { params: { contentType } }),
 }
 
 // ── Reviews (관광지 리뷰, BE: /api/attractions/{contentId}/reviews) ────────────

@@ -34,7 +34,7 @@
       </div>
 
       <div class="category-row">
-        <button v-for="cat in categories" :key="cat.label" class="category-chip" @click="$router.push('/explore')">
+        <button v-for="cat in categories" :key="cat.label" class="category-chip" @click="$router.push({ path: '/explore', query: { tag: cat.tag } })">
           <span class="cat-icon" v-html="cat.icon" />
           <span class="cat-label">{{ cat.label }}</span>
         </button>
@@ -163,18 +163,22 @@ function onAvatarError() {
 const categories = [
   {
     label: '맛집',
+    tag: 'food',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>`,
   },
   {
     label: '문화·역사',
+    tag: 'culture',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1v3H9zM14 9h1v3h-1zM9 15h1v6H9zM14 15h1v6h-1z"/></svg>`,
   },
   {
     label: '액티비티',
+    tag: 'activity',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>`,
   },
   {
     label: '야경',
+    tag: 'night',
     icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`,
   },
 ]

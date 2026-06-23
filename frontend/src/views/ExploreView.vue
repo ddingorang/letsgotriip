@@ -26,12 +26,16 @@
 
     <!-- ── Category chips ────────────────────────────────────────────────── -->
     <div class="category-scroll">
+      <!-- 태그(인기순) 모드 표시 + 해제 칩 -->
+      <button v-if="activeTag" class="cat-pill tag-pill active" @click="clearTag">
+        #{{ TAG_LABELS[activeTag] }} ✕
+      </button>
       <button
         v-for="cat in CATEGORIES"
         :key="cat.key"
         class="cat-pill"
-        :class="{ active: selectedCategory === cat.key }"
-        :style="selectedCategory === cat.key ? { background: CATEGORY_COLORS[cat.key], borderColor: CATEGORY_COLORS[cat.key] } : {}"
+        :class="{ active: !activeTag && selectedCategory === cat.key }"
+        :style="!activeTag && selectedCategory === cat.key ? { background: CATEGORY_COLORS[cat.key], borderColor: CATEGORY_COLORS[cat.key] } : {}"
         @click="selectCategory(cat.key)"
       >
         {{ cat.label }}
@@ -131,7 +135,14 @@
           <div class="place-info">
             <div class="place-name-row">
               <span class="place-name">{{ place.name }}</span>
-              <div v-if="place.rating" class="rating">
+              <!-- 태그(인기순) 모드: 좋아요 수 표시 -->
+              <div v-if="Number.isFinite(place.likeCount)" class="like-badge">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--color-peach)" stroke="none">
+                  <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 10-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z"/>
+                </svg>
+                <span>{{ place.likeCount }}</span>
+              </div>
+              <div v-else-if="place.rating" class="rating">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="var(--color-gold)" stroke="none">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
@@ -221,13 +232,15 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAttractionStore } from '@/stores/attraction.js'
 import { useFestivalStore } from '@/stores/festival.js'
 import { useLocationStore } from '@/stores/location.js'
+import { attractionApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 
 const router = useRouter()
+const route = useRoute()
 const store = useAttractionStore()
 const festivalStore = useFestivalStore()
 const locationStore = useLocationStore()
@@ -235,6 +248,19 @@ const locationStore = useLocationStore()
 // ── State ─────────────────────────────────────────────────────────────────────
 const searchQuery = ref('')
 const selectedPlace = ref(null)
+
+// ── 태그 큐레이션 모드 (홈 칩/‘#태그’ 검색 → 좋아요 인기순) ──────────────────────
+const TAG_LABELS = { food: '맛집', culture: '문화·역사', activity: '액티비티', night: '야경' }
+// 검색어 → 태그 매핑(‘#맛집’ 또는 ‘맛집’ 입력 시)
+const KEYWORD_TO_TAG = {
+  맛집: 'food', 음식: 'food', 맛: 'food',
+  문화: 'culture', 역사: 'culture', 박물관: 'culture', 고궁: 'culture',
+  액티비티: 'activity', 레저: 'activity', 체험: 'activity',
+  야경: 'night', 전망: 'night', 야간: 'night',
+}
+const activeTag = ref(null)        // 'food'|'culture'|'activity'|'night' | null
+const curatedItems = ref([])       // 큐레이트 결과(좋아요순) — mapAttraction 형태 + likeCount
+const curatedLoading = ref(false)
 
 // ── 드래그 바텀시트 (높이 vh, 스냅 3단) ───────────────────────────────────────
 const SHEET_SNAPS = [26, 52, 82]   // 접힘 / 중간 / 펼침 (viewport height %)
@@ -345,13 +371,16 @@ function distanceKm(a, b) {
 
 // ── Filtered + sorted display list ────────────────────────────────────────────
 const displayedPlaces = computed(() => {
-  let list = store.attractions
+  // 태그모드면 큐레이트(좋아요 인기순) 결과, 아니면 일반 탐색 목록.
+  let list = activeTag.value ? curatedItems.value : store.attractions
   const q = searchQuery.value.trim()
-  if (q) {
+  // '#태그' 검색어는 모드 트리거일 뿐 필터가 아니므로 일반 텍스트만 필터.
+  const textQ = q.startsWith('#') ? '' : q
+  if (textQ) {
     list = list.filter(
       (p) =>
-        p.name.includes(q) ||
-        (p.address && p.address.includes(q))
+        p.name.includes(textQ) ||
+        (p.address && p.address.includes(textQ))
     )
   }
   // 위치가 있으면 항상 _dist 를 계산해 row 에 거리 배지를 노출(정렬 여부와 무관).
@@ -442,9 +471,57 @@ const sortLabel = computed(
 const CATEGORY_LABEL = { all: '플레이스', '12': '관광지', '15': '축제', '39': '음식점', '32': '숙박' }
 
 const sheetTitle = computed(() => {
+  if (activeTag.value) return `${TAG_LABELS[activeTag.value]} 인기순`
   const label = CATEGORY_LABEL[selectedCategory.value] ?? '플레이스'
   return sortMode.value === 'distance' ? `내 주변 ${label}` : label
 })
+
+// ── 태그 큐레이션 조회/모드 전환 ───────────────────────────────────────────────
+// 큐레이트 응답(content) → 목록/지도 행 형태로 매핑(+likeCount).
+function mapCurated(c) {
+  return {
+    contentId: c.contentId,
+    contentTypeId: c.contentType,
+    name: c.title,
+    address: c.addr,
+    lat: c.latitude,
+    lng: c.longitude,
+    imageUrl: c.imageUrl,
+    likeCount: c.likeCount ?? 0,
+  }
+}
+async function fetchCurated(tag) {
+  if (!tag) return
+  curatedLoading.value = true
+  store.loading = true // 시트 스켈레톤 재사용
+  try {
+    const { data } = await attractionApi.curated({ tag, sort: 'like', page: 0, size: 50 })
+    const content = Array.isArray(data) ? data : (data?.content ?? [])
+    curatedItems.value = content.map(mapCurated)
+  } catch {
+    curatedItems.value = []
+  } finally {
+    curatedLoading.value = false
+    store.loading = false
+  }
+}
+// 태그모드 진입 — 큐레이트 조회 + 결과에 지도 맞춤.
+function setTag(tag) {
+  if (!TAG_LABELS[tag]) return
+  activeTag.value = tag
+  showMapSearchBtn.value = false
+  mapFit.value = true
+  if (searchQuery.value.trim() && !searchQuery.value.trim().startsWith('#')) searchQuery.value = ''
+  fetchCurated(tag)
+}
+// 태그모드 해제 — 일반 탐색 복귀.
+function clearTag() {
+  if (!activeTag.value) return
+  activeTag.value = null
+  curatedItems.value = []
+  searchQuery.value = ''
+  loadAttractions()
+}
 
 // 정렬 바텀시트 토글
 function openSortSheet() {
@@ -508,6 +585,8 @@ function currentUi() {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 function selectCategory(key) {
+  activeTag.value = null // 카테고리 선택 시 태그(인기순) 모드 해제
+  curatedItems.value = []
   showMapSearchBtn.value = false
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
@@ -566,6 +645,14 @@ function onSearchInput() {
   clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     const q = searchQuery.value.trim()
+    // '#맛집'/'#food' 형태 → 태그(인기순) 모드 진입
+    if (q.startsWith('#')) {
+      const key = q.slice(1).trim()
+      const tag = TAG_LABELS[key] ? key : KEYWORD_TO_TAG[key]
+      if (tag) { setTag(tag); return }
+    }
+    // 태그모드 중 일반 입력은 큐레이트 목록 내 필터(displayedPlaces)로만 — 전국 검색 호출 안 함.
+    if (activeTag.value) return
     if (q.length >= 2) {
       const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
       const params = {
@@ -703,19 +790,37 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointercancel', onSheetPointerUp)
 })
 
+// 홈 칩/딥링크의 ?tag 변화 → 태그(인기순) 모드 진입/해제
+watch(
+  () => route.query.tag,
+  (tag) => {
+    if (tag && TAG_LABELS[tag]) {
+      if (tag !== activeTag.value) setTag(tag)
+    } else if (!tag && activeTag.value) {
+      clearTag()
+    }
+  },
+)
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 onMounted(() => {
   festivalStore.loadFestivals()              // festival section (non-blocking)
   store.loadAreas()                          // area list for potential future use
 
-  // (a) 마지막 탐색이 있으면 그대로 복원 — 뒤로가기→재진입 시 초기화하지 않음.
+  // (a) 홈 칩/딥링크로 태그가 지정돼 들어오면 큐레이션(좋아요 인기순)부터 표시.
+  if (route.query.tag && TAG_LABELS[route.query.tag]) {
+    setTag(route.query.tag)
+    return
+  }
+
+  // (b) 마지막 탐색이 있으면 그대로 복원 — 뒤로가기→재진입 시 초기화하지 않음.
   const snap = store.lastExplore
   if (snap && Array.isArray(snap.results) && snap.results.length) {
     restoreFromLastExplore(snap)
     return
   }
 
-  // (b) 없으면 기존 동작 — 위치 우선(내 주변 → 거부/실패 시 전체/제주 폴백).
+  // (c) 없으면 기존 동작 — 위치 우선(내 주변 → 거부/실패 시 전체/제주 폴백).
   store.loading = true
   locateUser()
 })
@@ -1064,6 +1169,24 @@ onMounted(() => {
   color: var(--color-peach);
   font-weight: 600;
   flex-shrink: 0;
+}
+
+/* 좋아요(하트) 수 배지 — 태그 인기순 모드 */
+.like-badge {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-peach);
+  flex-shrink: 0;
+}
+
+/* 태그 모드 표시/해제 칩 */
+.tag-pill {
+  background: var(--color-peach) !important;
+  border-color: var(--color-peach) !important;
+  color: #fff !important;
 }
 
 .place-addr {
