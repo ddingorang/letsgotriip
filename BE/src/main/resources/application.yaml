@@ -125,6 +125,11 @@ app:
   # 데모 데이터 시드 토글 — DataSeeder(@ConditionalOnProperty)가 사용
   seed:
     enabled: ${SEED_ENABLED:true}
+    # 개발용 HTTP 배치 게이트 — DevAttractionBatchController 가 사용
+    #  api.enabled=false 면 /api/dev/attractions/batch 는 404, X-Seed-Secret 불일치면 403
+    api:
+      enabled: ${SEED_API_ENABLED:true}
+      secret: ${SEED_API_SECRET:triip-local-seed}
 
 # OpenAI (Whisper STT — preprocessing 도메인)
 openai:
