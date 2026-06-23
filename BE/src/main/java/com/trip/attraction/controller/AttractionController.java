@@ -1,8 +1,10 @@
 package com.trip.attraction.controller;
 
+import com.trip.attraction.client.AttractionTourApiClient;
 import com.trip.attraction.dto.AttractionSearchRequestDto;
 import com.trip.attraction.dto.AttractionTourApiResponse.AttractionItem;
 import com.trip.attraction.dto.AttractionTourApiResponse.AreaItem;
+import com.trip.attraction.dto.AttractionTourApiResponse.ImageItem;
 import com.trip.attraction.service.AttractionService;
 import com.trip.festival.service.FestivalService;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +24,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AttractionController {
 
-    private final AttractionService attractionService;
-    private final FestivalService   festivalService;
+    private final AttractionService      attractionService;
+    private final FestivalService        festivalService;
+    private final AttractionTourApiClient tourApiClient;
 
     /**
      * GET /api/attractions
@@ -85,5 +88,14 @@ public class AttractionController {
     @GetMapping("/{contentId}")
     public ResponseEntity<AttractionItem> getDetail(@PathVariable String contentId) {
         return ResponseEntity.ok(attractionService.getDetail(contentId));
+    }
+
+    /**
+     * GET /api/attractions/{contentId}/images
+     * detailImage2 — 추가 이미지 목록
+     */
+    @GetMapping("/{contentId}/images")
+    public ResponseEntity<List<ImageItem>> getImages(@PathVariable String contentId) {
+        return ResponseEntity.ok(tourApiClient.fetchImages(contentId));
     }
 }

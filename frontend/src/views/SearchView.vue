@@ -98,15 +98,11 @@
           >
             <div class="thumb">
               <img
-                v-if="item.firstimage"
-                :src="item.firstimage"
+                :src="item.firstimage || '/images/placeholder-thumb.png'"
                 :alt="item.title"
                 class="thumb-img"
-                @error="(e) => (e.target.style.display = 'none')"
+                @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
               />
-              <svg v-else class="thumb-placeholder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
-              </svg>
             </div>
             <div class="row-info">
               <div class="row-title">{{ item.title }}</div>
@@ -180,11 +176,10 @@
           >
             <div class="thumb">
               <img
-                v-if="item.imageUrl"
-                :src="item.imageUrl"
+                :src="item.imageUrl || '/images/placeholder-thumb.png'"
                 :alt="item.title"
                 class="thumb-img"
-                @error="(e) => (e.target.style.display = 'none')"
+                @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
               />
             </div>
             <div class="row-info">

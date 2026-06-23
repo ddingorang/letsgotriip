@@ -246,12 +246,26 @@
         <button class="cta-main" disabled>모집이 마감되었어요</button>
       </template>
 
-      <!-- Visitor: approved — 취소 불가, 채팅방 입장(동적 chatRoomId) -->
+      <!-- Visitor: approved — 채팅방 입장 + ... 더보기(동행 탈퇴) -->
       <template v-else-if="!comp.isOwner && isApplied && isApproved">
         <button class="cta-main" :disabled="comp.chatRoomId == null" @click="openChat">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
           채팅방 입장
         </button>
+        <div class="cta-more-wrap">
+          <div v-if="ctaMoreOpen" class="cta-more-backdrop" @click="ctaMoreOpen = false" />
+          <button class="cta-more-btn" @click.stop="ctaMoreOpen = !ctaMoreOpen" aria-label="더보기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+          <Transition name="fade">
+            <div v-if="ctaMoreOpen" class="cta-more-menu">
+              <button class="cta-more-item danger" @click="withdrawCompanion">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                동행 탈퇴
+              </button>
+            </div>
+          </Transition>
+        </div>
       </template>
 
       <!-- Visitor: applied (pending) — 취소 가능 -->
@@ -271,24 +285,75 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
           신청자 관리 {{ comp.pendingCount }}
         </button>
+        <!-- 방장 ... 메뉴 (수정 / 삭제) -->
+        <div class="cta-more-wrap">
+          <div v-if="ctaMoreOpen" class="cta-more-backdrop" @click="ctaMoreOpen = false" />
+          <button class="cta-chat" @click.stop="ctaMoreOpen = !ctaMoreOpen" aria-label="더보기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+          <Transition name="fade">
+            <div v-if="ctaMoreOpen" class="cta-more-menu">
+              <button class="cta-more-item" @click="editCompanion">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                수정
+              </button>
+              <button class="cta-more-item danger" @click="deleteCompanion">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                삭제
+              </button>
+            </div>
+          </Transition>
+        </div>
       </template>
     </div>
 
     <!-- 공유 토스트 -->
     <div v-if="shareToast" class="share-toast">{{ shareToast }}</div>
+
+    <!-- 신청 메시지 팝업 -->
+    <Transition name="fade">
+      <div v-if="applySheet.open" class="apply-overlay" @click.self="applySheet.open = false">
+        <div class="apply-popup">
+          <div class="apply-popup-head">
+            <h3 class="apply-popup-title">참여 신청</h3>
+            <button class="apply-popup-close" @click="applySheet.open = false" aria-label="닫기">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          </div>
+          <p class="apply-popup-desc">방장에게 전달할 한마디를 남겨보세요. (선택)</p>
+          <textarea
+            v-model="applySheet.message"
+            class="apply-popup-textarea"
+            rows="4"
+            placeholder="간단한 자기소개나 참여 이유를 적어주세요"
+            maxlength="200"
+          />
+          <div class="apply-popup-count">{{ applySheet.message.length }} / 200</div>
+          <button
+            class="apply-popup-confirm"
+            :disabled="applySheet.submitting"
+            @click="confirmApply"
+          >
+            {{ applySheet.submitting ? '신청 중…' : '신청하기' }}
+          </button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 import { followApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
+import { useConfirm } from '@/composables/useConfirm.js'
 
 const route = useRoute()
 const router = useRouter()
 const companionStore = useCompanionStore()
+const $confirm = useConfirm().confirm
 
 // 실제 상세 데이터(없으면 null). 실패/404를 가짜 "동행 모집" 객체로 위장하지 않는다.
 const realComp = computed(() => companionStore.getById(route.params.id) ?? null)
@@ -390,6 +455,8 @@ const myApplicationId = computed(
 // → 취소 버튼 대신 채팅방 입장 안내를 노출한다.
 const isApproved = computed(() => myApplicationStatus.value === 'APPROVED')
 const applyError = ref('')
+const applySheet = reactive({ open: false, message: '', submitting: false })
+const ctaMoreOpen = ref(false)
 
 // 남은 모집 자리 — 모집 조건 카드와 하단 CTA에서 공유(중복 계산 방지)
 const seatsLeft = computed(() =>
@@ -551,20 +618,30 @@ async function reloadDetail() {
   geocodeRegion()
 }
 
-async function apply() {
+function apply() {
+  applyError.value = ''
+  applySheet.message = ''
+  applySheet.open = true
+}
+
+async function confirmApply() {
+  if (applySheet.submitting) return
+  applySheet.submitting = true
   applyError.value = ''
   try {
-    const app = await companionStore.join(comp.value.id)
-    // origin: join 응답(status/id)을 우선 반영
+    const app = await companionStore.join(comp.value.id, applySheet.message)
     fetchedStatus.value = app?.status ?? 'PENDING'
     fetchedAppId.value = app?.id ?? null
     appliedOverride.value = true
-    // 서버 기준 isApplied/myApplicationId 동기화
+    applySheet.open = false
     await companionStore.getDetail(route.params.id)
     await refreshMyApplication()
     appliedOverride.value = null
   } catch {
     applyError.value = companionStore.error || '신청에 실패했어요.'
+    applySheet.open = false
+  } finally {
+    applySheet.submitting = false
   }
 }
 
@@ -591,6 +668,48 @@ async function cancelApply() {
     appliedOverride.value = null
   } catch {
     applyError.value = companionStore.error || '신청 취소에 실패했어요.'
+  }
+}
+
+async function withdrawCompanion() {
+  ctaMoreOpen.value = false
+  if (!await $confirm('동행에서 탈퇴하시겠어요? 채팅방에서도 나가게 됩니다.')) return
+  applyError.value = ''
+  if (!myApplicationId.value) {
+    await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
+  }
+  const id = myApplicationId.value
+  if (!id) {
+    applyError.value = '신청 정보를 찾을 수 없어요.'
+    return
+  }
+  try {
+    await companionStore.cancel(comp.value.id, id)
+    appliedOverride.value = false
+    fetchedStatus.value = null
+    fetchedAppId.value = null
+    await companionStore.getDetail(route.params.id)
+    await refreshMyApplication()
+    appliedOverride.value = null
+  } catch {
+    applyError.value = companionStore.error || '탈퇴에 실패했어요.'
+  }
+}
+
+function editCompanion() {
+  ctaMoreOpen.value = false
+  router.push({ name: 'companion-write', query: { edit: comp.value.id } })
+}
+
+async function deleteCompanion() {
+  ctaMoreOpen.value = false
+  if (!await $confirm('동행 게시글을 삭제할까요? 채팅방과 모든 신청 정보가 함께 삭제돼요.')) return
+  try {
+    await companionStore.remove(comp.value.id)
+    router.replace('/community')
+  } catch {
+    applyError.value = companionStore.error || '삭제에 실패했어요.'
   }
 }
 
@@ -877,6 +996,7 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 0;
   left: 0;
+  z-index: 10;
   right: 0;
   display: flex;
   flex-wrap: wrap;
@@ -1077,6 +1197,60 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+/* ── CTA 더보기 (...) 버튼 ────────────────────────────────────── */
+.cta-more-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.cta-more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+}
+.cta-more-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--color-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-secondary);
+  background: #fff;
+}
+.cta-more-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  overflow: hidden;
+  z-index: 10;
+  min-width: 140px;
+  z-index: 50;
+}
+.cta-more-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cta-more-item.danger {
+  color: var(--color-error, #ef4444);
+}
+.cta-more-item:hover {
+  background: var(--color-surface, #f5f5f5);
+}
+
 /* ── 공유 토스트 ──────────────────────────────────────────────── */
 .share-toast {
   position: fixed;
@@ -1092,4 +1266,91 @@ onBeforeUnmount(() => {
   max-width: 80%;
   text-align: center;
 }
+
+/* ── 신청 메시지 팝업 ─────────────────────────────────────────── */
+.apply-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.apply-popup {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px 20px 20px;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.apply-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.apply-popup-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-gray-900, #111);
+  margin: 0;
+}
+.apply-popup-close {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--color-gray-500, #888);
+  line-height: 1;
+}
+.apply-popup-desc {
+  font-size: 13px;
+  color: var(--color-gray-500, #888);
+  margin: 0;
+}
+.apply-popup-textarea {
+  width: 100%;
+  resize: none;
+  border: 1.5px solid var(--color-gray-200, #e5e7eb);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.apply-popup-textarea:focus {
+  border-color: var(--color-primary, #6c63ff);
+}
+.apply-popup-count {
+  font-size: 12px;
+  color: var(--color-gray-400, #aaa);
+  text-align: right;
+  margin-top: -6px;
+}
+.apply-popup-confirm {
+  background: var(--color-primary, #6c63ff);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.apply-popup-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* fade transition */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

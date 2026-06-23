@@ -7,8 +7,8 @@
           <path d="M19 12H5M12 5l-7 7 7 7" />
         </svg>
       </button>
-      <span class="nav-title">동행 모집</span>
-      <button class="submit-top-btn" :disabled="!isValid" @click="submit">등록</button>
+      <span class="nav-title">{{ isEditMode ? '동행 수정' : '동행 모집' }}</span>
+      <button class="submit-top-btn" :disabled="!isValid || submitting" @click="submit">{{ isEditMode ? '저장' : '등록' }}</button>
     </header>
 
     <div class="scroll-content">
@@ -168,7 +168,7 @@
         <!-- Info banner -->
         <div class="info-banner">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
-          <p class="info-text">모집글을 등록하면 그룹 채팅방이 자동 생성돼요. 승인한 멤버만 입장할 수 있어요.</p>
+          <p class="info-text">{{ isEditMode ? '수정 내용은 즉시 반영돼요.' : '모집글을 등록하면 그룹 채팅방이 자동 생성돼요. 승인한 멤버만 입장할 수 있어요.' }}</p>
         </div>
 
         <div style="height: 32px" />
@@ -193,6 +193,9 @@ const personOptions = ['2명', '3명', '4명', '5명', '6명+']
 const availableTags = ['#20대', '#30대', '#뚜벅이', '#드라이브', '#맛집투어', '#혼행환영', '#가족여행']
 
 const submitting = ref(false)
+const isEditMode = computed(() => !!route.query.edit)
+const editPostId = computed(() => route.query.edit ? Number(route.query.edit) : null)
+
 const form = ref({
   title: '',
   location: '',
@@ -297,18 +300,60 @@ function clearPlan() {
   planImages.value = []
 }
 
+// "N박 M일" 또는 "당일" 문자열에서 nights 수를 파싱해 endDate를 역산한다.
+function calcEndDate(startDate, duration) {
+  if (!startDate || !duration) return startDate
+  if (duration === '당일') return startDate
+  const m = duration.match(/^(\d+)박/)
+  if (!m) return startDate
+  const nights = parseInt(m[1])
+  const d = new Date(startDate + 'T00:00:00')
+  d.setDate(d.getDate() + nights)
+  return d.toISOString().slice(0, 10)
+}
+
+// maxMembers 숫자를 칩 선택지 문자열("4명")로 변환
+function maxToChip(n) {
+  if (!n) return null
+  if (n >= 6) return '6명+'
+  return `${n}명`
+}
+
 onMounted(async () => {
   plansLoading.value = true
   try {
     const { data } = await planApi.getMyPlans()
     const items = Array.isArray(data) ? data : (data?.content ?? [])
     myPlans.value = items
-    // AiResultView 등에서 query.planId 로 넘어온 계획을 자동 선택
-    const presetId = route.query.planId != null ? Number(route.query.planId) : null
-    if (presetId != null && !Number.isNaN(presetId)) {
-      const preset = items.find(p => Number(p.id) === presetId)
-      if (preset) selectPlan(preset)
-      else { form.value.planId = presetId; loadPlanImages(presetId) } // 목록에 없어도 연결 의도는 보존(BE가 소유 검증)
+
+    if (isEditMode.value && editPostId.value) {
+      // 수정 모드: 기존 게시글 데이터로 폼 채우기
+      const { data: post } = await companionStore.getDetail(editPostId.value)
+        .then(() => ({ data: companionStore.getById(editPostId.value) }))
+        .catch(() => ({ data: null }))
+      if (post) {
+        const startDate = post.travelDate ?? ''
+        const endDate = calcEndDate(startDate, post.duration)
+        form.value.title = post.title ?? ''
+        form.value.location = post.region ?? ''
+        form.value.startDate = startDate
+        form.value.endDate = endDate
+        form.value.maxCount = maxToChip(post.maxMembers)
+        form.value.estimatedCost = post.estimatedCost ?? null
+        form.value.description = post.description ?? ''
+        form.value.tags = post.tags ?? []
+        form.value.planId = post.planId ?? null
+        form.value.imageUrl = post.imageUrl ?? ''
+        if (post.planId) loadPlanImages(post.planId)
+      }
+    } else {
+      // 생성 모드: query.planId 자동 선택
+      const presetId = route.query.planId != null ? Number(route.query.planId) : null
+      if (presetId != null && !Number.isNaN(presetId)) {
+        const preset = items.find(p => Number(p.id) === presetId)
+        if (preset) selectPlan(preset)
+        else { form.value.planId = presetId; loadPlanImages(presetId) }
+      }
     }
   } catch {
     myPlans.value = []
@@ -393,14 +438,19 @@ async function submit() {
     imageUrl: form.value.imageUrl || null,
   }
   try {
-    const created = await companionStore.create(payload)
-    if (created?.id) {
-      router.push({ name: 'companion-applicants', params: { id: created.id } })
+    if (isEditMode.value) {
+      await companionStore.update(editPostId.value, payload)
+      router.replace({ name: 'companion-detail', params: { id: editPostId.value } })
     } else {
-      router.back()
+      const created = await companionStore.create(payload)
+      if (created?.id) {
+        router.push({ name: 'companion-applicants', params: { id: created.id } })
+      } else {
+        router.back()
+      }
     }
   } catch {
-    submitError.value = companionStore.error || '등록에 실패했어요. 잠시 후 다시 시도해 주세요.'
+    submitError.value = companionStore.error || (isEditMode.value ? '수정에 실패했어요.' : '등록에 실패했어요. 잠시 후 다시 시도해 주세요.')
   }
 }
 </script>

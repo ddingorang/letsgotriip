@@ -64,6 +64,8 @@ export const attractionApi = {
   // 좋아요 상태 조회(비로그인 시 liked=false) → { liked, likeCount }
   likeState: (contentId, contentType) =>
     http.get(`/api/attractions/${contentId}/like`, { params: { contentType } }),
+  // 장소 상세 이미지 갤러리(master) → [{ imageUrl, ... }]
+  images: (contentId) => http.get(`/api/attractions/${contentId}/images`),
 }
 
 // ── Reviews (관광지 리뷰, BE: /api/attractions/{contentId}/reviews) ────────────
@@ -319,7 +321,8 @@ export const companionApi = {
     http.patch(`/api/companion/posts/${postId}/applications/${applicationId}/approve`),
   reject: (postId, applicationId) =>
     http.patch(`/api/companion/posts/${postId}/applications/${applicationId}/reject`),
-  // 모집 마감 / 글 삭제 (방장만)
+  // 수정 / 모집 마감 / 글 삭제 (방장만)
+  update: (postId, data) => http.patch(`/api/companion/posts/${postId}`, data),
   close: (postId) => http.patch(`/api/companion/posts/${postId}/close`),
   remove: (postId) => http.delete(`/api/companion/posts/${postId}`),
 }

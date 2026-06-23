@@ -26,8 +26,12 @@ public interface ChatRoomMembershipRepository extends JpaRepository<ChatRoomMemb
     /** 특정 방·사용자의 멤버십 단건(있으면) — 음소거/강퇴/재초대에서 사용 */
     Optional<ChatRoomMembership> findByChatRoomIdAndUserId(Long chatRoomId, Long userId);
 
-    /** 채팅방 인원수 — N+1 회피용 카운트 쿼리 */
+    /** 채팅방 전체 멤버십 수(탈퇴 포함) */
     int countByChatRoomId(Long chatRoomId);
+
+    /** 채팅방 활성 멤버 수 — 탈퇴/강퇴 제외 */
+    @Query("select count(m) from ChatRoomMembership m where m.chatRoom.id = :chatRoomId and m.leftAt is null and m.isBanned = false")
+    int countActiveByChatRoomId(@Param("chatRoomId") Long chatRoomId);
 
     /**
      * 특정 방·사용자의 멤버십 단건을 비관적 쓰기 락으로 조회.
