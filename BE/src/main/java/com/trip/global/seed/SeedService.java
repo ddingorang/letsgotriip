@@ -10,6 +10,7 @@ import com.trip.checklist.repository.ChecklistItemRepository;
 import com.trip.checklist.service.ChecklistService;
 import com.trip.community.dto.HotPlaceCreateRequest;
 import com.trip.community.dto.PostCreateRequest;
+import com.trip.community.dto.CommentCreateRequest;
 import com.trip.community.entity.HotPlace;
 import com.trip.community.entity.Post;
 import com.trip.community.entity.enums.HotPlaceCategory;
@@ -214,6 +215,11 @@ public class SeedService {
 
         // 6) 마커 사용자 본인 — 마지막에 삭제
         userRepository.deleteAllById(seedUserIds);
+
+        // 큐잉된 엔티티 삭제(users/posts 등)를 즉시 DB에 반영한다. 같은 트랜잭션에서 곧바로
+        // 재삽입(insert)이 일어나는데, Hibernate 기본 액션 순서는 insert→delete 라서 flush 없이는
+        // 재삽입이 삭제보다 먼저 실행돼 unique(email) 충돌이 난다(reset 후 재시드 시 500).
+        userRepository.flush();
         log.info("[SeedService] reset 완료");
     }
 
@@ -331,19 +337,36 @@ public class SeedService {
             return 4;
         });
 
-        // ── 커뮤니티 게시글 ──────────────────────────────────────────────
+        // ── 커뮤니티 게시글 + 참여(댓글·좋아요·스크랩)로 실제 데이터처럼 ─────────────
         safe(counts, "communityPosts", () -> {
-            communityService.createPost(foodie.getId(), new PostCreateRequest(
+            var p1 = communityService.createPost(foodie.getId(), new PostCreateRequest(
                     "제주 흑돼지 맛집 BEST 5 🐷",
                     "현지인 추천 받아 다녀온 흑돼지 맛집들 정리해봤어요. 연탄구이는 진리!",
                     PostCategory.RESTAURANT,
                     List.of("https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg")));
-            communityService.createPost(seoul.getId(), new PostCreateRequest(
+            var p2 = communityService.createPost(seoul.getId(), new PostCreateRequest(
                     "서울 고궁 야간개장 일정 공유합니다",
                     "경복궁 야간개장 예매 꿀팁이랑 동선 정리. 미리 예매 필수예요!",
-                    PostCategory.TIP,
-                    List.of()));
-            return 2;
+                    PostCategory.TIP, List.of()));
+            var p3 = communityService.createPost(jeju.getId(), new PostCreateRequest(
+                    "혼자 제주 2박3일 뚜벅이 후기",
+                    "버스랑 도보로만 다녔는데 생각보다 충분했어요. 다닌 코스 공유합니다!",
+                    PostCategory.REVIEW, List.of()));
+            var p4 = communityService.createPost(busan.getId(), new PostCreateRequest(
+                    "부산 야경 명소 어디가 제일 좋나요?",
+                    "이번 주말 부산 가는데 야경 보기 좋은 곳 추천 부탁드려요 🙏",
+                    PostCategory.QUESTION, List.of()));
+
+            // 게시글별 좋아요/스크랩(여러 사용자) + 댓글
+            engage(p1.id(), "제주 흑돼지 맛집 BEST 5", List.of(jeju, busan, seoul),
+                    List.of(c(busan, "흑돼지 진짜 최고죠 ㅎㅎ"), c(seoul, "저장해갑니다 👍"), c(jeju, "근처 카페도 궁금해요!")));
+            engage(p2.id(), "서울 고궁 야간개장", List.of(foodie, jeju),
+                    List.of(c(jeju, "야간개장 분위기 미쳤어요"), c(foodie, "예매 링크도 공유 가능할까요?")));
+            engage(p3.id(), "혼자 제주 뚜벅이 후기", List.of(seoul, busan, foodie),
+                    List.of(c(seoul, "뚜벅이 여행 좋네요!"), c(busan, "코스 더 자세히 알고 싶어요")));
+            engage(p4.id(), "부산 야경 명소", List.of(seoul),
+                    List.of(c(seoul, "광안리 더베이101 강추합니다")));
+            return 4;
         });
 
         // ── 핫플(자동 APPROVED) ─────────────────────────────────────────
@@ -454,6 +477,23 @@ public class SeedService {
     // ════════════════════════════════════════════════════════════════════════
     //  헬퍼
     // ════════════════════════════════════════════════════════════════════════
+
+    /** 게시글 참여 시드용 — 댓글 작성자+내용 묶음. */
+    private record SeedComment(User user, String content) {}
+    private SeedComment c(User u, String content) { return new SeedComment(u, content); }
+
+    /** 게시글에 좋아요·스크랩(여러 사용자) + 댓글을 부여해 커뮤니티가 실제 데이터처럼 보이게 한다. */
+    private void engage(Long postId, String title, List<User> likers, List<SeedComment> comments) {
+        for (User u : likers) {
+            try { communityService.toggleLike(postId, u.getId()); } catch (Exception ignore) { /* best-effort */ }
+            try { favoriteService.toggle(u.getId(), FavoriteTargetType.POST, String.valueOf(postId), title); }
+            catch (Exception ignore) { /* best-effort */ }
+        }
+        for (SeedComment sc : comments) {
+            try { communityService.createComment(postId, sc.user().getId(), new CommentCreateRequest(sc.content())); }
+            catch (Exception ignore) { /* best-effort */ }
+        }
+    }
 
     private User saveUser(String nickname, String localPart) {
         return userRepository.save(User.builder()
