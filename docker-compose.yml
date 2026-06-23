@@ -120,6 +120,9 @@ services:
       # ⚠ 운영 배포 시에는 SEED_API_ENABLED 를 지우거나 "false" 로 두어 엔드포인트를 비활성화할 것.
       SEED_API_ENABLED: "true"
       SEED_API_SECRET: "triip-local-seed"
+      # 부팅 시 자동 1회 데모 시드(멱등) — 서버 켜지면 데모 데이터가 바로 채워짐. 운영은 "false".
+      SEED_BOOT_ENABLED: "true"
+      SEED_BOOT_PROFILE: "demo"
       UPLOAD_BASE_DIR: /app/uploads
       # 프론트엔드 연동 (CORS / OAuth 리다이렉트)
       FE_ALLOWED_ORIGINS: http://localhost:5173

@@ -130,6 +130,10 @@ app:
     api:
       enabled: ${SEED_API_ENABLED:false}
       secret: ${SEED_API_SECRET:}
+    # 부팅 시 자동 1회 데모 시드(멱등) — "서버가 켜지면 데이터가 비어있지 않게". 운영은 미설정(false).
+    boot:
+      enabled: ${SEED_BOOT_ENABLED:false}
+      profile: ${SEED_BOOT_PROFILE:demo}
 
 # OpenAI (Whisper STT — preprocessing 도메인)
 openai:
