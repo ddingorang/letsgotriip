@@ -279,6 +279,33 @@ export const useCompanionStore = defineStore('companion', () => {
   // cancelApplication: cancel 의 별칭(동일 기능). origin/master 호환.
   const cancelApplication = cancel
 
+  async function update(postId, payload) {
+    loading.value = true
+    error.value = null
+    try {
+      const { data } = await companionApi.update(postId, payload)
+      return data
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '수정에 실패했어요.'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function remove(postId) {
+    loading.value = true
+    error.value = null
+    try {
+      await companionApi.remove(postId)
+    } catch (e) {
+      error.value = e.response?.data?.message ?? e.message ?? '삭제에 실패했어요.'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ── applicant normalization ───────────────────────────────────────────────────
 
   function normalizeApplicant(item) {
@@ -377,7 +404,7 @@ export const useCompanionStore = defineStore('companion', () => {
     nextCursor, hasMore, loadingMore,
     detailLoading, detailError, detailNotFound,
     applicantsLoading, applicantsError, applicantsForbidden,
-    getList, getDetail, create, join, cancel,
+    getList, getDetail, create, update, remove, join, cancel,
     fetchMyRooms, fetchCompanions, fetchMoreCompanions,
     getApplications, approveApplicant, rejectApplicant, getById,
     getMyApplication, cancelApplication,

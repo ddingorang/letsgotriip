@@ -104,6 +104,10 @@ public class CompanionPost extends BaseEntity {
         this.status = CompanionStatus.CLOSED;
     }
 
+    public void reopen() {
+        this.status = CompanionStatus.OPEN;
+    }
+
     public void assignChatRoom(ChatRoom chatRoom) {
         this.chatRoom = chatRoom;
     }

@@ -307,7 +307,8 @@ export const companionApi = {
     http.patch(`/api/companion/posts/${postId}/applications/${applicationId}/approve`),
   reject: (postId, applicationId) =>
     http.patch(`/api/companion/posts/${postId}/applications/${applicationId}/reject`),
-  // 모집 마감 / 글 삭제 (방장만)
+  // 수정 / 모집 마감 / 글 삭제 (방장만)
+  update: (postId, data) => http.patch(`/api/companion/posts/${postId}`, data),
   close: (postId) => http.patch(`/api/companion/posts/${postId}/close`),
   remove: (postId) => http.delete(`/api/companion/posts/${postId}`),
 }

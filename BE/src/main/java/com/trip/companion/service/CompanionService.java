@@ -183,7 +183,7 @@ public class CompanionService {
         // 정원이 이미 찼으면 신청 자체를 차단 — 승인 단계뿐 아니라 신청 단계에서도 정원 검사
         if (post.getChatRoom() != null) {
             int currentMembers = chatRoomMembershipRepository
-                    .countByChatRoomId(post.getChatRoom().getId());
+                    .countActiveByChatRoomId(post.getChatRoom().getId());
             if (currentMembers >= post.getMaxMembers()) {
                 throw new GeneralException(ResponseCode.COMPANION_FULL);
             }
@@ -236,7 +236,7 @@ public class CompanionService {
         // 정원 초과 방지 — 락 보유 상태에서 현재 인원을 카운트하여 직렬화
         if (post.getChatRoom() != null) {
             int currentMembers = chatRoomMembershipRepository
-                    .countByChatRoomId(post.getChatRoom().getId());
+                    .countActiveByChatRoomId(post.getChatRoom().getId());
             if (currentMembers >= post.getMaxMembers()) {
                 throw new GeneralException(ResponseCode.COMPANION_FULL);
             }
@@ -267,7 +267,7 @@ public class CompanionService {
 
                 // 정원 도달 시 모집 자동 마감 — 이후 신청·승인을 신청 단계에서부터 차단한다.
                 int memberCount = chatRoomMembershipRepository
-                        .countByChatRoomId(post.getChatRoom().getId());
+                        .countActiveByChatRoomId(post.getChatRoom().getId());
                 if (post.getStatus() == CompanionStatus.OPEN && memberCount >= post.getMaxMembers()) {
                     post.close();
                 }
@@ -319,6 +319,14 @@ public class CompanionService {
             chatRoomMembershipRepository.findByChatRoomIdAndUserId(chatRoomId, userId)
                     .filter(m -> m.getLeftAt() == null)
                     .ifPresent(m -> m.leave(java.time.LocalDateTime.now()));
+
+            // 탈퇴 후 활성 인원이 정원 미만이 되면 CLOSED → OPEN으로 복귀
+            if (post.getStatus() == CompanionStatus.CLOSED) {
+                int remaining = chatRoomMembershipRepository.countActiveByChatRoomId(chatRoomId);
+                if (remaining < post.getMaxMembers()) {
+                    post.reopen();
+                }
+            }
         }
 
         companionApplicationRepository.delete(application);
@@ -368,7 +376,7 @@ public class CompanionService {
 
     private int countCurrentMembers(CompanionPost post) {
         return post.getChatRoom() != null
-                ? chatRoomMembershipRepository.countByChatRoomId(post.getChatRoom().getId())
+                ? chatRoomMembershipRepository.countActiveByChatRoomId(post.getChatRoom().getId())
                 : 0;
     }
 

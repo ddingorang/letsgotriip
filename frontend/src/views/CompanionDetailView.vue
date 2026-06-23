@@ -285,6 +285,25 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
           신청자 관리 {{ comp.pendingCount }}
         </button>
+        <!-- 방장 ... 메뉴 (수정 / 삭제) -->
+        <div class="cta-more-wrap">
+          <div v-if="ctaMoreOpen" class="cta-more-backdrop" @click="ctaMoreOpen = false" />
+          <button class="cta-chat" @click.stop="ctaMoreOpen = !ctaMoreOpen" aria-label="더보기">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+          <Transition name="fade">
+            <div v-if="ctaMoreOpen" class="cta-more-menu">
+              <button class="cta-more-item" @click="editCompanion">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                수정
+              </button>
+              <button class="cta-more-item danger" @click="deleteCompanion">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                삭제
+              </button>
+            </div>
+          </Transition>
+        </div>
       </template>
     </div>
 
@@ -329,10 +348,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useCompanionStore } from '@/stores/companion.js'
 import { followApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
+import { useConfirm } from '@/composables/useConfirm.js'
 
 const route = useRoute()
 const router = useRouter()
 const companionStore = useCompanionStore()
+const $confirm = useConfirm().confirm
 
 // 실제 상세 데이터(없으면 null). 실패/404를 가짜 "동행 모집" 객체로 위장하지 않는다.
 const realComp = computed(() => companionStore.getById(route.params.id) ?? null)
@@ -673,6 +694,22 @@ async function withdrawCompanion() {
     appliedOverride.value = null
   } catch {
     applyError.value = companionStore.error || '탈퇴에 실패했어요.'
+  }
+}
+
+function editCompanion() {
+  ctaMoreOpen.value = false
+  router.push({ name: 'companion-write', query: { edit: comp.value.id } })
+}
+
+async function deleteCompanion() {
+  ctaMoreOpen.value = false
+  if (!await $confirm('동행 게시글을 삭제할까요? 채팅방과 모든 신청 정보가 함께 삭제돼요.')) return
+  try {
+    await companionStore.remove(comp.value.id)
+    router.replace('/community')
+  } catch {
+    applyError.value = companionStore.error || '삭제에 실패했어요.'
   }
 }
 
