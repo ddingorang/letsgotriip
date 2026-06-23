@@ -1,5 +1,6 @@
 package com.trip.preprocessing.controller;
 
+import com.trip.preprocessing.dto.AnalysisResultResponse;
 import com.trip.preprocessing.entity.enums.AnalysisDataType;
 import com.trip.preprocessing.service.PreprocessingService;
 import com.trip.global.error.GeneralException;
@@ -24,23 +25,23 @@ public class PreprocessingController {
     private final PreprocessingService preprocessingService;
 
     @PostMapping("upload/kakao")
-    public ResponseEntity<Long> uploadKakaoTalk(
+    public ResponseEntity<AnalysisResultResponse> uploadKakaoTalk(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
         validateFile(file);
-        Long dataId = preprocessingService.uploadAndProcess(userPrincipal.userId(), AnalysisDataType.KAKAO_TALK, file);
-        return ResponseEntity.ok(dataId);
+        return ResponseEntity.ok(
+                preprocessingService.uploadAndProcess(userPrincipal.userId(), AnalysisDataType.KAKAO_TALK, file));
     }
 
     @PostMapping("upload/voice")
-    public ResponseEntity<Long> uploadVoiceCall(
+    public ResponseEntity<AnalysisResultResponse> uploadVoiceCall(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
         validateFile(file);
-        Long dataId = preprocessingService.uploadAndProcess(userPrincipal.userId(), AnalysisDataType.VOICE_CALL, file);
-        return ResponseEntity.ok(dataId);
+        return ResponseEntity.ok(
+                preprocessingService.uploadAndProcess(userPrincipal.userId(), AnalysisDataType.VOICE_CALL, file));
     }
 
     /** 빈/누락 파일 거부 — 빈 파일에도 200+dataId를 내보내던 false success 방지 */

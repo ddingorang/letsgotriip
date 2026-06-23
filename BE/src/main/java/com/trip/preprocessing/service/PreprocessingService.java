@@ -52,9 +52,18 @@ public class PreprocessingService {
     // rollbackFor: processData가 던지는 checked IOException(파일 읽기 실패 등)에도
     // 트랜잭션이 롤백되도록 한다. 기본값은 unchecked만 롤백하므로, rawText가 채워지지
     // 않은(마스킹 전) 레코드가 커밋되어 잔존하는 것을 막는다.
+    /** 키 → 한글 라벨(추천 도메인 6개 테마와 동일). */
+    private static final java.util.Map<String, String> THEME_LABELS = java.util.Map.of(
+            "sea", "바다", "mountain", "산·자연", "food", "맛집",
+            "history", "역사·문화", "activity", "액티비티", "shopping", "쇼핑");
+    private static final int PREVIEW_LIMIT = 1200;
+
     @Transactional(rollbackFor = Exception.class)
-    public Long uploadAndProcess(Long userId, AnalysisDataType dataType, MultipartFile file) throws IOException {
-        Path directory = Paths.get(uploadDir);
+    public com.trip.preprocessing.dto.AnalysisResultResponse uploadAndProcess(
+            Long userId, AnalysisDataType dataType, MultipartFile file) throws IOException {
+        // 절대경로(시스템 temp)로 둔다. 상대경로면 MultipartFile.transferTo 가 서블릿 컨테이너
+        // 임시 디렉터리 기준으로 해석돼 우리가 만든 디렉터리와 어긋나 FileNotFoundException 이 난다.
+        Path directory = Paths.get(System.getProperty("java.io.tmpdir"), uploadDir).toAbsolutePath();
         if (!Files.exists(directory)) {
             Files.createDirectories(directory);
         }
@@ -76,9 +85,18 @@ public class PreprocessingService {
 
             userAnalysisDataRepository.save(analysisData);
 
-            processData(analysisData, filePath.toFile());
+            List<String> themeKeys = processData(analysisData, filePath.toFile());
 
-            return analysisData.getId();
+            // 사용자에게 '실제로 분석됐음'을 보여주기 위해 마스킹된 전사 미리보기 + 추출된 취향을 반환.
+            String masked = analysisData.getRawText() == null ? "" : analysisData.getRawText();
+            int totalChars = masked.length();
+            boolean truncated = totalChars > PREVIEW_LIMIT;
+            String preview = truncated ? masked.substring(0, PREVIEW_LIMIT) : masked;
+            List<String> labels = themeKeys.stream()
+                    .map(k -> THEME_LABELS.getOrDefault(k, k)).toList();
+
+            return new com.trip.preprocessing.dto.AnalysisResultResponse(
+                    analysisData.getId(), preview, totalChars, truncated, themeKeys, labels);
         } finally {
             deleteTempFile(filePath);
         }
@@ -93,7 +111,7 @@ public class PreprocessingService {
         }
     }
 
-    private void processData(UserAnalysisData analysisData, File file) throws IOException {
+    private List<String> processData(UserAnalysisData analysisData, File file) throws IOException {
         if (analysisData.getDataType() == AnalysisDataType.KAKAO_TALK) {
             String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
             analysisData.updateRawText(maskPii(content));
@@ -115,6 +133,7 @@ public class PreprocessingService {
         // 빈 텍스트(예: 빈 카톡 파일)는 색인하지 않는다. 색인 실패가 업로드/저장 트랜잭션을
         // 깨뜨리지 않도록 방어적으로 감싼다.
         String maskedText = analysisData.getRawText();
+        List<String> themeKeys = List.of();
         if (maskedText != null && !maskedText.isBlank()) {
             try {
                 userDataIndexer.indexAnalysis(analysisData.getUserId(), analysisData.getId(), maskedText);
@@ -126,7 +145,7 @@ public class PreprocessingService {
             // rawText에서 여행 취향 테마 키를 추출해 사용자 preferredInterests에 합집합 병합한다.
             // 추출/저장 실패가 업로드 트랜잭션을 깨지 않도록 전 과정을 방어적으로 감싼다.
             try {
-                List<String> themeKeys = travelPreferenceExtractor.extractThemeKeys(maskedText);
+                themeKeys = travelPreferenceExtractor.extractThemeKeys(maskedText);
                 if (!themeKeys.isEmpty()) {
                     userService.mergePreferredInterests(analysisData.getUserId(), themeKeys);
                     log.info("분석데이터에서 취향 자동 반영 — analysisId={}, keys={}",
@@ -137,6 +156,7 @@ public class PreprocessingService {
                         analysisData.getId(), e.getMessage());
             }
         }
+        return themeKeys;
     }
 
     /**

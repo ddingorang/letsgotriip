@@ -229,12 +229,18 @@ public class SeedService {
     //  DEMO 프로필 — 스크린샷 친화적 풍부한 데이터
     // ════════════════════════════════════════════════════════════════════════
     private void seedDemo(Map<String, Integer> counts) {
-        // ── 사용자 (팔로우 그래프용 여러 명) ──────────────────────────────
+        // ── 사용자 (팔로우/좋아요/저장 등 참여 데이터용 여러 명) ──────────────
         User jeju  = saveUser("제주러버", "jeju");
         User busan = saveUser("부산갈매기", "busan");
         User seoul = saveUser("서울나들이", "seoul");
         User foodie = saveUser("맛집헌터", "foodie");
-        inc(counts, "users", 4);
+        User gangneung = saveUser("강릉바다", "gangneung");
+        User yeosu = saveUser("여수밤바다", "yeosu");
+        User gyeongju = saveUser("경주역사가", "gyeongju");
+        User sokcho = saveUser("속초여행러", "sokcho");
+        // 핫플 좋아요/저장 참여에 두루 쓸 사용자 풀
+        java.util.List<User> everyone = java.util.List.of(jeju, busan, seoul, foodie, gangneung, yeosu, gyeongju, sokcho);
+        inc(counts, "users", 8);
 
         // ── 관광지 스냅샷(직접 insert — TourAPI 미사용) ─────────────────
         Attraction gyeongbok = saveAttraction("126508", 12, "경복궁",
@@ -295,7 +301,12 @@ public class SeedService {
             favoriteService.toggle(jeju.getId(), FavoriteTargetType.ATTRACTION, hyeopjae.getContentId(), hyeopjae.getTitle());
             favoriteService.toggle(seoul.getId(), FavoriteTargetType.ATTRACTION, gyeongbok.getContentId(), gyeongbok.getTitle());
             favoriteService.toggle(busan.getId(), FavoriteTargetType.ATTRACTION, haeundae.getContentId(), haeundae.getTitle());
-            return 4;
+            favoriteService.toggle(foodie.getId(), FavoriteTargetType.ATTRACTION, hyeopjae.getContentId(), hyeopjae.getTitle());
+            favoriteService.toggle(gangneung.getId(), FavoriteTargetType.ATTRACTION, nseoul.getContentId(), nseoul.getTitle());
+            favoriteService.toggle(yeosu.getId(), FavoriteTargetType.ATTRACTION, haeundae.getContentId(), haeundae.getTitle());
+            favoriteService.toggle(gyeongju.getId(), FavoriteTargetType.ATTRACTION, gyeongbok.getContentId(), gyeongbok.getTitle());
+            favoriteService.toggle(sokcho.getId(), FavoriteTargetType.ATTRACTION, seongsan.getContentId(), seongsan.getTitle());
+            return 9;
         });
 
         // ── 리뷰 ────────────────────────────────────────────────────────
@@ -303,7 +314,12 @@ public class SeedService {
             reviewService.create(jeju.getId(), seongsan.getContentId(), new ReviewCreateRequest(5, "일출이 정말 장관이었어요! 새벽에 올라간 보람이 있네요."));
             reviewService.create(seoul.getId(), gyeongbok.getContentId(), new ReviewCreateRequest(4, "한복 입고 입장하면 무료라 더 좋았어요."));
             reviewService.create(busan.getId(), haeundae.getContentId(), new ReviewCreateRequest(5, "백사장이 넓고 야경이 환상적입니다."));
-            return 3;
+            reviewService.create(foodie.getId(), hyeopjae.getContentId(), new ReviewCreateRequest(4, "물이 맑고 가족 단위로 오기 좋아요."));
+            reviewService.create(gangneung.getId(), nseoul.getContentId(), new ReviewCreateRequest(5, "야경 보러 갔는데 케이블카도 재밌어요."));
+            reviewService.create(yeosu.getId(), haeundae.getContentId(), new ReviewCreateRequest(4, "여름엔 사람 많지만 그만한 이유가 있네요."));
+            reviewService.create(gyeongju.getId(), gyeongbok.getContentId(), new ReviewCreateRequest(5, "고즈넉한 분위기가 정말 좋았습니다."));
+            reviewService.create(sokcho.getId(), seongsan.getContentId(), new ReviewCreateRequest(4, "경치가 멋지고 둘레길도 잘 돼 있어요."));
+            return 8;
         });
 
         // ── 여행 스토리 ──────────────────────────────────────────────────
@@ -317,7 +333,16 @@ public class SeedService {
                     "고궁 데이트 기록", seoulPlan.getId(),
                     "고궁 투어는 처음이라 기대됐어요.",
                     "경복궁 야경과 N서울타워 전망이 완벽했습니다.", 4, null));
-            return 2;
+            travelStoryService.create(busan.getId(), new TravelStoryCreateRequest(
+                    "부산 바다 혼행 기록", busanPlan.getId(),
+                    "혼자 훌쩍 떠난 부산이었어요.",
+                    "해운대 야경에 힐링하고 왔습니다.", 5,
+                    "https://tong.visitkorea.or.kr/cms/resource/41/2655741_image2_1.jpg"));
+            travelStoryService.create(foodie.getId(), new TravelStoryCreateRequest(
+                    "전국 맛집 탐방기", null,
+                    "먹으러 떠난 여행이었죠.",
+                    "광장시장 빈대떡이 최고였어요!", 4, null));
+            return 4;
         });
 
         // ── 팔로우 그래프 ─────────────────────────────────────────────────
@@ -327,7 +352,12 @@ public class SeedService {
             followService.toggle(busan.getId(), jeju.getId());
             followService.toggle(seoul.getId(), foodie.getId());
             followService.toggle(foodie.getId(), jeju.getId());
-            return 5;
+            followService.toggle(gangneung.getId(), jeju.getId());
+            followService.toggle(yeosu.getId(), busan.getId());
+            followService.toggle(gyeongju.getId(), seoul.getId());
+            followService.toggle(sokcho.getId(), foodie.getId());
+            followService.toggle(jeju.getId(), gangneung.getId());
+            return 10;
         });
 
         // ── 체크리스트 ────────────────────────────────────────────────────
@@ -378,28 +408,36 @@ public class SeedService {
         safe(counts, "hotPlaces", () -> {
             seedHotPlace(busan, "흰여울문화마을", "부산광역시 영도구 흰여울길", 35.0789, 129.0468,
                     HotPlaceCategory.ATTRACTION, "영화 촬영지로 유명한 바다 절벽 마을.",
-                    "https://tong.visitkorea.or.kr/cms/resource/19/2576419_image2_1.jpg", 1240);
+                    "https://tong.visitkorea.or.kr/cms/resource/19/2576419_image2_1.jpg", 1240,
+                    everyone, everyone.subList(0, 5));
             seedHotPlace(jeju, "성산일출봉", "제주특별자치도 서귀포시 성산읍 일출로", 33.4581, 126.9425,
                     HotPlaceCategory.NATURE, "유네스코 세계자연유산. 일출 명소.",
-                    "https://tong.visitkorea.or.kr/cms/resource/08/2871008_image2_1.JPG", 1080);
+                    "https://tong.visitkorea.or.kr/cms/resource/08/2871008_image2_1.JPG", 1080,
+                    everyone.subList(0, 7), everyone.subList(0, 4));
             seedHotPlace(seoul, "북촌한옥마을", "서울특별시 종로구 계동길", 37.5826, 126.9831,
                     HotPlaceCategory.ATTRACTION, "전통 한옥이 늘어선 골목.",
-                    "https://tong.visitkorea.or.kr/cms/resource/23/2678623_image2_1.jpg", 870);
+                    "https://tong.visitkorea.or.kr/cms/resource/23/2678623_image2_1.jpg", 870,
+                    everyone.subList(1, 7), everyone.subList(2, 6));
             seedHotPlace(jeju, "협재해수욕장", "제주특별자치도 제주시 한림읍 협재리", 33.3940, 126.2396,
                     HotPlaceCategory.NATURE, "에메랄드빛 바다와 비양도 전망.",
-                    "https://tong.visitkorea.or.kr/cms/resource/53/2869753_image2_1.jpg", 760);
+                    "https://tong.visitkorea.or.kr/cms/resource/53/2869753_image2_1.jpg", 760,
+                    everyone.subList(0, 5), everyone.subList(0, 3));
             seedHotPlace(busan, "감천문화마을", "부산광역시 사하구 감내2로", 35.0975, 129.0107,
                     HotPlaceCategory.ATTRACTION, "알록달록 산비탈 예술 마을.",
-                    "https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg", 640);
+                    "https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg", 640,
+                    everyone.subList(2, 8), everyone.subList(3, 6));
             seedHotPlace(foodie, "광장시장 먹자골목", "서울특별시 종로구 창경궁로", 37.5701, 126.9999,
                     HotPlaceCategory.RESTAURANT, "빈대떡·마약김밥 등 길거리 먹거리.",
-                    "https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg", 520);
+                    "https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg", 520,
+                    everyone.subList(0, 6), everyone.subList(1, 4));
             seedHotPlace(seoul, "남산서울타워", "서울특별시 용산구 남산공원길", 37.5512, 126.9882,
                     HotPlaceCategory.ATTRACTION, "서울 야경 1번지.",
-                    "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 410);
+                    "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 410,
+                    everyone.subList(1, 5), everyone.subList(0, 2));
             seedHotPlace(jeju, "오설록 티 뮤지엄", "제주특별자치도 서귀포시 안덕면 신화역사로", 33.3056, 126.2895,
                     HotPlaceCategory.CAFE, "녹차밭 카페 겸 박물관.",
-                    "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 280);
+                    "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 280,
+                    everyone.subList(3, 7), everyone.subList(4, 7));
             return 8;
         });
 
@@ -520,12 +558,30 @@ public class SeedService {
         }
     }
 
-    /** 핫플 등록(자동 APPROVED) 후 데모 좋아요 수를 부여한다('지금 뜨는 여행지' 정렬용). */
+    /**
+     * 핫플 등록(자동 APPROVED) + 데모 좋아요 베이스 부여 + 실제 사용자 좋아요(HotPlaceLike)·저장(찜) 부여.
+     * likeCount(데모 베이스)에 실제 likers 수만큼 더해져 '지금 뜨는 여행지' 정렬에 반영된다.
+     */
     private void seedHotPlace(User submitter, String name, String addr, double lat, double lng,
-                             HotPlaceCategory cat, String desc, String imageUrl, int likeCount) {
+                             HotPlaceCategory cat, String desc, String imageUrl, int likeCount,
+                             List<User> likers, List<User> savers) {
         var resp = hotPlaceService.register(submitter.getId(), new HotPlaceCreateRequest(
                 name, addr, lat, lng, cat, desc, List.of(imageUrl)));
-        hotPlaceRepository.findById(resp.id()).ifPresent(hp -> hp.applyDemoLikeCount(likeCount));
+        final Long id = resp.id();
+        hotPlaceRepository.findById(id).ifPresent(hp -> {
+            hp.applyDemoLikeCount(likeCount);
+            for (User u : likers) {
+                try {
+                    hotPlaceLikeRepository.save(com.trip.community.entity.HotPlaceLike.builder()
+                            .userId(u.getId()).hotPlaceId(id).createdAt(java.time.LocalDateTime.now()).build());
+                    hp.incLike();
+                } catch (Exception ignore) { /* 중복 등 무시 */ }
+            }
+        });
+        for (User u : savers) {
+            try { favoriteService.toggle(u.getId(), FavoriteTargetType.HOTPLACE, String.valueOf(id), name); }
+            catch (Exception ignore) { /* best-effort */ }
+        }
     }
 
     private User saveUser(String nickname, String localPart) {
