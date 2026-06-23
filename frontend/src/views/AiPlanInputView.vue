@@ -187,6 +187,10 @@
         </svg>
         다음 단계
       </button>
+      <!-- AI 없이, 설정만으로 빈 계획 생성 -->
+      <button class="empty-btn" :disabled="creatingEmpty" @click="handleCreateEmpty">
+        {{ creatingEmpty ? '만드는 중...' : '빈 계획으로 만들기' }}
+      </button>
       <p class="ai-btn-sub">조건 확인 후 AI 일정을 생성할 수 있어요</p>
     </div>
 
@@ -253,6 +257,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { http } from '@/api/http.js'
+import { planApi } from '@/api/index.js'
 
 const router = useRouter()
 
@@ -464,6 +469,9 @@ const planTitle = ref('')
 // ── 에러 ──────────────────────────────────────────────────────────────────────
 const localError = ref('')
 
+// ── 빈 계획 생성 진행 상태 ────────────────────────────────────────────────────
+const creatingEmpty = ref(false)
+
 // ── 다음 단계 ─────────────────────────────────────────────────────────────────
 function handleNext() {
   if (!selectedAreaCode.value) {
@@ -488,6 +496,47 @@ function handleNext() {
 
   // Pass conditions to /ai via History state so AiInputView can read them
   router.push({ name: 'ai-input', state: { conditions } })
+}
+
+// ── AI 없이 빈 계획 만들기 ─────────────────────────────────────────────────────
+// 폼 설정(제목/지역/날짜/동행/예산)만으로 빈 일정을 생성한다. AI 호출 없음.
+// 서버는 날짜 범위만큼 빈 TripDay를 자동 생성한다.
+async function handleCreateEmpty() {
+  if (creatingEmpty.value) return
+
+  // 최소 필수값 검증: 제목은 선택이라 미입력 시 기본 제목으로 보완
+  if (!startDate.value || !endDate.value) {
+    localError.value = '여행 날짜를 선택해 주세요.'
+    return
+  }
+  localError.value = ''
+
+  const companion = companionTypes.find(c => c.key === selectedCompanion.value)
+  const budgetOpt = budgetOptions.find(o => o.label === selectedBudget.value)
+
+  // 제목 미입력 시 기본값(지역명 + "여행")으로 보완 — title은 BE 필수값
+  const area = areas.value.find(a => a.code === selectedAreaCode.value)
+  const fallbackTitle = `${area?.name ?? ''} 여행`.trim() || '내 여행'
+  const title = (planTitle.value.trim() || fallbackTitle).slice(0, 100)
+
+  const payload = {
+    title,
+    startDate: startDate.value,
+    endDate: endDate.value,
+    companions: companion?.apiVal ?? null,           // 'SOLO'|'COUPLE'|'FAMILY'|'FRIENDS'
+    budget: budgetOpt?.value ?? null,                // 정수 또는 null
+    origin: 'MANUAL',
+  }
+
+  creatingEmpty.value = true
+  try {
+    await planApi.createPlan(payload)
+    router.push('/plan')
+  } catch (e) {
+    localError.value = e?.response?.data?.message || '빈 계획을 만들지 못했어요. 잠시 후 다시 시도해 주세요.'
+  } finally {
+    creatingEmpty.value = false
+  }
 }
 </script>
 
@@ -970,6 +1019,30 @@ function handleNext() {
   gap: 10px;
   box-shadow: 0 4px 16px rgba(247, 143, 87, 0.35);
   transition: opacity 0.2s;
+}
+
+/* 빈 계획 만들기 — AI 버튼 대비 보조(secondary) 스타일 */
+.empty-btn {
+  width: 100%;
+  height: 46px;
+  background: var(--color-white);
+  color: var(--color-ink-secondary);
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.2s;
+}
+
+.empty-btn:active {
+  background: var(--color-surface);
+}
+
+.empty-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .ai-btn-sub {
