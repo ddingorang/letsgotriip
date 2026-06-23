@@ -58,6 +58,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/attractions/*/reviews").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/attractions/*/reviews/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/attractions/*/reviews/**").authenticated()
+                        // 관광지 좋아요(하트) 토글은 인증 필수 (GET 상태/큐레이션은 아래 attractions GET permitAll 로 공개)
+                        .requestMatchers(HttpMethod.POST, "/api/attractions/*/like").authenticated()
                         // 비회원 공개 조회 (탐색 도메인)
                         .requestMatchers(HttpMethod.GET, "/api/festivals/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/attractions/**").permitAll()
