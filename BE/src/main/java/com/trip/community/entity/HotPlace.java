@@ -58,6 +58,9 @@ public class HotPlace extends BaseEntity {
         this.likeCount = Math.max(0, value);
     }
 
+    public void incLike() { this.likeCount++; }
+    public void decLike() { if (this.likeCount > 0) this.likeCount--; }
+
     public void approve() {
         this.status = HotPlaceStatus.APPROVED;
     }

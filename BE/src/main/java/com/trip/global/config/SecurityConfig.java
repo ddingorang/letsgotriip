@@ -85,6 +85,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces/pending").hasRole("ADMIN")
                         // 핫플 승인/거절은 매처 레벨에서 ADMIN 강제 — GET hotplaces permitAll 와일드카드보다 먼저 선언
                         .requestMatchers(HttpMethod.POST, "/community/hotplaces/*/approve", "/community/hotplaces/*/reject").hasRole("ADMIN")
+                        // 핫플 좋아요(하트) — 토글은 인증, 상태조회는 공개(비로그인 liked=false). GET hotplaces/* 보다 먼저.
+                        .requestMatchers(HttpMethod.POST, "/community/hotplaces/*/like").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/community/hotplaces/*/like").permitAll()
                         .requestMatchers(HttpMethod.GET, "/community/hotplaces", "/community/hotplaces/*").permitAll()
                         // 동행 — 내 참여 방은 인증 필수 (공개 매처보다 먼저 선언해 /my가 permitAll에 포함되지 않도록)
                         .requestMatchers(HttpMethod.GET, "/companion/posts/my").authenticated()

@@ -3,6 +3,7 @@ package com.trip.community.controller;
 
 import com.trip.community.dto.*;
 import com.trip.community.service.HotPlaceService;
+import com.trip.community.service.HotPlaceLikeService;
 import com.trip.global.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,6 +23,7 @@ import java.net.URI;
 public class HotPlaceController {
 
     private final HotPlaceService hotPlaceService;
+    private final HotPlaceLikeService hotPlaceLikeService;
 
     // ─── 조회 (비회원 가능) ───────────────────────────────────
 
@@ -38,6 +40,25 @@ public class HotPlaceController {
             @PageableDefault(size = 10) Pageable pageable
     ) {
         return ResponseEntity.ok(hotPlaceService.getPopularHotPlaces(pageable));
+    }
+
+    /** 핫플 좋아요(하트) 토글 — 찜과 별개. 인증 필요. → { liked, likeCount } */
+    @PostMapping("/{hotPlaceId}/like")
+    public ResponseEntity<HotPlaceLikeResponse> toggleLike(
+            @PathVariable Long hotPlaceId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(hotPlaceLikeService.toggle(principal.userId(), hotPlaceId));
+    }
+
+    /** 핫플 좋아요 상태 — 비로그인 시 liked=false. → { liked, likeCount } */
+    @GetMapping("/{hotPlaceId}/like")
+    public ResponseEntity<HotPlaceLikeResponse> getLikeState(
+            @PathVariable Long hotPlaceId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        Long userId = principal != null ? principal.userId() : null;
+        return ResponseEntity.ok(hotPlaceLikeService.getState(userId, hotPlaceId));
     }
 
     @GetMapping("/{hotPlaceId}")

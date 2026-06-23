@@ -113,6 +113,7 @@ public class SeedService {
     private final CommentLikeRepository commentLikeRepository;
     private final HotPlaceRepository hotPlaceRepository;
     private final HotPlacePhotoRepository hotPlacePhotoRepository;
+    private final com.trip.community.repository.HotPlaceLikeRepository hotPlaceLikeRepository;
     private final CompanionPostRepository companionPostRepository;
     private final CompanionApplicationRepository companionApplicationRepository;
     private final ChatRoomRepository chatRoomRepository;
@@ -194,6 +195,7 @@ public class SeedService {
         // 4) 핫플 — 사진 먼저 정리
         List<HotPlace> hotPlaces = hotPlaceRepository.findAllBySubmitter_IdIn(seedUserIds);
         if (!hotPlaces.isEmpty()) {
+            hotPlaceLikeRepository.deleteByHotPlaceIdIn(hotPlaces.stream().map(HotPlace::getId).toList());
             hotPlaces.forEach(hp -> hotPlacePhotoRepository.deleteAllByHotPlaceId(hp.getId()));
             hotPlaceRepository.deleteAll(hotPlaces);
         }

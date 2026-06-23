@@ -83,6 +83,13 @@
         </svg>
         내 일정에 추가
       </button>
+      <!-- 좋아요(하트) — 공개 인기수. 찜과 별개 -->
+      <button class="cta-like" :class="{ liked }" :disabled="likeLoading" @click="toggleLike">
+        <svg width="20" height="20" viewBox="0 0 24 24" :fill="liked ? '#ff5a7a' : 'none'" :stroke="liked ? '#ff5a7a' : 'var(--color-ink)'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 10-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z" />
+        </svg>
+        <span v-if="likeCount > 0" class="cta-like-count">{{ likeCount }}</span>
+      </button>
       <button class="cta-bookmark" :class="{ bookmarked }" :disabled="bookmarkLoading" @click="toggleBookmark">
         <svg width="20" height="20" viewBox="0 0 24 24" :fill="bookmarked ? 'var(--color-peach)' : 'none'" :stroke="bookmarked ? 'var(--color-peach)' : 'var(--color-ink)'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
@@ -97,7 +104,7 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHotplaceStore } from '@/stores/hotplace.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { favoriteApi } from '@/api/index.js'
+import { favoriteApi, hotplaceApi } from '@/api/index.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -115,6 +122,10 @@ const hp = ref({ ...DEFAULT_HP, id: route.params.id })
 const loading = ref(true)
 const bookmarked = ref(false)
 const bookmarkLoading = ref(false)
+// 좋아요(하트) — 공개 인기수. 찜과 별개.
+const liked = ref(false)
+const likeCount = ref(0)
+const likeLoading = ref(false)
 
 // 미니맵용 실좌표 여부
 const mapEl = ref(null)
@@ -173,8 +184,9 @@ onMounted(async () => {
     loading.value = false
   }
   await renderMiniMap()
-  // 상세 로드 후 hp.id가 확정되면 초기 찜 상태 수화 (로그인 시)
+  // 상세 로드 후 hp.id가 확정되면 초기 찜/좋아요 상태 수화 (좋아요수는 비로그인도)
   loadBookmark()
+  loadLike()
 })
 
 onBeforeUnmount(() => {
@@ -227,6 +239,42 @@ async function loadBookmark() {
   } catch {
     bookmarked.value = false
   }
+}
+
+// ── 좋아요(하트) 토글 — 찜과 별개. 낙관적 갱신, 실패 롤백 ───────────────────────
+async function toggleLike() {
+  if (!authStore.isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  const id = hp.value?.id
+  if (id == null) return
+  const prevLiked = liked.value
+  const prevCount = likeCount.value
+  liked.value = !prevLiked
+  likeCount.value = prevCount + (prevLiked ? -1 : 1)
+  likeLoading.value = true
+  try {
+    const { data } = await hotplaceApi.likeToggle(id)
+    liked.value = !!data?.liked
+    if (Number.isFinite(data?.likeCount)) likeCount.value = data.likeCount
+  } catch {
+    liked.value = prevLiked
+    likeCount.value = prevCount
+  } finally {
+    likeLoading.value = false
+  }
+}
+
+// 초기 좋아요 상태/수 수화(비로그인도 수 조회).
+async function loadLike() {
+  const id = hp.value?.id
+  if (id == null) return
+  try {
+    const { data } = await hotplaceApi.likeState(id)
+    liked.value = !!data?.liked
+    likeCount.value = Number.isFinite(data?.likeCount) ? data.likeCount : 0
+  } catch { /* noop */ }
 }
 </script>
 
@@ -428,4 +476,25 @@ async function loadBookmark() {
   transition: border-color 0.15s;
 }
 .cta-bookmark.bookmarked { border-color: var(--color-peach); }
+
+/* 좋아요(하트) CTA — 수가 있으면 가로로 늘어남 */
+.cta-like {
+  min-width: 52px;
+  height: 52px;
+  padding: 0 12px;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--color-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+.cta-like.liked { border-color: #ff5a7a; }
+.cta-like-count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
 </style>
