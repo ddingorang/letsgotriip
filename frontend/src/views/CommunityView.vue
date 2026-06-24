@@ -93,6 +93,18 @@
             목록
           </button>
         </div>
+        <div class="sort-toggle" aria-label="핫플 정렬 기준">
+          <button
+            v-for="option in hpSortOptions"
+            :key="option.value"
+            type="button"
+            :class="['sort-btn', { active: hpSort === option.value }]"
+            :aria-pressed="hpSort === option.value"
+            @click="selectHpSort(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
         <div class="cat-scroll">
           <button
             v-for="cat in hpCategories"
@@ -111,25 +123,34 @@
           :places="mappableHotplaces"
           :selected-id="selectedHp?.id"
           @select="onHpSelect"
+          @detail="goHotplaceDetail"
         />
         <div v-if="!mappableHotplaces.length" class="map-empty">
           지도에 표시할 핫플이 아직 없어요
         </div>
 
         <Transition name="slide-up">
-          <div v-if="selectedHp" class="map-card" @click="$router.push(`/hotplace/${selectedHp.id}`)">
+          <div
+            v-if="mapCardHotplace"
+            class="map-card"
+            role="button"
+            tabindex="0"
+            @click="goHotplaceDetail(mapCardHotplace)"
+            @keydown.enter.prevent="goHotplaceDetail(mapCardHotplace)"
+            @keydown.space.prevent="goHotplaceDetail(mapCardHotplace)"
+          >
             <div class="map-thumb">
-              <img :src="selectedHp.imageUrl || seedImg('hp-' + selectedHp.id)" :alt="selectedHp.name" @error="onThumbError($event, 'hp-' + selectedHp.id)" />
+              <img :src="mapCardHotplace.imageUrl || seedImg('hp-' + mapCardHotplace.id)" :alt="mapCardHotplace.name" @error="onThumbError($event, 'hp-' + mapCardHotplace.id)" />
             </div>
             <div class="map-card-body">
               <div class="map-card-row1">
-                <span class="cat-tag">{{ selectedHp.category }}</span>
+                <span class="cat-tag">{{ mapCardHotplace.category }}</span>
               </div>
-              <div class="map-card-name">{{ selectedHp.name }}</div>
-              <div class="map-card-sub">{{ selectedHp.location }} · {{ selectedHp.description }}</div>
+              <div class="map-card-name">{{ mapCardHotplace.name }}</div>
+              <div class="map-card-sub">{{ mapCardHotplace.location }} · {{ mapCardHotplace.description }}</div>
               <div class="map-card-rating">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="#f78f57"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
-                {{ selectedHp.rating }} ({{ selectedHp.ratingCount }})
+                {{ mapCardHotplace.rating }} ({{ mapCardHotplace.ratingCount }})
               </div>
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
@@ -150,7 +171,11 @@
           v-for="hp in filteredHotplaces"
           :key="hp.id"
           class="hp-item"
-          @click="$router.push(`/hotplace/${hp.id}`)"
+          role="button"
+          tabindex="0"
+          @click="goHotplaceDetail(hp)"
+          @keydown.enter.prevent="goHotplaceDetail(hp)"
+          @keydown.space.prevent="goHotplaceDetail(hp)"
         >
           <div class="hp-thumb">
             <img :src="hp.imageUrl || seedImg('hp-' + hp.id)" :alt="hp.name" @error="onThumbError($event, 'hp-' + hp.id)" />
@@ -164,13 +189,17 @@
             </div>
             <div class="hp-stats">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="#f78f57"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
-              {{ hp.rating }} ({{ hp.ratingCount }}) · 저장 {{ hp.saveCount }}
+              {{ hp.rating }} ({{ hp.ratingCount }}) · 좋아요 {{ hp.likeCount ?? 0 }}
             </div>
           </div>
         </div>
       </div>
 
-      <button class="fab" @click="$router.push('/hotplace/register')">
+      <button
+        :class="['fab', 'hp-fab', { 'with-map-card': hpView === 'map' && mapCardHotplace }]"
+        @click="$router.push('/hotplace/register')"
+        aria-label="핫플 등록하기"
+      >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
       </button>
     </div>
@@ -237,7 +266,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PostCard from '@/components/community/PostCard.vue'
 import TripMap from '@/components/common/TripMap.vue'
 import { usePostsStore } from '@/stores/posts.js'
@@ -250,6 +279,7 @@ const hotplaceStore = useHotplaceStore()
 const companionStore = useCompanionStore()
 const notifStore = useNotificationStore()
 const route = useRoute()
+const router = useRouter()
 
 // 진입 쿼리(?tab=hotplace|companion)로 초기 탭 선택 — 0:공유게시판 1:핫플 2:동행
 const TAB_INDEX = { board: 0, hotplace: 1, companion: 2 }
@@ -293,6 +323,12 @@ function onScroll(e) {
 
 // 핫플
 const hpView = ref('list')
+const hpSortOptions = [
+  { value: 'latest', label: '최신순' },
+  { value: 'popular', label: '인기순' },
+  { value: 'name', label: '이름순' },
+]
+const hpSort = ref('latest')
 const hpCategories = ['전체', '카페', '맛집', '명소', '포토존']
 const hpCat = ref('전체')
 const selectedHp = ref(null)
@@ -306,8 +342,33 @@ const mappableHotplaces = computed(() =>
     (h) => Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lng)),
   ),
 )
+const mapCardHotplace = computed(() => {
+  if (!selectedHp.value) return null
+  return mappableHotplaces.value.find((h) => h.id === selectedHp.value.id) ?? null
+})
 function onHpSelect(place) {
-  selectedHp.value = selectedHp.value?.id === place.id ? null : place
+  if (selectedHp.value?.id === place.id) {
+    goHotplaceDetail(place)
+    return
+  }
+  selectedHp.value = place
+}
+async function loadHotplaces() {
+  const items = await hotplaceStore.getList(undefined, { sort: hpSort.value })
+  if (selectedHp.value && !items.some((h) => h.id === selectedHp.value.id)) {
+    selectedHp.value = null
+  }
+}
+function selectHpSort(sort) {
+  if (hpSort.value === sort) return
+  hpSort.value = sort
+  selectedHp.value = null
+  loadHotplaces()
+}
+function goHotplaceDetail(place) {
+  const id = place?.id
+  if (id == null) return
+  router.push({ name: 'hotplace-detail', params: { id } })
 }
 
 // 썸네일 — 업로드 이미지가 없거나 로딩 실패 시 로컬 기본 썸네일로 채움(외부 더미 미사용)
@@ -322,7 +383,7 @@ function onThumbError(e) {
 onMounted(() => {
   postsStore.fetchPosts(true)
   notifStore.load()
-  hotplaceStore.getList()
+  loadHotplaces()
   companionStore.fetchCompanions()
 })
 </script>
@@ -480,7 +541,10 @@ onMounted(() => {
 .bottom-spacer { height: calc(28px + var(--safe-bottom)); }
 
 /* ====== 핫플 ====== */
-.hp-pane { background: var(--color-white); }
+.hp-pane {
+  background: var(--color-white);
+  min-height: 0;
+}
 .hp-controls {
   padding: 12px 16px;
   display: flex;
@@ -488,6 +552,9 @@ onMounted(() => {
   gap: 10px;
   border-bottom: 1px solid var(--color-line-light);
   flex-shrink: 0;
+  position: relative;
+  z-index: 30;
+  background: var(--color-white);
 }
 .view-toggle {
   display: flex;
@@ -513,6 +580,29 @@ onMounted(() => {
   color: white;
   border-color: var(--color-ink);
 }
+.sort-toggle {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+.sort-btn {
+  flex-shrink: 0;
+  min-width: 64px;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  border: 1.5px solid var(--color-line);
+  background: var(--color-white);
+  letter-spacing: 0;
+  transition: all 0.15s;
+}
+.sort-btn.active {
+  background: var(--color-peach);
+  color: white;
+  border-color: var(--color-peach);
+}
 .cat-scroll {
   display: flex;
   gap: 8px;
@@ -526,8 +616,14 @@ onMounted(() => {
 /* Map */
 .map-wrap {
   flex: 1;
+  min-height: 0;
   position: relative;
   overflow: hidden;
+  isolation: isolate;
+}
+
+.map-wrap :deep(.trip-map) {
+  min-height: 0;
 }
 
 .map-empty {
@@ -535,7 +631,8 @@ onMounted(() => {
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: 35;
+  max-width: calc(100% - 32px);
   background: var(--color-white);
   border: 1px solid var(--color-line-light);
   box-shadow: var(--shadow-card);
@@ -543,6 +640,7 @@ onMounted(() => {
   padding: 8px 16px;
   font-size: 12.5px;
   color: var(--color-ink-muted);
+  text-align: center;
 }
 
 .hp-empty {
@@ -606,11 +704,14 @@ onMounted(() => {
 }
 .map-card {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  margin: 0 12px 12px;
+  bottom: calc(24px + var(--safe-bottom));
+  left: 12px;
+  right: 12px;
+  z-index: 40;
+  min-height: 88px;
+  margin: 0;
   background: white;
+  border: 1px solid var(--color-line-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: 12px;
@@ -644,8 +745,17 @@ onMounted(() => {
   margin-bottom: 3px;
 }
 .map-card-name { font-size: 15px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.3px; }
-.map-card-sub { font-size: 12px; color: var(--color-ink-muted); margin-top: 2px; }
+.map-card-sub {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  margin-top: 2px;
+}
 .map-card-rating { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--color-ink-secondary); margin-top: 4px; }
+.map-card > svg { flex-shrink: 0; }
 
 .cat-tag {
   display: inline-block;
@@ -661,7 +771,7 @@ onMounted(() => {
 .hp-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 4px 0 calc(88px + var(--safe-bottom));
 }
 .hp-item {
   display: flex;
@@ -670,6 +780,11 @@ onMounted(() => {
   padding: 14px 16px;
   border-bottom: 1px solid var(--color-line-light);
   cursor: pointer;
+}
+.hp-item:focus-visible,
+.map-card:focus-visible {
+  outline: 2px solid var(--color-peach);
+  outline-offset: -2px;
 }
 .hp-thumb {
   position: relative;
@@ -844,6 +959,13 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(247, 143, 87, 0.45);
   z-index: 10;
   transition: background 0.15s, transform 0.15s;
+}
+.hp-fab {
+  bottom: calc(20px + var(--safe-bottom));
+  z-index: 50;
+}
+.hp-fab.with-map-card {
+  bottom: calc(128px + var(--safe-bottom));
 }
 .fab:active { background: var(--color-peach-pressed); transform: scale(0.95); }
 

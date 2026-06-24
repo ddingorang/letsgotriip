@@ -41,8 +41,7 @@
     </div>
 
     <div class="scroll-content">
-      <!-- ── 내 계획 탭 ──────────────────────────────────────────────── -->
-      <div v-show="pageTab === 'plans'">
+      <div>
       <!-- ── Loading state ────────────────────────────────────────────── -->
       <div v-if="listLoading && plans.length === 0" class="state-block">
         <div class="skeleton-card" />
@@ -584,7 +583,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
-import { useCompanionStore } from '@/stores/companion.js'
 import { planApi, attractionApi, communityApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 import { useConfirm } from '@/composables/useConfirm.js'
@@ -593,14 +591,8 @@ const $confirm = useConfirm().confirm
 
 const router = useRouter()
 const planStore = usePlanStore()
-const companionStore = useCompanionStore()
 // storeToRefs로 반응성 유지 — 비반응적 destructure 시 loadPlans() 후 목록이 갱신되지 않음
 const { plans } = storeToRefs(planStore)
-// 동행 목록도 store 기준으로 반응성 유지(하드코딩 목업 제거 → 실 API 연동)
-const { companions } = storeToRefs(companionStore)
-
-// 페이지 상단 탭 — '내 계획' | '동행 구하기'
-const pageTab = ref('plans')
 
 const selectedPlanId = ref(null)
 
@@ -1038,20 +1030,6 @@ function openKakaoNavi() {
   window.open(`https://map.kakao.com/link/to/${name},${first.lat},${first.lng}`, '_blank', 'noopener')
 }
 
-// ── 동행 카드용 D-day 계산 ─────────────────────────────────────────────────────
-// store companion의 dateRange(=travelDate, 'YYYY-MM-DD')에서 남은 일수를 구한다.
-// 날짜 파싱 불가/과거면 null → 배지 미표시.
-function companionDday(dateStr) {
-  if (!dateStr) return null
-  const target = new Date(dateStr)
-  if (Number.isNaN(target.getTime())) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  target.setHours(0, 0, 0, 0)
-  const diff = Math.round((target - today) / 86400000)
-  return diff >= 0 ? diff : null
-}
-
 /** Navigate to /ai/plan (new AI trip flow) */
 function goNewTrip() {
   router.push('/ai/plan')
@@ -1487,30 +1465,6 @@ async function removePlace(planId, dayNo, place) {
 .compare-check.on {
   background: white;
   border-color: white;
-}
-
-/* ── 페이지 탭 (내 계획 / 동행 구하기) ──────────────────────────────────── */
-.page-tab-bar {
-  display: flex;
-  gap: 4px;
-  padding: 4px 20px 0;
-  border-bottom: 1px solid var(--color-line-light);
-  flex-shrink: 0;
-}
-.page-tab {
-  flex: 1;
-  padding: 12px 0 11px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--color-ink-muted);
-  letter-spacing: -0.3px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-}
-.page-tab.active {
-  color: var(--color-peach);
-  border-bottom-color: var(--color-peach);
 }
 
 .scroll-content {
@@ -2516,170 +2470,6 @@ async function removePlace(planId, dayNo, place) {
 .expand-leave-to {
   max-height: 0;
   opacity: 0;
-}
-
-/* ── Companion section ────────────────────────────────────────────────────── */
-.companion-section {
-  padding-bottom: 16px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.section-title {
-  font-size: 17px;
-  font-weight: 750;
-  color: var(--color-ink);
-  letter-spacing: -0.4px;
-}
-
-.see-all {
-  font-size: 13px;
-  color: var(--color-ink-muted);
-}
-
-.companion-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.companion-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-/* 동행 카드 대표 이미지 — 카드 패딩을 상쇄해 상단 전체 폭 배너로 */
-.comp-thumb {
-  margin: -16px -16px 12px;
-  height: 96px;
-  position: relative;
-  overflow: hidden;
-  background: var(--color-line-light);
-}
-.comp-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-/* 이미지 없음(또는 깨짐) — 기본 그라데이션 placeholder */
-.comp-thumb.ph {
-  background: linear-gradient(135deg, #f7b690 0%, #e89a6c 100%);
-}
-
-.comp-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.comp-badge {
-  background: var(--color-peach-light);
-  color: var(--color-peach-pressed);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-}
-
-.comp-badge.urgent {
-  background: #fff0e8;
-  color: #d04010;
-}
-
-/* ── Companion empty state ────────────────────────────────────────────────── */
-.companion-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 28px 16px;
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-}
-
-.companion-empty-text {
-  font-size: 13px;
-  color: var(--color-ink-muted);
-}
-
-.companion-empty-btn {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-peach-pressed);
-  background: var(--color-white);
-  border: 1px solid var(--color-line-light);
-  padding: 8px 18px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-}
-
-.comp-dday {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-ink-muted);
-}
-
-.comp-dday.urgent {
-  color: var(--color-error);
-}
-
-.comp-title {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.3px;
-  margin-bottom: 4px;
-}
-
-.comp-sub {
-  font-size: 12.5px;
-  color: var(--color-ink-muted);
-  margin-bottom: 12px;
-}
-
-.comp-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.comp-members {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.member-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-peach);
-}
-
-.member-text {
-  font-size: 12px;
-  color: var(--color-ink-muted);
-  margin-left: 4px;
-}
-
-.join-btn {
-  background: var(--color-peach);
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 7px 16px;
-  border-radius: var(--radius-full);
-  letter-spacing: -0.2px;
 }
 
 .bottom-spacer {

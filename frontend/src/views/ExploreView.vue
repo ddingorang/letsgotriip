@@ -383,6 +383,55 @@ function distanceKm(a, b) {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
 }
 
+const RECOMMEND_SORT_FIELDS = [
+  'recommendationScore',
+  'recommendScore',
+  'score',
+  'popularityScore',
+  'likeCount',
+  'rating',
+  'reviewCount',
+]
+
+function finiteNumber(value) {
+  if (value == null || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function comparePlaceName(a, b) {
+  const aName = String(a.name ?? '').trim()
+  const bName = String(b.name ?? '').trim()
+  if (aName && !bName) return -1
+  if (!aName && bName) return 1
+  const byName = aName.localeCompare(bName, 'ko')
+  if (byName !== 0) return byName
+  return String(a.contentId ?? a.id ?? '').localeCompare(
+    String(b.contentId ?? b.id ?? ''),
+    'ko',
+    { numeric: true },
+  )
+}
+
+function compareRecommendation(a, b) {
+  for (const field of RECOMMEND_SORT_FIELDS) {
+    const aValue = finiteNumber(a[field])
+    const bValue = finiteNumber(b[field])
+    if (aValue == null && bValue == null) continue
+    if (aValue == null) return 1
+    if (bValue == null) return -1
+    if (aValue !== bValue) return bValue - aValue
+  }
+  return comparePlaceName(a, b)
+}
+
+function compareDistance(a, b) {
+  const aDist = finiteNumber(a._dist) ?? Infinity
+  const bDist = finiteNumber(b._dist) ?? Infinity
+  if (aDist !== bDist) return aDist < bDist ? -1 : 1
+  return comparePlaceName(a, b)
+}
+
 // ── Filtered + sorted display list ────────────────────────────────────────────
 const displayedPlaces = computed(() => {
   // 태그모드면 큐레이트(좋아요 인기순) 결과, 아니면 일반 탐색 목록.
@@ -410,12 +459,12 @@ const displayedPlaces = computed(() => {
   // 정렬 적용 — 원본을 변형하지 않도록 복사 후 정렬.
   if (sortMode.value === 'distance' && userLoc.value) {
     // 거리순 — 가까운 순. 좌표 없는 항목(_dist=Infinity)은 뒤로.
-    list = [...list].sort((a, b) => a._dist - b._dist)
+    list = [...list].sort(compareDistance)
   } else if (sortMode.value === 'name') {
     // 이름순 — title 로캘 비교(가나다). 한글·영문·숫자 자연스러운 정렬.
-    list = [...list].sort((a, b) =>
-      String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko'),
-    )
+    list = [...list].sort(comparePlaceName)
+  } else {
+    list = [...list].sort(compareRecommendation)
   }
   return list
 })

@@ -104,6 +104,11 @@ export function mapAttraction(item, rank = null) {
     // rating / review — TourAPI has no ratings; use null so UI can hide gracefully
     rating: item.rating ?? null,
     reviewCount: item.reviewCount ?? null,
+    likeCount: item.likeCount ?? null,
+    recommendationScore: item.recommendationScore ?? item.recommendScore ?? null,
+    recommendScore: item.recommendScore ?? null,
+    score: item.score ?? null,
+    popularityScore: item.popularityScore ?? null,
     // tags from contentTypeId
     tags: item.tags ?? (item.contentTypeId ? [CONTENT_TYPE_MAP[item.contentTypeId] ?? '관광'].filter(Boolean) : []),
     // geo
