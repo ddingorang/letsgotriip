@@ -137,6 +137,8 @@ async function loadTrending() {
       imageUrl: h.thumbnailUrl,
       category: h.category,
       likeCount: h.likeCount,
+      rating: h.rating,
+      reviewCount: h.ratingCount,
       rank: i + 1,
     }))
   } catch {

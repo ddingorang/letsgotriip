@@ -57,7 +57,8 @@ public class DataSeeder implements ApplicationRunner {
             log.info("[DataSeeder] 데모 데이터 시드 시작");
 
             Long demoUserId = seedUsers();
-            seedHotPlaces(demoUserId);
+            // 핫플 시딩은 SeedService(@seed.triip, 좋아요·별점 부여)가 전담한다.
+            // 여기서 중복 생성하면 '지금 뜨는 여행지'에 좋아요 0·별점 없는 중복 카드가 섞이므로 제거.
             seedCommunityPosts(demoUserId);
             seedCompanionPost(demoUserId);
 

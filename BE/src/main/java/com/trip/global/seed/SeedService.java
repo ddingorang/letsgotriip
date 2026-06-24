@@ -570,6 +570,13 @@ public class SeedService {
         final Long id = resp.id();
         hotPlaceRepository.findById(id).ifPresent(hp -> {
             hp.applyDemoLikeCount(likeCount);
+            // 사실적 별점 — 인기(좋아요)에 약하게 비례(280→4.1, 1240→4.8), 이름 해시로 ±0.05 흔들림.
+            int h = Math.abs(name.hashCode());
+            double rating = 3.9 + Math.min(0.9, likeCount / 1400.0) + ((h % 11) - 5) * 0.01;
+            rating = Math.round(Math.max(3.9, Math.min(4.9, rating)) * 10) / 10.0;
+            // 리뷰수 — 좋아요의 35~64% 수준(데모용 자연스러운 표본).
+            int ratingCount = Math.max(12, (int) Math.round(likeCount * (0.35 + (h % 30) / 100.0)));
+            hp.applyDemoRating(rating, ratingCount);
             for (User u : likers) {
                 try {
                     hotPlaceLikeRepository.save(com.trip.community.entity.HotPlaceLike.builder()

@@ -15,6 +15,8 @@ public record HotPlaceSummaryResponse(
         HotPlaceCategory category,
         String thumbnailUrl,
         int likeCount,
+        Double rating,
+        int ratingCount,
         LocalDateTime createdAt
 ) {
     public static HotPlaceSummaryResponse of(HotPlace hotPlace, String thumbnailUrl) {
@@ -27,6 +29,8 @@ public record HotPlaceSummaryResponse(
                 hotPlace.getCategory(),
                 thumbnailUrl,
                 hotPlace.getLikeCount(),
+                hotPlace.getRating(),
+                hotPlace.getRatingCount(),
                 hotPlace.getCreatedAt()
         );
     }

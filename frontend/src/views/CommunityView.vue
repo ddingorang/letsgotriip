@@ -22,7 +22,7 @@
     <!-- Main tabs -->
     <div class="main-tab-bar">
       <button
-        v-for="(tab, i) in ['공유게시판', '핫플']"
+        v-for="(tab, i) in ['공유게시판', '핫플', '동행']"
         :key="tab"
         :class="['main-tab', { active: activeMain === i }]"
         @click="activeMain = i"
@@ -175,26 +175,99 @@
       </button>
     </div>
 
+    <!-- ③ 동행 -->
+    <div v-show="activeMain === 2" class="tab-pane companion-pane">
+      <div class="scroll-content">
+        <div class="companion-section">
+          <div v-if="companions.length" class="companion-list">
+            <div
+              v-for="comp in companions"
+              :key="comp.id"
+              class="companion-card"
+              @click="$router.push(`/companion/${comp.id}`)"
+            >
+              <div class="comp-thumb" :class="{ ph: !comp.imageUrl }">
+                <img
+                  v-if="comp.imageUrl"
+                  :src="comp.imageUrl"
+                  alt=""
+                  loading="lazy"
+                  @error="(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('ph') }"
+                />
+              </div>
+              <div class="comp-header">
+                <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
+                <span
+                  v-if="companionDday(comp.dateRange) != null"
+                  class="comp-dday"
+                  :class="{ urgent: companionDday(comp.dateRange) <= 3 }"
+                >
+                  D-{{ companionDday(comp.dateRange) }}
+                </span>
+              </div>
+              <h4 class="comp-title">{{ comp.title }}</h4>
+              <p class="comp-sub">{{ comp.location }}<span v-if="comp.dateRange"> · {{ comp.dateRange }}</span></p>
+              <div class="comp-footer">
+                <div class="comp-members">
+                  <div v-for="i in Math.min(comp.currentCount, 6)" :key="i" class="member-dot" />
+                  <span class="member-text">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
+                </div>
+                <button class="join-btn" @click.stop="$router.push(`/companion/${comp.id}`)">참여하기</button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="companion-empty">
+            <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
+            <button class="companion-empty-btn" @click="$router.push('/companion/write')">
+              동행 모집하기
+            </button>
+          </div>
+          <div class="bottom-spacer" />
+        </div>
+      </div>
+
+      <button class="fab" @click="$router.push('/companion/write')" aria-label="동행 모집하기">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+      </button>
+    </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import PostCard from '@/components/community/PostCard.vue'
 import TripMap from '@/components/common/TripMap.vue'
 import { usePostsStore } from '@/stores/posts.js'
 import { useHotplaceStore } from '@/stores/hotplace.js'
+import { useCompanionStore } from '@/stores/companion.js'
 import { useNotificationStore } from '@/stores/notification.js'
 
 const postsStore = usePostsStore()
 const hotplaceStore = useHotplaceStore()
+const companionStore = useCompanionStore()
 const notifStore = useNotificationStore()
 const route = useRoute()
 
-// 진입 쿼리(?tab=hotplace)로 초기 탭 선택 — 0:공유게시판 1:핫플
-const TAB_INDEX = { board: 0, hotplace: 1 }
+// 진입 쿼리(?tab=hotplace|companion)로 초기 탭 선택 — 0:공유게시판 1:핫플 2:동행
+const TAB_INDEX = { board: 0, hotplace: 1, companion: 2 }
 const activeMain = ref(TAB_INDEX[route.query.tab] ?? 0)
+
+// 동행 — 모집 중인 동행 목록(계획 페이지에서 커뮤니티 탭으로 이전)
+const { companions } = storeToRefs(companionStore)
+// dateRange('YYYY-MM-DD')에서 남은 일수. 파싱 불가/과거면 null → 배지 미표시.
+function companionDday(dateStr) {
+  if (!dateStr) return null
+  const target = new Date(dateStr)
+  if (Number.isNaN(target.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target - today) / 86400000)
+  return diff >= 0 ? diff : null
+}
 
 // 공유게시판
 const filterTabs = ['전체', '후기', '질문', '꿀팁', '맛집', '동행']
@@ -250,6 +323,7 @@ onMounted(() => {
   postsStore.fetchPosts(true)
   notifStore.load()
   hotplaceStore.getList()
+  companionStore.fetchCompanions()
 })
 </script>
 
@@ -632,132 +706,126 @@ onMounted(() => {
 }
 /* ====== 동행 ====== */
 .companion-pane { background: var(--color-white); }
-.section-header {
+.companion-section { padding: 16px; }
+.companion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.companion-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  overflow: hidden;
+}
+/* 동행 카드 대표 이미지 — 카드 패딩을 상쇄해 상단 전체 폭 배너로 */
+.comp-thumb {
+  margin: -16px -16px 12px;
+  height: 96px;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-line-light);
+}
+.comp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.comp-thumb.ph {
+  background: linear-gradient(135deg, #f7b690 0%, #e89a6c 100%);
+}
+.comp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 10px;
+  margin-bottom: 8px;
 }
-.section-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.4px;
-}
-.see-all-btn {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-ink-muted);
-}
-/* Room cards horizontal scroll */
-.rooms-row {
-  display: flex;
-  gap: 10px;
-  padding: 0 16px 4px;
-  overflow-x: auto;
-}
-.room-card {
-  flex-shrink: 0;
-  width: 120px;
-  border-radius: var(--radius-lg);
-  border: 1.5px solid var(--color-line-light);
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--color-white);
-}
-.room-avatar-area {
-  width: 100%;
-  height: 70px;
-  background: var(--color-surface);
-  overflow: hidden;
-}
-.room-bottom {
-  padding: 8px 10px 10px;
-}
-.room-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.room-d-row { margin-top: 2px; }
-.room-d {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-ink-muted);
-}
-.room-d.urgent { color: var(--color-peach); }
-.room-d.ended { color: var(--color-ink-muted); }
-.room-unread-badge {
-  margin-top: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-peach);
-}
-.room-read {
-  margin-top: 5px;
-  font-size: 11px;
-  color: var(--color-ink-muted);
-}
-
-/* Companion list */
-.companion-list { padding: 0; }
-.comp-item {
-  display: flex;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--color-line-light);
-  cursor: pointer;
-}
-.comp-thumb {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.comp-info { flex: 1; min-width: 0; }
-.comp-header-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-.status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
+.comp-badge {
   background: var(--color-peach-light);
   color: var(--color-peach-pressed);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
 }
-.status-badge.urgent {
+.comp-badge.urgent {
   background: #fff0e8;
   color: #d04010;
 }
-.comp-date { font-size: 12px; color: var(--color-ink-muted); }
+.comp-dday {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+}
+.comp-dday.urgent {
+  color: var(--color-error);
+}
 .comp-title {
   font-size: 14.5px;
   font-weight: 700;
   color: var(--color-ink);
   letter-spacing: -0.3px;
-  margin-bottom: 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-bottom: 4px;
 }
-.comp-meta { display: flex; align-items: center; gap: 12px; }
-.comp-loc, .comp-people {
+.comp-sub {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  margin-bottom: 12px;
+}
+.comp-footer {
   display: flex;
   align-items: center;
-  gap: 3px;
+  justify-content: space-between;
+}
+.comp-members {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.member-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-peach);
+}
+.member-text {
   font-size: 12px;
   color: var(--color-ink-muted);
+  margin-left: 4px;
+}
+.join-btn {
+  background: var(--color-peach);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: var(--radius-full);
+  letter-spacing: -0.2px;
+}
+.companion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+.companion-empty-text {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+.companion-empty-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+  background: var(--color-white);
+  border: 1px solid var(--color-line-light);
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
 }
 
 /* FAB */

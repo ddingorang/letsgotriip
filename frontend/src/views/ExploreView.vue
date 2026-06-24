@@ -91,6 +91,11 @@
         </button>
       </div>
 
+      <!-- 지도가 넓어 조회 반경(최대 20km)이 화면보다 작을 때 — 정직하게 안내 -->
+      <div v-if="areaCapped" class="area-cap-hint">
+        지도가 넓어 중심 반경 20km만 조회됐어요. 확대하면 보이는 영역과 정확히 맞춰져요.
+      </div>
+
       <!-- Loading skeleton -->
       <div v-if="store.loading" class="place-grid">
         <div v-for="n in 4" :key="n" class="place-row skeleton-row">
@@ -424,6 +429,8 @@ const mapCenter = computed(() =>
 const mapDragCenter = ref(null)
 const showMapSearchBtn = ref(false)
 const mapFit = ref(true) // 현 지도에서 검색 시 false → 카메라 고정
+// 지도가 너무 넓어(내접원 > 20km) 조회 원이 화면보다 작아진 상태 — 안내 노출용
+const areaCapped = ref(false)
 
 // 카카오맵 level(클수록 광역) → 검색 반경(m)
 const ZOOM_RADIUS = { 1:500, 2:1000, 3:2000, 4:3000, 5:5000, 6:8000, 7:12000, 8:16000, 9:20000, 10:35000, 11:60000, 12:100000, 13:200000, 14:400000 }
@@ -444,8 +451,11 @@ function mapAreaParams(extra = {}) {
     // 중심~북변(N-S 반높이), 중심~동변(E-W 반너비) 중 더 작은 값 = 내접원 반경.
     const vertM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.neLat, lng: c.lng }) * 1000
     const horizM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.lat, lng: c.neLng }) * 1000
-    radius = Math.round(Math.min(vertM, horizM))
-    radius = Math.min(Math.max(radius, 500), 20000) // TourAPI radius 상한 20km
+    const inscribed = Math.round(Math.min(vertM, horizM))
+    radius = Math.min(Math.max(inscribed, 500), 20000) // TourAPI radius 상한 20km
+    // 화면 내접원이 상한(20km)을 넘으면 조회 원이 화면보다 작아져 '화면=조회영역'이 깨진다.
+    // → 사용자에게 "확대하면 정확해진다"고 안내하기 위한 플래그.
+    areaCapped.value = inscribed > 20000
   } else {
     radius = ZOOM_RADIUS[c.level ?? 9] ?? 20000
   }
@@ -625,6 +635,7 @@ function selectCategory(key) {
     if (route.query.tag) router.replace({ path: '/explore', query: {} })
   }
   showMapSearchBtn.value = false
+  areaCapped.value = false // 분류 조회는 지도범위 기반이 아니므로 안내 해제
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
   const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
@@ -1004,6 +1015,17 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
+}
+
+.area-cap-hint {
+  margin: -4px 20px 8px;
+  padding: 8px 12px;
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: -0.2px;
+  border-radius: var(--radius-md);
 }
 
 .festival-header {

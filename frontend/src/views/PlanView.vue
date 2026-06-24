@@ -40,20 +40,6 @@
       </div>
     </div>
 
-    <!-- 페이지 탭 — 내 계획 / 동행 구하기 -->
-    <div class="page-tab-bar">
-      <button
-        class="page-tab"
-        :class="{ active: pageTab === 'plans' }"
-        @click="pageTab = 'plans'"
-      >내 계획</button>
-      <button
-        class="page-tab"
-        :class="{ active: pageTab === 'companion' }"
-        @click="pageTab = 'companion'"
-      >동행 구하기</button>
-    </div>
-
     <div class="scroll-content">
       <!-- ── 내 계획 탭 ──────────────────────────────────────────────── -->
       <div v-show="pageTab === 'plans'">
@@ -415,58 +401,6 @@
         </div>
       </div>
 
-      </div>
-      <!-- ── 동행 구하기 탭 ──────────────────────────────────────────── -->
-      <div v-show="pageTab === 'companion'" class="companion-section">
-        <div class="section-header">
-          <h2 class="section-title">동행 구하기</h2>
-          <button class="see-all" @click="router.push('/companion/write')">모집하기</button>
-        </div>
-        <div v-if="companions.length" class="companion-list">
-          <div
-            v-for="comp in companions"
-            :key="comp.id"
-            class="companion-card"
-            @click="router.push(`/companion/${comp.id}`)"
-          >
-            <!-- 대표 이미지 썸네일 — 없으면 기본 그라데이션(comp-thumb-ph) -->
-            <div class="comp-thumb" :class="{ ph: !comp.imageUrl }">
-              <img
-                v-if="comp.imageUrl"
-                :src="comp.imageUrl"
-                alt=""
-                loading="lazy"
-                @error="(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('ph') }"
-              />
-            </div>
-            <div class="comp-header">
-              <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
-              <span
-                v-if="companionDday(comp.dateRange) != null"
-                class="comp-dday"
-                :class="{ urgent: companionDday(comp.dateRange) <= 3 }"
-              >
-                D-{{ companionDday(comp.dateRange) }}
-              </span>
-            </div>
-            <h4 class="comp-title">{{ comp.title }}</h4>
-            <p class="comp-sub">{{ comp.location }}<span v-if="comp.dateRange"> · {{ comp.dateRange }}</span></p>
-            <div class="comp-footer">
-              <div class="comp-members">
-                <div v-for="i in Math.min(comp.currentCount, 6)" :key="i" class="member-dot" />
-                <span class="member-text">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
-              </div>
-              <button class="join-btn" @click.stop="router.push(`/companion/${comp.id}`)">참여하기</button>
-            </div>
-          </div>
-        </div>
-        <!-- 동행 목록 비어있음(미로그인/없음/로드 실패) — 가짜 목업 대신 빈상태 노출 -->
-        <div v-else class="companion-empty">
-          <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
-          <button class="companion-empty-btn" @click="router.push('/companion/write')">
-            동행 모집하기
-          </button>
-        </div>
       </div>
 
       <div class="bottom-spacer" />
@@ -956,8 +890,6 @@ async function addPlaceToDay(item) {
 
 onMounted(() => {
   reloadPlans()
-  // 실제 동행 목록 로드(하드코딩 목업 제거). 실패 시 store가 조용히 빈 배열 유지 → 빈상태 노출.
-  companionStore.fetchCompanions()
 })
 
 /** 계획 목록 로드 — 로딩/에러를 분리 추적해 빈상태 위장을 막는다 */
