@@ -2,6 +2,9 @@ package com.trip.story.service;
 
 import com.trip.global.error.GeneralException;
 import com.trip.global.error.ResponseCode;
+import com.trip.global.error.exception.handler.PlanHandler;
+import com.trip.plan.entity.TripPlan;
+import com.trip.plan.repository.PlanRepository;
 import com.trip.story.dto.TravelStoryCreateRequest;
 import com.trip.story.dto.TravelStoryResponse;
 import com.trip.story.dto.TravelStoryUpdateRequest;
@@ -19,6 +22,7 @@ import java.util.List;
 public class TravelStoryService {
 
     private final TravelStoryRepository travelStoryRepository;
+    private final PlanRepository planRepository;
 
     /** 내 스토리 목록 — 최신순 */
     @Transactional(readOnly = true)
@@ -37,9 +41,10 @@ public class TravelStoryService {
 
     /** 스토리 생성 */
     public TravelStoryResponse create(Long userId, TravelStoryCreateRequest request) {
+        Long planId = validateOwnedPlan(userId, request.planId());
         TravelStory story = TravelStory.builder()
                 .userId(userId)
-                .planId(request.planId())
+                .planId(planId)
                 .title(request.title())
                 .beforeNote(request.beforeNote())
                 .afterNote(request.afterNote())
@@ -52,9 +57,10 @@ public class TravelStoryService {
     /** 스토리 부분 수정 — 소유자만 가능 */
     public TravelStoryResponse update(Long userId, Long id, TravelStoryUpdateRequest request) {
         TravelStory story = findOwned(userId, id);
+        Long planId = validateOwnedPlan(userId, request.planId());
         story.update(
                 request.title(),
-                request.planId(),
+                planId,
                 request.beforeNote(),
                 request.afterNote(),
                 request.rating(),
@@ -73,5 +79,17 @@ public class TravelStoryService {
     private TravelStory findOwned(Long userId, Long id) {
         return travelStoryRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new GeneralException(ResponseCode._FORBIDDEN));
+    }
+
+    private Long validateOwnedPlan(Long userId, Long planId) {
+        if (planId == null) {
+            return null;
+        }
+        TripPlan plan = planRepository.findById(planId)
+                .orElseThrow(() -> new PlanHandler(ResponseCode.PLAN_NOT_FOUND));
+        if (!plan.getUserId().equals(userId)) {
+            throw new PlanHandler(ResponseCode.PLAN_FORBIDDEN);
+        }
+        return plan.getId();
     }
 }

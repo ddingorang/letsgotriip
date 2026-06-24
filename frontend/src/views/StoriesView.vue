@@ -47,6 +47,16 @@
             </div>
           </div>
 
+          <button
+            v-if="linkedPlan(story)"
+            class="linked-plan"
+            @click="goPlan(story.planId)"
+          >
+            <span class="linked-label">내 여행</span>
+            <span class="linked-main">{{ linkedPlan(story).title }}</span>
+            <span class="linked-date">{{ planDateLabel(linkedPlan(story)) }}</span>
+          </button>
+
           <div v-if="story.beforeNote" class="note-block">
             <span class="note-label note-before">여행 전 기대</span>
             <p class="note-text">{{ story.beforeNote }}</p>
@@ -101,6 +111,19 @@
           </label>
 
           <label class="field">
+            <span class="field-label">연결할 내 여행</span>
+            <select v-model="form.planId" class="field-input">
+              <option value="">{{ editing ? '기존 연결 유지' : '선택 안 함' }}</option>
+              <option v-for="plan in plans" :key="plan.id" :value="String(plan.id)">
+                {{ plan.title }} · {{ planDateLabel(plan) }}
+              </option>
+            </select>
+            <span v-if="plansLoading" class="field-hint">내 여행을 불러오는 중…</span>
+            <span v-else-if="plansError" class="field-hint error">{{ plansError }}</span>
+            <span v-else-if="plans.length === 0" class="field-hint">먼저 내 여행 계획을 만들면 스토리와 연결할 수 있어요.</span>
+          </label>
+
+          <label class="field">
             <span class="field-label">여행 전 기대</span>
             <textarea v-model.trim="form.beforeNote" class="field-textarea" rows="3" placeholder="이번 여행에서 기대하는 점을 적어보세요." maxlength="1000" />
           </label>
@@ -146,17 +169,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { storyApi } from '@/api/index.js'
+import { computed, ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { planApi, storyApi } from '@/api/index.js'
 import { useConfirm } from '@/composables/useConfirm.js'
 
 const $confirm = useConfirm().confirm
+const router = useRouter()
 
 // ── 상태 ──────────────────────────────────────────────────────────────────────
 const stories = ref([])
 const loading = ref(false)
 const loadError = ref(false)
 const deletingId = ref(null)
+const plans = ref([])
+const plansLoading = ref(false)
+const plansError = ref('')
 
 const modalOpen = ref(false)
 const editing = ref(false)
@@ -166,9 +194,16 @@ const formError = ref('')
 
 const form = reactive({
   title: '',
+  planId: '',
   beforeNote: '',
   afterNote: '',
   rating: 0,
+})
+
+const plansById = computed(() => {
+  const map = new Map()
+  plans.value.forEach((plan) => map.set(String(plan.id), plan))
+  return map
 })
 
 // ── 토스트 ────────────────────────────────────────────────────────────────────
@@ -185,6 +220,29 @@ function storyKey(story) {
   return story.id
 }
 
+function linkedPlan(story) {
+  if (!story?.planId) return null
+  return plansById.value.get(String(story.planId)) ?? null
+}
+
+function formatDate(str) {
+  if (!str) return ''
+  const d = new Date(str)
+  if (Number.isNaN(d.getTime())) return str
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+function planDateLabel(plan) {
+  if (!plan?.startDate && !plan?.endDate) return '날짜 미정'
+  if (plan.startDate === plan.endDate) return formatDate(plan.startDate)
+  return `${formatDate(plan.startDate)} - ${formatDate(plan.endDate)}`
+}
+
+function goPlan(planId) {
+  if (!planId) return
+  router.push({ path: '/plan', query: { planId } })
+}
+
 // ── 목록 조회 ─────────────────────────────────────────────────────────────────
 async function fetchStories() {
   loading.value = true
@@ -199,9 +257,24 @@ async function fetchStories() {
   }
 }
 
+async function fetchPlans() {
+  plansLoading.value = true
+  plansError.value = ''
+  try {
+    const { data } = await planApi.getMyPlans({ page: 0, size: 50 })
+    plans.value = Array.isArray(data) ? data : (data?.content ?? [])
+  } catch (e) {
+    plans.value = []
+    plansError.value = e.response?.data?.message ?? '내 여행을 불러오지 못했어요.'
+  } finally {
+    plansLoading.value = false
+  }
+}
+
 // ── 모달 ──────────────────────────────────────────────────────────────────────
 function resetForm() {
   form.title = ''
+  form.planId = ''
   form.beforeNote = ''
   form.afterNote = ''
   form.rating = 0
@@ -212,6 +285,7 @@ function openCreate() {
   editing.value = false
   editingId.value = null
   resetForm()
+  if (plans.value.length === 1) form.planId = String(plans.value[0].id)
   modalOpen.value = true
 }
 
@@ -219,6 +293,7 @@ function openEdit(story) {
   editing.value = true
   editingId.value = storyKey(story)
   form.title = story.title ?? ''
+  form.planId = story.planId ? String(story.planId) : ''
   form.beforeNote = story.beforeNote ?? ''
   form.afterNote = story.afterNote ?? ''
   form.rating = story.rating ?? 0
@@ -247,6 +322,8 @@ async function onSubmit() {
     afterNote: form.afterNote || null,
     rating: form.rating || null,
   }
+  if (form.planId) payload.planId = Number(form.planId)
+  if (!editing.value && !form.planId) payload.planId = null
 
   try {
     if (editing.value) {
@@ -281,7 +358,10 @@ async function onDelete(story) {
   }
 }
 
-onMounted(fetchStories)
+onMounted(() => {
+  fetchStories()
+  fetchPlans()
+})
 </script>
 
 <style scoped>
@@ -391,6 +471,41 @@ onMounted(fetchStories)
   gap: 1px;
   flex-shrink: 0;
   padding-top: 2px;
+}
+
+.linked-plan {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  margin: 0 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-peach-light);
+  color: var(--color-ink);
+  text-align: left;
+}
+.linked-label {
+  color: var(--color-peach-pressed);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.linked-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+.linked-date {
+  color: var(--color-ink-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 .note-block { margin-bottom: 12px; }
@@ -558,6 +673,14 @@ onMounted(fetchStories)
   font-weight: 700;
   color: var(--color-ink);
   letter-spacing: -0.2px;
+}
+.field-hint {
+  color: var(--color-ink-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.field-hint.error {
+  color: var(--color-error);
 }
 .field-input,
 .field-textarea {

@@ -587,7 +587,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
 import { planApi, attractionApi, communityApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
@@ -595,6 +595,7 @@ import { useConfirm } from '@/composables/useConfirm.js'
 
 const $confirm = useConfirm().confirm
 
+const route = useRoute()
 const router = useRouter()
 const planStore = usePlanStore()
 // storeToRefs로 반응성 유지 — 비반응적 destructure 시 loadPlans() 후 목록이 갱신되지 않음
@@ -909,11 +910,20 @@ async function reloadPlans() {
     await planStore.loadPlans()
     // store가 에러를 삼키고 plans를 []로 두는 경우(로그인 만료/서버 오류)를 에러로 노출
     if (planStore.error) listError.value = planStore.error
+    await openPlanFromQuery()
   } catch (e) {
     listError.value = planStore.error ?? e?.message ?? '계획을 불러오지 못했어요.'
   } finally {
     listLoading.value = false
   }
+}
+
+async function openPlanFromQuery() {
+  const planId = Number(route.query.planId)
+  if (!Number.isFinite(planId) || selectedPlanId.value === planId) return
+  const plan = plans.value.find((item) => Number(item.id) === planId)
+  if (!plan) return
+  await togglePlan(plan)
 }
 
 function formatDate(str) {
