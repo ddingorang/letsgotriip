@@ -158,18 +158,6 @@
                 <span class="plan-status-badge" :class="'status-' + statusKey(plan.status)">
                   {{ statusLabel(plan.status) }}
                 </span>
-                <select
-                  v-if="!compareMode"
-                  class="plan-status-select"
-                  :value="plan.status || 'PLANNING'"
-                  :disabled="statusSavingId === plan.id"
-                  @click.stop
-                  @change="changePlanStatus(plan, $event.target.value)"
-                >
-                  <option v-for="option in editableStatusOptions" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </select>
               </div>
               <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
               <div class="plan-spots">
@@ -190,6 +178,26 @@
           <Transition name="expand">
             <div v-if="selectedPlanId === plan.id" class="plan-detail">
               <div class="detail-divider" />
+
+              <div v-if="!compareMode" class="detail-status-panel">
+                <div class="detail-status-copy">
+                  <span class="detail-status-label">여행 상태</span>
+                  <span class="plan-status-badge" :class="'status-' + statusKey(plan.status)">
+                    {{ statusLabel(plan.status) }}
+                  </span>
+                </div>
+                <select
+                  class="detail-status-select"
+                  :value="plan.status || 'PLANNING'"
+                  :disabled="statusSavingId === plan.id"
+                  @click.stop
+                  @change="changePlanStatus(plan, $event.target.value)"
+                >
+                  <option v-for="option in editableStatusOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
 
               <!-- 상세 탭바 — 일정 / 동선 / 예산 (분류가 길게 쌓이지 않게 한 번에 하나만) -->
               <div class="detail-tabs" role="tablist">
@@ -1884,22 +1892,6 @@ async function removePlace(planId, dayNo, place) {
   color: #287a43;
 }
 
-.plan-status-select {
-  min-width: 0;
-  max-width: 112px;
-  padding: 5px 8px;
-  border: 1px solid var(--color-line-light);
-  border-radius: var(--radius-sm);
-  background: var(--color-white);
-  color: var(--color-ink-secondary);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.plan-status-select:disabled {
-  opacity: 0.55;
-}
-
 .plan-sub {
   font-size: 13px;
   color: var(--color-ink-muted);
@@ -1932,6 +1924,48 @@ async function removePlace(planId, dayNo, place) {
   height: 1px;
   background: var(--color-line-light);
   margin-bottom: 14px;
+}
+
+.detail-status-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--color-line-light);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+}
+
+.detail-status-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-status-label {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--color-ink-secondary);
+  white-space: nowrap;
+}
+
+.detail-status-select {
+  flex-shrink: 0;
+  min-width: 112px;
+  padding: 7px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  color: var(--color-ink);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+.detail-status-select:disabled {
+  opacity: 0.55;
 }
 
 /* ── 상세 탭바(일정·동선·예산) ─────────────────────────────────────────────── */
