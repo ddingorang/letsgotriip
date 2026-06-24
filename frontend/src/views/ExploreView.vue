@@ -712,12 +712,10 @@ function setRowRef(contentId, el) {
   else rowRefs.delete(String(contentId))
 }
 
-// 지도 마커 클릭 → 선택 상태 반영 + 하단 시트에서 해당 항목으로 스크롤/강조.
+// 지도 마커 클릭 → 선택 상태 반영 + 현재 시트 높이 안에서 해당 항목으로 스크롤/강조.
 // (지도 패닝/마커 강조는 TripMap 이 selectedId watch 로 처리)
 function selectPlace(place) {
   selectedPlace.value = place
-  // 시트를 펼쳐 항목이 보이도록 한 뒤, 해당 row 를 스크롤로 가시화
-  expandSheet()
   nextTick(() => {
     const el = rowRefs.get(String(place.contentId))
     if (el && typeof el.scrollIntoView === 'function') {
