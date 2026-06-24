@@ -103,7 +103,7 @@
             v-for="plan in filteredPlans"
             :key="plan.id"
             class="plan-item"
-            @click="$router.push('/plan')"
+            @click="$router.push({ path: '/plan', query: { planId: plan.id } })"
           >
             <div class="plan-thumb">
               <span class="plan-thumb-label">{{ plan.thumbLabel }}</span>
@@ -111,7 +111,7 @@
             <div class="plan-info">
               <div class="plan-title-row">
                 <span class="plan-title">{{ plan.title }}</span>
-                <span :class="['plan-badge', plan.status === '예정' ? 'badge-upcoming' : 'badge-done']">{{ plan.status }}</span>
+                <span :class="['plan-badge', badgeClass(plan.status)]">{{ plan.status }}</span>
               </div>
               <div class="plan-meta">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
@@ -539,9 +539,14 @@ async function handleLogout() {
 const activeMain = ref(0)
 
 // ── 내 계획 (GET /api/plans) ────────────────────────────────────────────────
-const planFilters = ['전체', '예정', '완료']
+const planFilters = ['전체', '계획중', '진행중', '완료']
 const planFilter = ref('전체')
 const allPlans = ref([])
+const PLAN_STATUS_LABELS = {
+  PLANNING: '계획중',
+  ONGOING: '진행중',
+  COMPLETED: '완료',
+}
 
 // 날짜 포맷 'M.D' (예: 6.12)
 function fmtDate(iso) {
@@ -553,11 +558,21 @@ function fmtDate(iso) {
 
 // 종료일이 오늘보다 과거면 '완료', 아니면 '예정'
 function deriveStatus(endDate) {
-  if (!endDate) return '예정'
+  if (!endDate) return '계획중'
   const end = new Date(endDate)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  return end < today ? '완료' : '예정'
+  return end < today ? '완료' : '계획중'
+}
+
+function planStatusLabel(status, endDate) {
+  return PLAN_STATUS_LABELS[status] ?? deriveStatus(endDate)
+}
+
+function badgeClass(status) {
+  if (status === '완료') return 'badge-done'
+  if (status === '진행중') return 'badge-ongoing'
+  return 'badge-upcoming'
 }
 
 function mapPlan(p) {
@@ -567,7 +582,7 @@ function mapPlan(p) {
   return {
     id: p.id,
     title: p.title,
-    status: deriveStatus(p.endDate),
+    status: planStatusLabel(p.status, p.endDate),
     dateRange,
     // 썸네일은 일정 제목 앞부분을 사용 (이미지 미보유)
     thumbLabel: (p.title || '여행') + '\n일정',
@@ -1082,6 +1097,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .badge-upcoming { background: var(--color-peach-light); color: var(--color-peach-pressed); }
+.badge-ongoing { background: #e8f3ff; color: #2167a8; }
 .badge-done { background: var(--color-surface); color: var(--color-ink-muted); }
 .plan-meta {
   display: flex;

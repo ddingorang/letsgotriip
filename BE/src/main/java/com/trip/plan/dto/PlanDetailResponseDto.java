@@ -2,6 +2,7 @@ package com.trip.plan.dto;
 
 import com.trip.plan.entity.CompanionsType;
 import com.trip.plan.entity.OriginType;
+import com.trip.plan.entity.PlanStatus;
 import com.trip.plan.entity.TripPlan;
 
 import java.time.LocalDate;
@@ -16,6 +17,7 @@ public record PlanDetailResponseDto(
         CompanionsType companions,
         Integer budget,
         OriginType origin,
+        PlanStatus status,
         String imageUrl,
         Long version,
         LocalDateTime createdAt,
@@ -31,6 +33,7 @@ public record PlanDetailResponseDto(
                 plan.getCompanions(),
                 plan.getBudget(),
                 plan.getOrigin(),
+                plan.getStatus(),
                 plan.getImageUrl(),
                 plan.getVersion(),
                 plan.getCreatedAt(),

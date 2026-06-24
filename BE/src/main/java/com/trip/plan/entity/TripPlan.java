@@ -51,6 +51,10 @@ public class TripPlan extends BaseEntity {
     @Column(nullable = false, length = 10)
     private OriginType origin;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20) default 'PLANNING'")
+    private PlanStatus status = PlanStatus.PLANNING;
+
     /**
      * 대표 이미지 URL(선택). null이면 프론트에서 기본 이미지(그라데이션/placeholder)로 표시.
      * 업로드 엔드포인트(/community/images 등)로 받은 URL을 저장한다. (ddl-auto=update가 컬럼 추가)
@@ -90,7 +94,8 @@ public class TripPlan extends BaseEntity {
 
     @Builder
     public TripPlan(Long userId, String title, LocalDate startDate, LocalDate endDate,
-                    CompanionsType companions, Integer budget, OriginType origin, String imageUrl) {
+                    CompanionsType companions, Integer budget, OriginType origin, String imageUrl,
+                    PlanStatus status) {
         this.userId     = userId;
         this.title      = title;
         this.startDate  = startDate;
@@ -99,6 +104,7 @@ public class TripPlan extends BaseEntity {
         this.budget     = budget;
         this.origin     = origin != null ? origin : OriginType.MANUAL;
         this.imageUrl   = (imageUrl != null && imageUrl.isBlank()) ? null : imageUrl;
+        this.status     = status != null ? status : PlanStatus.PLANNING;
     }
 
     /**
@@ -107,13 +113,15 @@ public class TripPlan extends BaseEntity {
      * (companion imageUrl 정책과 동일하게 둔다.)
      */
     public void updateMeta(String title, LocalDate startDate, LocalDate endDate,
-                           CompanionsType companions, Integer budget, String imageUrl) {
+                           CompanionsType companions, Integer budget, String imageUrl,
+                           PlanStatus status) {
         this.title      = title;
         this.startDate  = startDate;
         this.endDate    = endDate;
         this.companions = companions;
         this.budget     = budget;
         if (imageUrl != null) this.imageUrl = imageUrl.isBlank() ? null : imageUrl;
+        if (status != null) this.status = status;
     }
 
     /** 공유 토큰 발급. 이미 발급된 경우 호출 측에서 재사용하므로 여기서는 단순 세팅만. */

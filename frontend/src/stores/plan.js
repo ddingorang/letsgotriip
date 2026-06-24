@@ -53,12 +53,12 @@ export const usePlanStore = defineStore('plan', () => {
 
   // ── actions ──────────────────────────────────────────────────────────────────
 
-  async function loadPlans() {
+  async function loadPlans(params = {}) {
     loading.value = true
     error.value = null
     try {
       // Backend returns Spring Page({ content: [...] })
-      const { data } = await http.get('/api/plans', { params: { page: 0, size: 20 } })
+      const { data } = await http.get('/api/plans', { params: { page: 0, size: 50, ...params } })
       plans.value = Array.isArray(data) ? data : (data?.content ?? [])
     } catch (e) {
       const { msg } = handleError(e)

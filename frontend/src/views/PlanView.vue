@@ -4,7 +4,7 @@
       <h1 class="header-title">내 여행 계획</h1>
       <div class="header-actions">
         <button
-          v-if="plans.length >= 2"
+          v-if="visiblePlans.length >= 2"
           class="compare-toggle"
           :class="{ active: compareMode }"
           @click="toggleCompareMode"
@@ -24,6 +24,21 @@
         </button>
       </div>
     </header>
+
+    <div v-if="plans.length" class="status-tabs" role="tablist" aria-label="여행 상태">
+      <button
+        v-for="option in statusOptions"
+        :key="option.value"
+        class="status-tab"
+        :class="{ active: statusFilter === option.value }"
+        role="tab"
+        :aria-selected="statusFilter === option.value"
+        @click="statusFilter = option.value"
+      >
+        <span>{{ option.label }}</span>
+        <small>{{ statusCount(option.value) }}</small>
+      </button>
+    </div>
 
     <!-- 비교 모드 안내 배너 -->
     <div v-if="compareMode" class="compare-banner">
@@ -84,10 +99,20 @@
         </button>
       </div>
 
+      <div v-else-if="visiblePlans.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+          </svg>
+        </div>
+        <p class="empty-title">{{ currentStatusLabel }} 여행이 없어요</p>
+        <p class="empty-sub">상태를 바꾸면 이 탭에서 따로 볼 수 있어요</p>
+      </div>
+
       <!-- ── Plan list ────────────────────────────────────────────────── -->
       <div v-else class="plan-list">
         <div
-          v-for="plan in plans"
+          v-for="plan in visiblePlans"
           :key="plan.id"
           class="plan-card"
           :class="{ expanded: selectedPlanId === plan.id, selectable: compareMode, selected: isCompareSelected(plan.id) }"
@@ -129,6 +154,23 @@
           <div class="plan-info">
             <div class="plan-info-main" @click="onCardTap(plan)">
               <h3 class="plan-name">{{ plan.title }}</h3>
+              <div class="plan-status-row">
+                <span class="plan-status-badge" :class="'status-' + statusKey(plan.status)">
+                  {{ statusLabel(plan.status) }}
+                </span>
+                <select
+                  v-if="!compareMode"
+                  class="plan-status-select"
+                  :value="plan.status || 'PLANNING'"
+                  :disabled="statusSavingId === plan.id"
+                  @click.stop
+                  @change="changePlanStatus(plan, $event.target.value)"
+                >
+                  <option v-for="option in editableStatusOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
               <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
               <div class="plan-spots">
                 <span v-for="spot in plan.spots?.slice(0, 3)" :key="spot" class="spot-chip">{{ spot }}</span>
@@ -602,6 +644,37 @@ const planStore = usePlanStore()
 const { plans } = storeToRefs(planStore)
 
 const selectedPlanId = ref(null)
+const statusFilter = ref('ALL')
+const statusSavingId = ref(null)
+const statusOptions = [
+  { value: 'ALL', label: '전체' },
+  { value: 'PLANNING', label: '계획중' },
+  { value: 'ONGOING', label: '진행중' },
+  { value: 'COMPLETED', label: '완료' },
+]
+const editableStatusOptions = statusOptions.filter((option) => option.value !== 'ALL')
+
+const visiblePlans = computed(() => {
+  if (statusFilter.value === 'ALL') return plans.value
+  return plans.value.filter((plan) => (plan.status ?? 'PLANNING') === statusFilter.value)
+})
+
+const currentStatusLabel = computed(() =>
+  statusOptions.find((option) => option.value === statusFilter.value)?.label ?? '선택한 상태',
+)
+
+function statusCount(status) {
+  if (status === 'ALL') return plans.value.length
+  return plans.value.filter((plan) => (plan.status ?? 'PLANNING') === status).length
+}
+
+function statusLabel(status) {
+  return editableStatusOptions.find((option) => option.value === (status ?? 'PLANNING'))?.label ?? '계획중'
+}
+
+function statusKey(status) {
+  return String(status ?? 'PLANNING').toLowerCase()
+}
 
 // ── 계획 목록 로드 상태 ───────────────────────────────────────────────────────
 // planStore.loading은 상세/편집 등에서도 켜지므로, 목록 로드 전용 상태를 따로 둔다.
@@ -761,6 +834,7 @@ async function onPlanImageChange(e) {
       companions: fromList?.companions ?? planStore.current?.companions ?? null,
       budget: fromList?.budget ?? planStore.current?.budget ?? null,
       imageUrl,
+      status: fromList?.status ?? planStore.current?.status ?? 'PLANNING',
     })
     // 목록/상세 새로고침으로 새 imageUrl 반영
     await planStore.loadPlans()
@@ -918,6 +992,35 @@ async function reloadPlans() {
   }
 }
 
+async function changePlanStatus(plan, nextStatus) {
+  if (!plan || (plan.status ?? 'PLANNING') === nextStatus || statusSavingId.value) return
+  statusSavingId.value = plan.id
+  try {
+    const expectedVersion = (planStore.current?.id === plan.id
+      ? planStore.current.version
+      : plan.version)
+    await planApi.updatePlan(plan.id, {
+      expectedVersion,
+      title: plan.title,
+      startDate: plan.startDate,
+      endDate: plan.endDate,
+      companions: plan.companions ?? null,
+      budget: plan.budget ?? null,
+      imageUrl: plan.imageUrl ?? null,
+      status: nextStatus,
+    })
+    await planStore.loadPlans()
+    if (planStore.current?.id === plan.id) await planStore.loadPlan(plan.id)
+    if (statusFilter.value !== 'ALL' && statusFilter.value !== nextStatus) selectedPlanId.value = null
+    showPlanToast(`상태를 ${statusLabel(nextStatus)}으로 바꿨어요`)
+  } catch (e) {
+    showPlanToast(e?.response?.data?.message ?? '상태 변경에 실패했어요.')
+    await planStore.loadPlans().catch(() => {})
+  } finally {
+    statusSavingId.value = null
+  }
+}
+
 async function openPlanFromQuery() {
   const planId = Number(route.query.planId)
   if (!Number.isFinite(planId) || selectedPlanId.value === planId) return
@@ -1035,6 +1138,15 @@ function stepDay(delta) {
 
 watch(selectedDay, () => {
   queueRouteMapRefresh()
+})
+
+watch(statusFilter, () => {
+  if (selectedPlanId.value && !visiblePlans.value.some((plan) => plan.id === selectedPlanId.value)) {
+    selectedPlanId.value = null
+  }
+  compareSelection.value = compareSelection.value.filter((id) =>
+    visiblePlans.value.some((plan) => plan.id === id),
+  )
 })
 
 /** 펼친 계획의 도로 경로 조회. 좌표 2곳 미만/키 미설정이면 조용히 빈 경로 유지(마커만 표시). */
@@ -1471,6 +1583,44 @@ async function removePlace(planId, dayNo, place) {
   color: var(--color-ink-muted);
 }
 
+.status-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 20px 12px;
+  background: var(--color-white);
+}
+
+.status-tab {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-ink-secondary);
+  font-size: 12.5px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.status-tab small {
+  color: var(--color-ink-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.status-tab.active {
+  background: var(--color-peach);
+  color: #fff;
+}
+
+.status-tab.active small {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .plan-card.selectable {
   outline: 2px solid transparent;
   transition: outline-color 0.15s;
@@ -1701,6 +1851,53 @@ async function removePlace(planId, dayNo, place) {
   color: var(--color-ink);
   letter-spacing: -0.3px;
   margin-bottom: 4px;
+}
+
+.plan-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.plan-status-badge {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.plan-status-badge.status-planning {
+  background: #fff2d6;
+  color: #9a6200;
+}
+
+.plan-status-badge.status-ongoing {
+  background: #e8f3ff;
+  color: #2167a8;
+}
+
+.plan-status-badge.status-completed {
+  background: #e9f8ee;
+  color: #287a43;
+}
+
+.plan-status-select {
+  min-width: 0;
+  max-width: 112px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-line-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  color: var(--color-ink-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.plan-status-select:disabled {
+  opacity: 0.55;
 }
 
 .plan-sub {

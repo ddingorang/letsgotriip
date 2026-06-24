@@ -7,6 +7,7 @@ import com.trip.global.error.exception.handler.PlanHandler;
 import com.trip.plan.dto.*;
 import com.trip.plan.entity.CompanionsType;
 import com.trip.plan.entity.OriginType;
+import com.trip.plan.entity.PlanStatus;
 import com.trip.plan.entity.TripDay;
 import com.trip.plan.entity.TripPlace;
 import com.trip.plan.entity.TripPlan;
@@ -86,6 +87,7 @@ public class PlanService {
                 .budget(req.budget())
                 .origin(req.origin())
                 .imageUrl(req.imageUrl())
+                .status(req.status())
                 .build();
 
         // 기간만큼 TripDay 자동 생성
@@ -107,9 +109,16 @@ public class PlanService {
     // ─────────────────────────────────────────────────────────────
 
     public Page<PlanSummaryResponseDto> getMyPlans(Long userId, int page, int size) {
+        return getMyPlans(userId, page, size, null);
+    }
+
+    public Page<PlanSummaryResponseDto> getMyPlans(Long userId, int page, int size, PlanStatus status) {
         int clampedSize = Math.min(size, MAX_PAGE_SIZE);
         Pageable pageable = PageRequest.of(Math.max(0, page), clampedSize);
-        return planRepository.findByUserIdOrderByUpdatedAtDesc(userId, pageable)
+        Page<TripPlan> result = status == null
+                ? planRepository.findByUserIdOrderByUpdatedAtDesc(userId, pageable)
+                : planRepository.findByUserIdAndStatusOrderByUpdatedAtDesc(userId, status, pageable);
+        return result
                 .map(PlanSummaryResponseDto::from);
     }
 
@@ -386,7 +395,7 @@ public class PlanService {
             }
         }
 
-        plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget(), req.imageUrl());
+        plan.updateMeta(req.title(), newStart, newEnd, req.companions(), req.budget(), req.imageUrl(), req.status());
 
         indexPlanSafely(userId, plan.getId());
 
