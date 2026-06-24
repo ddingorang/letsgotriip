@@ -2,6 +2,7 @@ package com.trip.plan.controller;
 
 import com.trip.global.security.UserPrincipal;
 import com.trip.plan.dto.*;
+import com.trip.plan.entity.PlanStatus;
 import com.trip.plan.service.PlanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,8 +40,9 @@ public class PlanController {
     public ResponseEntity<Page<PlanSummaryResponseDto>> getMyPlans(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(planService.getMyPlans(principal.userId(), page, size));
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) PlanStatus status) {
+        return ResponseEntity.ok(planService.getMyPlans(principal.userId(), page, size, status));
     }
 
     /** GET /api/plans/{planId} — 여행 계획 상세 */

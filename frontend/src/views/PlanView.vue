@@ -4,7 +4,7 @@
       <h1 class="header-title">내 여행 계획</h1>
       <div class="header-actions">
         <button
-          v-if="plans.length >= 2"
+          v-if="visiblePlans.length >= 2"
           class="compare-toggle"
           :class="{ active: compareMode }"
           @click="toggleCompareMode"
@@ -25,6 +25,21 @@
       </div>
     </header>
 
+    <div v-if="plans.length" class="status-tabs" role="tablist" aria-label="여행 상태">
+      <button
+        v-for="option in statusOptions"
+        :key="option.value"
+        class="status-tab"
+        :class="{ active: statusFilter === option.value }"
+        role="tab"
+        :aria-selected="statusFilter === option.value"
+        @click="statusFilter = option.value"
+      >
+        <span>{{ option.label }}</span>
+        <small>{{ statusCount(option.value) }}</small>
+      </button>
+    </div>
+
     <!-- 비교 모드 안내 배너 -->
     <div v-if="compareMode" class="compare-banner">
       <span class="compare-banner-text">
@@ -40,23 +55,8 @@
       </div>
     </div>
 
-    <!-- 페이지 탭 — 내 계획 / 동행 구하기 -->
-    <div class="page-tab-bar">
-      <button
-        class="page-tab"
-        :class="{ active: pageTab === 'plans' }"
-        @click="pageTab = 'plans'"
-      >내 계획</button>
-      <button
-        class="page-tab"
-        :class="{ active: pageTab === 'companion' }"
-        @click="pageTab = 'companion'"
-      >동행 구하기</button>
-    </div>
-
     <div class="scroll-content">
-      <!-- ── 내 계획 탭 ──────────────────────────────────────────────── -->
-      <div v-show="pageTab === 'plans'">
+      <div>
       <!-- ── Loading state ────────────────────────────────────────────── -->
       <div v-if="listLoading && plans.length === 0" class="state-block">
         <div class="skeleton-card" />
@@ -99,10 +99,20 @@
         </button>
       </div>
 
+      <div v-else-if="visiblePlans.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-line)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+          </svg>
+        </div>
+        <p class="empty-title">{{ currentStatusLabel }} 여행이 없어요</p>
+        <p class="empty-sub">상태를 바꾸면 이 탭에서 따로 볼 수 있어요</p>
+      </div>
+
       <!-- ── Plan list ────────────────────────────────────────────────── -->
       <div v-else class="plan-list">
         <div
-          v-for="plan in plans"
+          v-for="plan in visiblePlans"
           :key="plan.id"
           class="plan-card"
           :class="{ expanded: selectedPlanId === plan.id, selectable: compareMode, selected: isCompareSelected(plan.id) }"
@@ -144,6 +154,11 @@
           <div class="plan-info">
             <div class="plan-info-main" @click="onCardTap(plan)">
               <h3 class="plan-name">{{ plan.title }}</h3>
+              <div class="plan-status-row">
+                <span class="plan-status-badge" :class="'status-' + statusKey(plan.status)">
+                  {{ statusLabel(plan.status) }}
+                </span>
+              </div>
               <p class="plan-sub">{{ plan.destination }} · {{ dayCount(plan.startDate, plan.endDate) }}박 {{ dayCount(plan.startDate, plan.endDate) + 1 }}일</p>
               <div class="plan-spots">
                 <span v-for="spot in plan.spots?.slice(0, 3)" :key="spot" class="spot-chip">{{ spot }}</span>
@@ -163,6 +178,26 @@
           <Transition name="expand">
             <div v-if="selectedPlanId === plan.id" class="plan-detail">
               <div class="detail-divider" />
+
+              <div v-if="!compareMode" class="detail-status-panel">
+                <div class="detail-status-copy">
+                  <span class="detail-status-label">여행 상태</span>
+                  <span class="plan-status-badge" :class="'status-' + statusKey(plan.status)">
+                    {{ statusLabel(plan.status) }}
+                  </span>
+                </div>
+                <select
+                  class="detail-status-select"
+                  :value="plan.status || 'PLANNING'"
+                  :disabled="statusSavingId === plan.id"
+                  @click.stop
+                  @change="changePlanStatus(plan, $event.target.value)"
+                >
+                  <option v-for="option in editableStatusOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
 
               <!-- 상세 탭바 — 일정 / 동선 / 예산 (분류가 길게 쌓이지 않게 한 번에 하나만) -->
               <div class="detail-tabs" role="tablist">
@@ -292,7 +327,13 @@
                 </div>
 
                 <div v-if="currentDayPlaces.length" class="plan-map-wrap">
-                  <TripMap :places="currentDayPlaces" :path="currentDayLine" :path-dashed="currentDayDashed" :numbered="true" />
+                  <TripMap
+                    :key="`${plan.id}-${routeMapKey}`"
+                    :places="currentDayPlaces"
+                    :path="currentDayLine"
+                    :path-dashed="currentDayDashed"
+                    :numbered="true"
+                  />
                 </div>
                 <p v-else class="day-empty-map">{{ selectedDay }}일차는 지도에 표시할 장소(좌표)가 없어요.</p>
 
@@ -415,58 +456,6 @@
         </div>
       </div>
 
-      </div>
-      <!-- ── 동행 구하기 탭 ──────────────────────────────────────────── -->
-      <div v-show="pageTab === 'companion'" class="companion-section">
-        <div class="section-header">
-          <h2 class="section-title">동행 구하기</h2>
-          <button class="see-all" @click="router.push('/companion/write')">모집하기</button>
-        </div>
-        <div v-if="companions.length" class="companion-list">
-          <div
-            v-for="comp in companions"
-            :key="comp.id"
-            class="companion-card"
-            @click="router.push(`/companion/${comp.id}`)"
-          >
-            <!-- 대표 이미지 썸네일 — 없으면 기본 그라데이션(comp-thumb-ph) -->
-            <div class="comp-thumb" :class="{ ph: !comp.imageUrl }">
-              <img
-                v-if="comp.imageUrl"
-                :src="comp.imageUrl"
-                alt=""
-                loading="lazy"
-                @error="(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('ph') }"
-              />
-            </div>
-            <div class="comp-header">
-              <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
-              <span
-                v-if="companionDday(comp.dateRange) != null"
-                class="comp-dday"
-                :class="{ urgent: companionDday(comp.dateRange) <= 3 }"
-              >
-                D-{{ companionDday(comp.dateRange) }}
-              </span>
-            </div>
-            <h4 class="comp-title">{{ comp.title }}</h4>
-            <p class="comp-sub">{{ comp.location }}<span v-if="comp.dateRange"> · {{ comp.dateRange }}</span></p>
-            <div class="comp-footer">
-              <div class="comp-members">
-                <div v-for="i in Math.min(comp.currentCount, 6)" :key="i" class="member-dot" />
-                <span class="member-text">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
-              </div>
-              <button class="join-btn" @click.stop="router.push(`/companion/${comp.id}`)">참여하기</button>
-            </div>
-          </div>
-        </div>
-        <!-- 동행 목록 비어있음(미로그인/없음/로드 실패) — 가짜 목업 대신 빈상태 노출 -->
-        <div v-else class="companion-empty">
-          <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
-          <button class="companion-empty-btn" @click="router.push('/companion/write')">
-            동행 모집하기
-          </button>
-        </div>
       </div>
 
       <div class="bottom-spacer" />
@@ -646,29 +635,54 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
-import { useCompanionStore } from '@/stores/companion.js'
 import { planApi, attractionApi, communityApi } from '@/api/index.js'
 import TripMap from '@/components/common/TripMap.vue'
 import { useConfirm } from '@/composables/useConfirm.js'
 
 const $confirm = useConfirm().confirm
 
+const route = useRoute()
 const router = useRouter()
 const planStore = usePlanStore()
-const companionStore = useCompanionStore()
 // storeToRefs로 반응성 유지 — 비반응적 destructure 시 loadPlans() 후 목록이 갱신되지 않음
 const { plans } = storeToRefs(planStore)
-// 동행 목록도 store 기준으로 반응성 유지(하드코딩 목업 제거 → 실 API 연동)
-const { companions } = storeToRefs(companionStore)
-
-// 페이지 상단 탭 — '내 계획' | '동행 구하기'
-const pageTab = ref('plans')
 
 const selectedPlanId = ref(null)
+const statusFilter = ref('ALL')
+const statusSavingId = ref(null)
+const statusOptions = [
+  { value: 'ALL', label: '전체' },
+  { value: 'PLANNING', label: '계획중' },
+  { value: 'ONGOING', label: '진행중' },
+  { value: 'COMPLETED', label: '완료' },
+]
+const editableStatusOptions = statusOptions.filter((option) => option.value !== 'ALL')
+
+const visiblePlans = computed(() => {
+  if (statusFilter.value === 'ALL') return plans.value
+  return plans.value.filter((plan) => (plan.status ?? 'PLANNING') === statusFilter.value)
+})
+
+const currentStatusLabel = computed(() =>
+  statusOptions.find((option) => option.value === statusFilter.value)?.label ?? '선택한 상태',
+)
+
+function statusCount(status) {
+  if (status === 'ALL') return plans.value.length
+  return plans.value.filter((plan) => (plan.status ?? 'PLANNING') === status).length
+}
+
+function statusLabel(status) {
+  return editableStatusOptions.find((option) => option.value === (status ?? 'PLANNING'))?.label ?? '계획중'
+}
+
+function statusKey(status) {
+  return String(status ?? 'PLANNING').toLowerCase()
+}
 
 // ── 계획 목록 로드 상태 ───────────────────────────────────────────────────────
 // planStore.loading은 상세/편집 등에서도 켜지므로, 목록 로드 전용 상태를 따로 둔다.
@@ -697,6 +711,7 @@ const compareLoading = ref(false)
 const routePath = ref(null)        // { planId, enabled, days }
 const routePathLoading = ref(false)
 const selectedDay = ref(1)         // 지도에 표시 중인 일차(1부터). 계획 펼칠 때 첫 일차로 초기화
+const routeMapKey = ref(0)
 
 // ── 계획 상세 탭 ───────────────────────────────────────────────────────────────
 // 분류(일정·동선·예산)가 길게 쌓이지 않도록 펼친 계획 내부를 탭으로 나눈다.
@@ -712,6 +727,15 @@ function tabFor(planId) {
 }
 function setTab(planId, key) {
   activeTab.value = { ...activeTab.value, [planId]: key }
+  if (key === 'route') queueRouteMapRefresh(planId)
+}
+
+async function queueRouteMapRefresh(planId = selectedPlanId.value) {
+  if (planId == null || tabFor(planId) !== 'route') return
+  await nextTick()
+  if (selectedPlanId.value === planId && tabFor(planId) === 'route') {
+    routeMapKey.value += 1
+  }
 }
 
 // ── 장소 드래그 정렬 상태 ──────────────────────────────────────────────────────
@@ -818,6 +842,7 @@ async function onPlanImageChange(e) {
       companions: fromList?.companions ?? planStore.current?.companions ?? null,
       budget: fromList?.budget ?? planStore.current?.budget ?? null,
       imageUrl,
+      status: fromList?.status ?? planStore.current?.status ?? 'PLANNING',
     })
     // 목록/상세 새로고침으로 새 imageUrl 반영
     await planStore.loadPlans()
@@ -956,8 +981,6 @@ async function addPlaceToDay(item) {
 
 onMounted(() => {
   reloadPlans()
-  // 실제 동행 목록 로드(하드코딩 목업 제거). 실패 시 store가 조용히 빈 배열 유지 → 빈상태 노출.
-  companionStore.fetchCompanions()
 })
 
 /** 계획 목록 로드 — 로딩/에러를 분리 추적해 빈상태 위장을 막는다 */
@@ -969,11 +992,49 @@ async function reloadPlans() {
     await planStore.loadPlans()
     // store가 에러를 삼키고 plans를 []로 두는 경우(로그인 만료/서버 오류)를 에러로 노출
     if (planStore.error) listError.value = planStore.error
+    await openPlanFromQuery()
   } catch (e) {
     listError.value = planStore.error ?? e?.message ?? '계획을 불러오지 못했어요.'
   } finally {
     listLoading.value = false
   }
+}
+
+async function changePlanStatus(plan, nextStatus) {
+  if (!plan || (plan.status ?? 'PLANNING') === nextStatus || statusSavingId.value) return
+  statusSavingId.value = plan.id
+  try {
+    const expectedVersion = (planStore.current?.id === plan.id
+      ? planStore.current.version
+      : plan.version)
+    await planApi.updatePlan(plan.id, {
+      expectedVersion,
+      title: plan.title,
+      startDate: plan.startDate,
+      endDate: plan.endDate,
+      companions: plan.companions ?? null,
+      budget: plan.budget ?? null,
+      imageUrl: plan.imageUrl ?? null,
+      status: nextStatus,
+    })
+    await planStore.loadPlans()
+    if (planStore.current?.id === plan.id) await planStore.loadPlan(plan.id)
+    if (statusFilter.value !== 'ALL' && statusFilter.value !== nextStatus) selectedPlanId.value = null
+    showPlanToast(`상태를 ${statusLabel(nextStatus)}으로 바꿨어요`)
+  } catch (e) {
+    showPlanToast(e?.response?.data?.message ?? '상태 변경에 실패했어요.')
+    await planStore.loadPlans().catch(() => {})
+  } finally {
+    statusSavingId.value = null
+  }
+}
+
+async function openPlanFromQuery() {
+  const planId = Number(route.query.planId)
+  if (!Number.isFinite(planId) || selectedPlanId.value === planId) return
+  const plan = plans.value.find((item) => Number(item.id) === planId)
+  if (!plan) return
+  await togglePlan(plan)
 }
 
 function formatDate(str) {
@@ -1083,6 +1144,19 @@ function stepDay(delta) {
   if (next != null) selectedDay.value = next
 }
 
+watch(selectedDay, () => {
+  queueRouteMapRefresh()
+})
+
+watch(statusFilter, () => {
+  if (selectedPlanId.value && !visiblePlans.value.some((plan) => plan.id === selectedPlanId.value)) {
+    selectedPlanId.value = null
+  }
+  compareSelection.value = compareSelection.value.filter((id) =>
+    visiblePlans.value.some((plan) => plan.id === id),
+  )
+})
+
 /** 펼친 계획의 도로 경로 조회. 좌표 2곳 미만/키 미설정이면 조용히 빈 경로 유지(마커만 표시). */
 async function loadRoutePath(planId) {
   routePathLoading.value = true
@@ -1093,7 +1167,10 @@ async function loadRoutePath(planId) {
   } catch {
     if (selectedPlanId.value === planId) routePath.value = null
   } finally {
-    if (selectedPlanId.value === planId) routePathLoading.value = false
+    if (selectedPlanId.value === planId) {
+      routePathLoading.value = false
+      queueRouteMapRefresh(planId)
+    }
   }
 }
 
@@ -1104,20 +1181,6 @@ function openKakaoNavi() {
   const name = encodeURIComponent(first.name || '목적지')
   // map.kakao.com 길찾기 링크: 도착지(이름,위도,경도) — 카카오맵 앱/웹이 길안내를 띄운다.
   window.open(`https://map.kakao.com/link/to/${name},${first.lat},${first.lng}`, '_blank', 'noopener')
-}
-
-// ── 동행 카드용 D-day 계산 ─────────────────────────────────────────────────────
-// store companion의 dateRange(=travelDate, 'YYYY-MM-DD')에서 남은 일수를 구한다.
-// 날짜 파싱 불가/과거면 null → 배지 미표시.
-function companionDday(dateStr) {
-  if (!dateStr) return null
-  const target = new Date(dateStr)
-  if (Number.isNaN(target.getTime())) return null
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  target.setHours(0, 0, 0, 0)
-  const diff = Math.round((target - today) / 86400000)
-  return diff >= 0 ? diff : null
 }
 
 /** Navigate to /ai/plan (new AI trip flow) */
@@ -1157,6 +1220,7 @@ async function togglePlan(plan) {
   // 상세 로드 후 실제 첫 일차로 지도를 맞춘다(일차 번호가 1부터가 아닐 수 있음).
   if (planStore.current?.id === plan.id) {
     selectedDay.value = planStore.current?.days?.[0]?.dayNo ?? 1
+    queueRouteMapRefresh(plan.id)
   }
   // 도로 경로(길찾기) 조회 — 실패해도 마커는 그대로 표시
   loadRoutePath(plan.id)
@@ -1527,6 +1591,44 @@ async function removePlace(planId, dayNo, place) {
   color: var(--color-ink-muted);
 }
 
+.status-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 20px 12px;
+  background: var(--color-white);
+}
+
+.status-tab {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-ink-secondary);
+  font-size: 12.5px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.status-tab small {
+  color: var(--color-ink-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.status-tab.active {
+  background: var(--color-peach);
+  color: #fff;
+}
+
+.status-tab.active small {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .plan-card.selectable {
   outline: 2px solid transparent;
   transition: outline-color 0.15s;
@@ -1555,30 +1657,6 @@ async function removePlace(planId, dayNo, place) {
 .compare-check.on {
   background: white;
   border-color: white;
-}
-
-/* ── 페이지 탭 (내 계획 / 동행 구하기) ──────────────────────────────────── */
-.page-tab-bar {
-  display: flex;
-  gap: 4px;
-  padding: 4px 20px 0;
-  border-bottom: 1px solid var(--color-line-light);
-  flex-shrink: 0;
-}
-.page-tab {
-  flex: 1;
-  padding: 12px 0 11px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--color-ink-muted);
-  letter-spacing: -0.3px;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-}
-.page-tab.active {
-  color: var(--color-peach);
-  border-bottom-color: var(--color-peach);
 }
 
 .scroll-content {
@@ -1783,6 +1861,37 @@ async function removePlace(planId, dayNo, place) {
   margin-bottom: 4px;
 }
 
+.plan-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.plan-status-badge {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.plan-status-badge.status-planning {
+  background: #fff2d6;
+  color: #9a6200;
+}
+
+.plan-status-badge.status-ongoing {
+  background: #e8f3ff;
+  color: #2167a8;
+}
+
+.plan-status-badge.status-completed {
+  background: #e9f8ee;
+  color: #287a43;
+}
+
 .plan-sub {
   font-size: 13px;
   color: var(--color-ink-muted);
@@ -1815,6 +1924,48 @@ async function removePlace(planId, dayNo, place) {
   height: 1px;
   background: var(--color-line-light);
   margin-bottom: 14px;
+}
+
+.detail-status-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--color-line-light);
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+}
+
+.detail-status-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-status-label {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--color-ink-secondary);
+  white-space: nowrap;
+}
+
+.detail-status-select {
+  flex-shrink: 0;
+  min-width: 112px;
+  padding: 7px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  color: var(--color-ink);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+
+.detail-status-select:disabled {
+  opacity: 0.55;
 }
 
 /* ── 상세 탭바(일정·동선·예산) ─────────────────────────────────────────────── */
@@ -2584,170 +2735,6 @@ async function removePlace(planId, dayNo, place) {
 .expand-leave-to {
   max-height: 0;
   opacity: 0;
-}
-
-/* ── Companion section ────────────────────────────────────────────────────── */
-.companion-section {
-  padding-bottom: 16px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.section-title {
-  font-size: 17px;
-  font-weight: 750;
-  color: var(--color-ink);
-  letter-spacing: -0.4px;
-}
-
-.see-all {
-  font-size: 13px;
-  color: var(--color-ink-muted);
-}
-
-.companion-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.companion-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-/* 동행 카드 대표 이미지 — 카드 패딩을 상쇄해 상단 전체 폭 배너로 */
-.comp-thumb {
-  margin: -16px -16px 12px;
-  height: 96px;
-  position: relative;
-  overflow: hidden;
-  background: var(--color-line-light);
-}
-.comp-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-/* 이미지 없음(또는 깨짐) — 기본 그라데이션 placeholder */
-.comp-thumb.ph {
-  background: linear-gradient(135deg, #f7b690 0%, #e89a6c 100%);
-}
-
-.comp-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.comp-badge {
-  background: var(--color-peach-light);
-  color: var(--color-peach-pressed);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-}
-
-.comp-badge.urgent {
-  background: #fff0e8;
-  color: #d04010;
-}
-
-/* ── Companion empty state ────────────────────────────────────────────────── */
-.companion-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 28px 16px;
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-}
-
-.companion-empty-text {
-  font-size: 13px;
-  color: var(--color-ink-muted);
-}
-
-.companion-empty-btn {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-peach-pressed);
-  background: var(--color-white);
-  border: 1px solid var(--color-line-light);
-  padding: 8px 18px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-}
-
-.comp-dday {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-ink-muted);
-}
-
-.comp-dday.urgent {
-  color: var(--color-error);
-}
-
-.comp-title {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.3px;
-  margin-bottom: 4px;
-}
-
-.comp-sub {
-  font-size: 12.5px;
-  color: var(--color-ink-muted);
-  margin-bottom: 12px;
-}
-
-.comp-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.comp-members {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.member-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-peach);
-}
-
-.member-text {
-  font-size: 12px;
-  color: var(--color-ink-muted);
-  margin-left: 4px;
-}
-
-.join-btn {
-  background: var(--color-peach);
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 7px 16px;
-  border-radius: var(--radius-full);
-  letter-spacing: -0.2px;
 }
 
 .bottom-spacer {

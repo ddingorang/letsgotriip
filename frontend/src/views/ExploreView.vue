@@ -78,7 +78,7 @@
           {{ sheetTitle }}
           <span class="count">{{ displayedPlaces.length }}</span>
         </h2>
-        <button class="sort-btn" :class="{ active: sortMode !== 'default' }" @click="openSortSheet">
+        <button class="sort-btn" :class="{ active: sortMode === 'default' || sortMode === 'distance' }" @click="openSortSheet">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="7" y1="12" x2="17" y2="12" />
@@ -89,6 +89,11 @@
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
+      </div>
+
+      <!-- 지도가 넓어 조회 반경(최대 20km)이 화면보다 작을 때 — 정직하게 안내 -->
+      <div v-if="areaCapped" class="area-cap-hint">
+        지도가 넓어 중심 반경 20km만 조회됐어요. 확대하면 보이는 영역과 정확히 맞춰져요.
       </div>
 
       <!-- Loading skeleton -->
@@ -354,7 +359,7 @@ const PAGE_SIZE = 30   // 거리순 정렬이 의미있도록 후보를 넉넉�
 
 // ── 현재 위치 / 정렬 ─────────────────────────────────────────────────────────
 const userLoc = ref(null)              // { lat, lng }
-const sortMode = ref('default')        // 'default' | 'distance' | 'name'
+const sortMode = ref('name')           // 'default' | 'distance' | 'name'
 const sortSheetOpen = ref(false)       // 정렬 기준 바텀시트 표시 여부
 
 // 정렬 기준 정의 — key/label/설명. requiresLoc 인 항목은 위치 없으면 비활성.
@@ -376,6 +381,56 @@ function distanceKm(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2)
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x))
+}
+
+const RECOMMEND_SORT_FIELDS = [
+  'recommendationScore',
+  'recommendScore',
+  'score',
+  'popularityScore',
+  'likeCount',
+  'rating',
+  'reviewCount',
+]
+
+function finiteNumber(value) {
+  if (value == null || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function comparePlaceName(a, b) {
+  const aName = String(a.name ?? '').trim()
+  const bName = String(b.name ?? '').trim()
+  if (aName && !bName) return -1
+  if (!aName && bName) return 1
+  const byName = aName.localeCompare(bName, 'ko')
+  if (byName !== 0) return byName
+  return String(a.contentId ?? a.id ?? '').localeCompare(
+    String(b.contentId ?? b.id ?? ''),
+    'ko',
+    { numeric: true },
+  )
+}
+
+function compareRecommendation(a, b) {
+  for (const field of RECOMMEND_SORT_FIELDS) {
+    const aValue = finiteNumber(a[field])
+    const bValue = finiteNumber(b[field])
+    if (aValue == null && bValue == null) continue
+    if (aValue == null) return 1
+    if (bValue == null) return -1
+    if (aValue !== bValue) return bValue - aValue
+  }
+  // 추천 점수가 같으면 API/기본 노출 순서를 유지한다. 이름 정렬은 별도 이름순 옵션에서만 수행한다.
+  return 0
+}
+
+function compareDistance(a, b) {
+  const aDist = finiteNumber(a._dist) ?? Infinity
+  const bDist = finiteNumber(b._dist) ?? Infinity
+  if (aDist !== bDist) return aDist < bDist ? -1 : 1
+  return comparePlaceName(a, b)
 }
 
 // ── Filtered + sorted display list ────────────────────────────────────────────
@@ -405,12 +460,12 @@ const displayedPlaces = computed(() => {
   // 정렬 적용 — 원본을 변형하지 않도록 복사 후 정렬.
   if (sortMode.value === 'distance' && userLoc.value) {
     // 거리순 — 가까운 순. 좌표 없는 항목(_dist=Infinity)은 뒤로.
-    list = [...list].sort((a, b) => a._dist - b._dist)
+    list = [...list].sort(compareDistance)
   } else if (sortMode.value === 'name') {
     // 이름순 — title 로캘 비교(가나다). 한글·영문·숫자 자연스러운 정렬.
-    list = [...list].sort((a, b) =>
-      String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko'),
-    )
+    list = [...list].sort(comparePlaceName)
+  } else {
+    list = [...list].sort(compareRecommendation)
   }
   return list
 })
@@ -424,6 +479,8 @@ const mapCenter = computed(() =>
 const mapDragCenter = ref(null)
 const showMapSearchBtn = ref(false)
 const mapFit = ref(true) // 현 지도에서 검색 시 false → 카메라 고정
+// 지도가 너무 넓어(내접원 > 20km) 조회 원이 화면보다 작아진 상태 — 안내 노출용
+const areaCapped = ref(false)
 
 // 카카오맵 level(클수록 광역) → 검색 반경(m)
 const ZOOM_RADIUS = { 1:500, 2:1000, 3:2000, 4:3000, 5:5000, 6:8000, 7:12000, 8:16000, 9:20000, 10:35000, 11:60000, 12:100000, 13:200000, 14:400000 }
@@ -444,8 +501,11 @@ function mapAreaParams(extra = {}) {
     // 중심~북변(N-S 반높이), 중심~동변(E-W 반너비) 중 더 작은 값 = 내접원 반경.
     const vertM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.neLat, lng: c.lng }) * 1000
     const horizM = distanceKm({ lat: c.lat, lng: c.lng }, { lat: c.lat, lng: c.neLng }) * 1000
-    radius = Math.round(Math.min(vertM, horizM))
-    radius = Math.min(Math.max(radius, 500), 20000) // TourAPI radius 상한 20km
+    const inscribed = Math.round(Math.min(vertM, horizM))
+    radius = Math.min(Math.max(inscribed, 500), 20000) // TourAPI radius 상한 20km
+    // 화면 내접원이 상한(20km)을 넘으면 조회 원이 화면보다 작아져 '화면=조회영역'이 깨진다.
+    // → 사용자에게 "확대하면 정확해진다"고 안내하기 위한 플래그.
+    areaCapped.value = inscribed > 20000
   } else {
     radius = ZOOM_RADIUS[c.level ?? 9] ?? 20000
   }
@@ -625,6 +685,7 @@ function selectCategory(key) {
     if (route.query.tag) router.replace({ path: '/explore', query: {} })
   }
   showMapSearchBtn.value = false
+  areaCapped.value = false // 분류 조회는 지도범위 기반이 아니므로 안내 해제
   selectedCategory.value = key
   const cat = CATEGORIES.find((c) => c.key === key)
   const ct = cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}
@@ -651,12 +712,10 @@ function setRowRef(contentId, el) {
   else rowRefs.delete(String(contentId))
 }
 
-// 지도 마커 클릭 → 선택 상태 반영 + 하단 시트에서 해당 항목으로 스크롤/강조.
+// 지도 마커 클릭 → 선택 상태 반영 + 현재 시트 높이 안에서 해당 항목으로 스크롤/강조.
 // (지도 패닝/마커 강조는 TripMap 이 selectedId watch 로 처리)
 function selectPlace(place) {
   selectedPlace.value = place
-  // 시트를 펼쳐 항목이 보이도록 한 뒤, 해당 row 를 스크롤로 가시화
-  expandSheet()
   nextTick(() => {
     const el = rowRefs.get(String(place.contentId))
     if (el && typeof el.scrollIntoView === 'function') {
@@ -1004,6 +1063,17 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
+}
+
+.area-cap-hint {
+  margin: -4px 20px 8px;
+  padding: 8px 12px;
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: -0.2px;
+  border-radius: var(--radius-md);
 }
 
 .festival-header {

@@ -30,6 +30,11 @@ export const CATEGORY_LABEL_MAP = {
   ETC: '기타',
 }
 
+const nameCollator = new Intl.Collator('ko-KR', {
+  numeric: true,
+  sensitivity: 'base',
+})
+
 /**
  * Normalize a BE HotPlaceResponse or HotPlaceSummaryResponse to the shape
  * the views consume (lat/lng, imageUrl, category label, etc.).
@@ -97,11 +102,19 @@ export const useHotplaceStore = defineStore('hotplace', () => {
    * Returns normalized items array. On error, sets listError and clears the
    * list so the view can show an error/empty state (no seed disguised as live).
    */
-  async function getList(params) {
+  async function getList(params, options = {}) {
     listError.value = null
     try {
-      const res = await hotplaceApi.getList(params)
-      const items = (res.data?.content ?? res.data ?? []).map(normalize)
+      const sort = options.sort ?? 'latest'
+      const res = sort === 'popular'
+        ? await hotplaceApi.popular(params)
+        : await hotplaceApi.getList(params)
+      let items = (res.data?.content ?? res.data ?? []).map(normalize)
+      if (sort === 'name') {
+        items = [...items].sort((a, b) =>
+          nameCollator.compare(a.name ?? '', b.name ?? '') || Number(a.id ?? 0) - Number(b.id ?? 0),
+        )
+      }
       hotplaces.value = items
       return items
     } catch (e) {

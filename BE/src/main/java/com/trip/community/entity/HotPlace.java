@@ -53,9 +53,24 @@ public class HotPlace extends BaseEntity {
     @Builder.Default
     private int likeCount = 0;
 
+    /** 평점(별점, 0~5) — 데모는 시드에서 좋아요수에 비례해 부여. */
+    @Column
+    private Double rating;
+
+    /** 평점 참여수(리뷰 수) — '(1,248)' 표기용. 데모는 시드에서 부여. */
+    @Column(nullable = false)
+    @Builder.Default
+    private int ratingCount = 0;
+
     /** 데모 인기수 부여(시드 전용). */
     public void applyDemoLikeCount(int value) {
         this.likeCount = Math.max(0, value);
+    }
+
+    /** 데모 별점/리뷰수 부여(시드 전용). */
+    public void applyDemoRating(double rating, int ratingCount) {
+        this.rating = Math.max(0.0, Math.min(5.0, rating));
+        this.ratingCount = Math.max(0, ratingCount);
     }
 
     public void incLike() { this.likeCount++; }

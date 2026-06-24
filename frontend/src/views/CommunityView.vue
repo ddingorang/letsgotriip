@@ -22,7 +22,7 @@
     <!-- Main tabs -->
     <div class="main-tab-bar">
       <button
-        v-for="(tab, i) in ['공유게시판', '핫플']"
+        v-for="(tab, i) in ['공유게시판', '핫플', '동행']"
         :key="tab"
         :class="['main-tab', { active: activeMain === i }]"
         @click="activeMain = i"
@@ -77,21 +77,35 @@
     <!-- ② 핫플 -->
     <div v-show="activeMain === 1" class="tab-pane hp-pane">
       <div class="hp-controls">
-        <div class="view-toggle">
-          <button :class="['toggle-btn', { active: hpView === 'map' }]" @click="hpView = 'map'">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-              <line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
-            </svg>
-            지도
-          </button>
-          <button :class="['toggle-btn', { active: hpView === 'list' }]" @click="hpView = 'list'">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-            </svg>
-            목록
-          </button>
+        <div class="hp-top-row">
+          <div class="view-toggle">
+            <button :class="['toggle-btn', { active: hpView === 'map' }]" @click="hpView = 'map'">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                <line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
+              </svg>
+              지도
+            </button>
+            <button :class="['toggle-btn', { active: hpView === 'list' }]" @click="hpView = 'list'">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+              목록
+            </button>
+          </div>
+          <div class="sort-toggle" aria-label="핫플 정렬 기준">
+            <button
+              v-for="option in hpSortOptions"
+              :key="option.value"
+              type="button"
+              :class="['sort-btn', { active: hpSort === option.value }]"
+              :aria-pressed="hpSort === option.value"
+              @click="selectHpSort(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
         </div>
         <div class="cat-scroll">
           <button
@@ -111,25 +125,34 @@
           :places="mappableHotplaces"
           :selected-id="selectedHp?.id"
           @select="onHpSelect"
+          @detail="goHotplaceDetail"
         />
         <div v-if="!mappableHotplaces.length" class="map-empty">
           지도에 표시할 핫플이 아직 없어요
         </div>
 
         <Transition name="slide-up">
-          <div v-if="selectedHp" class="map-card" @click="$router.push(`/hotplace/${selectedHp.id}`)">
+          <div
+            v-if="mapCardHotplace"
+            class="map-card"
+            role="button"
+            tabindex="0"
+            @click="goHotplaceDetail(mapCardHotplace)"
+            @keydown.enter.prevent="goHotplaceDetail(mapCardHotplace)"
+            @keydown.space.prevent="goHotplaceDetail(mapCardHotplace)"
+          >
             <div class="map-thumb">
-              <img :src="selectedHp.imageUrl || seedImg('hp-' + selectedHp.id)" :alt="selectedHp.name" @error="onThumbError($event, 'hp-' + selectedHp.id)" />
+              <img :src="mapCardHotplace.imageUrl || seedImg('hp-' + mapCardHotplace.id)" :alt="mapCardHotplace.name" @error="onThumbError($event, 'hp-' + mapCardHotplace.id)" />
             </div>
             <div class="map-card-body">
               <div class="map-card-row1">
-                <span class="cat-tag">{{ selectedHp.category }}</span>
+                <span class="cat-tag">{{ mapCardHotplace.category }}</span>
               </div>
-              <div class="map-card-name">{{ selectedHp.name }}</div>
-              <div class="map-card-sub">{{ selectedHp.location }} · {{ selectedHp.description }}</div>
+              <div class="map-card-name">{{ mapCardHotplace.name }}</div>
+              <div class="map-card-sub">{{ mapCardHotplace.location }} · {{ mapCardHotplace.description }}</div>
               <div class="map-card-rating">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="#f78f57"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
-                {{ selectedHp.rating }} ({{ selectedHp.ratingCount }})
+                {{ mapCardHotplace.rating }} ({{ mapCardHotplace.ratingCount }})
               </div>
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6" /></svg>
@@ -150,7 +173,11 @@
           v-for="hp in filteredHotplaces"
           :key="hp.id"
           class="hp-item"
-          @click="$router.push(`/hotplace/${hp.id}`)"
+          role="button"
+          tabindex="0"
+          @click="goHotplaceDetail(hp)"
+          @keydown.enter.prevent="goHotplaceDetail(hp)"
+          @keydown.space.prevent="goHotplaceDetail(hp)"
         >
           <div class="hp-thumb">
             <img :src="hp.imageUrl || seedImg('hp-' + hp.id)" :alt="hp.name" @error="onThumbError($event, 'hp-' + hp.id)" />
@@ -164,13 +191,73 @@
             </div>
             <div class="hp-stats">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="#f78f57"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
-              {{ hp.rating }} ({{ hp.ratingCount }}) · 저장 {{ hp.saveCount }}
+              {{ hp.rating }} ({{ hp.ratingCount }}) · 좋아요 {{ hp.likeCount ?? 0 }}
             </div>
           </div>
         </div>
       </div>
 
-      <button class="fab" @click="$router.push('/hotplace/register')">
+      <button
+        :class="['fab', 'hp-fab', { 'with-map-card': hpView === 'map' && mapCardHotplace }]"
+        @click="$router.push('/hotplace/register')"
+        aria-label="핫플 등록하기"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+      </button>
+    </div>
+
+    <!-- ③ 동행 -->
+    <div v-show="activeMain === 2" class="tab-pane companion-pane">
+      <div class="scroll-content">
+        <div class="companion-section">
+          <div v-if="companions.length" class="companion-list">
+            <div
+              v-for="comp in companions"
+              :key="comp.id"
+              class="companion-card"
+              @click="$router.push(`/companion/${comp.id}`)"
+            >
+              <div class="comp-thumb" :class="{ ph: !comp.imageUrl }">
+                <img
+                  v-if="comp.imageUrl"
+                  :src="comp.imageUrl"
+                  alt=""
+                  loading="lazy"
+                  @error="(e) => { e.target.style.display = 'none'; e.target.parentElement.classList.add('ph') }"
+                />
+              </div>
+              <div class="comp-header">
+                <span class="comp-badge" :class="{ urgent: comp.status === '마감임박' }">{{ comp.status }}</span>
+                <span
+                  v-if="companionDday(comp.dateRange) != null"
+                  class="comp-dday"
+                  :class="{ urgent: companionDday(comp.dateRange) <= 3 }"
+                >
+                  D-{{ companionDday(comp.dateRange) }}
+                </span>
+              </div>
+              <h4 class="comp-title">{{ comp.title }}</h4>
+              <p class="comp-sub">{{ comp.location }}<span v-if="comp.dateRange"> · {{ comp.dateRange }}</span></p>
+              <div class="comp-footer">
+                <div class="comp-members">
+                  <div v-for="i in Math.min(comp.currentCount, 6)" :key="i" class="member-dot" />
+                  <span class="member-text">{{ comp.currentCount }}/{{ comp.maxCount }}명</span>
+                </div>
+                <button class="join-btn" @click.stop="$router.push(`/companion/${comp.id}`)">참여하기</button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="companion-empty">
+            <p class="companion-empty-text">아직 모집 중인 동행이 없어요</p>
+            <button class="companion-empty-btn" @click="$router.push('/companion/write')">
+              동행 모집하기
+            </button>
+          </div>
+          <div class="bottom-spacer" />
+        </div>
+      </div>
+
+      <button class="fab" @click="$router.push('/companion/write')" aria-label="동행 모집하기">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
       </button>
     </div>
@@ -180,24 +267,42 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useRoute, useRouter } from 'vue-router'
 import PostCard from '@/components/community/PostCard.vue'
 import TripMap from '@/components/common/TripMap.vue'
 import { usePostsStore } from '@/stores/posts.js'
 import { useHotplaceStore } from '@/stores/hotplace.js'
+import { useCompanionStore } from '@/stores/companion.js'
 import { useNotificationStore } from '@/stores/notification.js'
 
 const postsStore = usePostsStore()
 const hotplaceStore = useHotplaceStore()
+const companionStore = useCompanionStore()
 const notifStore = useNotificationStore()
 const route = useRoute()
+const router = useRouter()
 
-// 진입 쿼리(?tab=hotplace)로 초기 탭 선택 — 0:공유게시판 1:핫플
-const TAB_INDEX = { board: 0, hotplace: 1 }
+// 진입 쿼리(?tab=hotplace|companion)로 초기 탭 선택 — 0:공유게시판 1:핫플 2:동행
+const TAB_INDEX = { board: 0, hotplace: 1, companion: 2 }
 const activeMain = ref(TAB_INDEX[route.query.tab] ?? 0)
 
+// 동행 — 모집 중인 동행 목록(계획 페이지에서 커뮤니티 탭으로 이전)
+const { companions } = storeToRefs(companionStore)
+// dateRange('YYYY-MM-DD')에서 남은 일수. 파싱 불가/과거면 null → 배지 미표시.
+function companionDday(dateStr) {
+  if (!dateStr) return null
+  const target = new Date(dateStr)
+  if (Number.isNaN(target.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((target - today) / 86400000)
+  return diff >= 0 ? diff : null
+}
+
 // 공유게시판
-const filterTabs = ['전체', '후기', '질문', '꿀팁', '맛집', '동행']
+const filterTabs = ['전체', '후기', '질문', '꿀팁', '맛집']
 const activeFilter = ref('전체')
 // 라벨 → BE PostCategory enum. '전체'는 무필터(undefined).
 const FILTER_ENUM = {
@@ -205,7 +310,6 @@ const FILTER_ENUM = {
   질문: 'QUESTION',
   꿀팁: 'TIP',
   맛집: 'RESTAURANT',
-  동행: 'COMPANION',
 }
 // 카테고리 필터 변경 시 서버에서 재조회(클라이언트 필터 제거 — 페이지네이션과 정합)
 function selectFilter(f) {
@@ -220,6 +324,12 @@ function onScroll(e) {
 
 // 핫플
 const hpView = ref('list')
+const hpSortOptions = [
+  { value: 'latest', label: '최신순' },
+  { value: 'popular', label: '인기순' },
+  { value: 'name', label: '이름순' },
+]
+const hpSort = ref('latest')
 const hpCategories = ['전체', '카페', '맛집', '명소', '포토존']
 const hpCat = ref('전체')
 const selectedHp = ref(null)
@@ -233,8 +343,33 @@ const mappableHotplaces = computed(() =>
     (h) => Number.isFinite(Number(h.lat)) && Number.isFinite(Number(h.lng)),
   ),
 )
+const mapCardHotplace = computed(() => {
+  if (!selectedHp.value) return null
+  return mappableHotplaces.value.find((h) => h.id === selectedHp.value.id) ?? null
+})
 function onHpSelect(place) {
-  selectedHp.value = selectedHp.value?.id === place.id ? null : place
+  if (selectedHp.value?.id === place.id) {
+    goHotplaceDetail(place)
+    return
+  }
+  selectedHp.value = place
+}
+async function loadHotplaces() {
+  const items = await hotplaceStore.getList(undefined, { sort: hpSort.value })
+  if (selectedHp.value && !items.some((h) => h.id === selectedHp.value.id)) {
+    selectedHp.value = null
+  }
+}
+function selectHpSort(sort) {
+  if (hpSort.value === sort) return
+  hpSort.value = sort
+  selectedHp.value = null
+  loadHotplaces()
+}
+function goHotplaceDetail(place) {
+  const id = place?.id
+  if (id == null) return
+  router.push({ name: 'hotplace-detail', params: { id } })
 }
 
 // 썸네일 — 업로드 이미지가 없거나 로딩 실패 시 로컬 기본 썸네일로 채움(외부 더미 미사용)
@@ -249,7 +384,8 @@ function onThumbError(e) {
 onMounted(() => {
   postsStore.fetchPosts(true)
   notifStore.load()
-  hotplaceStore.getList()
+  loadHotplaces()
+  companionStore.fetchCompanions()
 })
 </script>
 
@@ -406,7 +542,10 @@ onMounted(() => {
 .bottom-spacer { height: calc(28px + var(--safe-bottom)); }
 
 /* ====== 핫플 ====== */
-.hp-pane { background: var(--color-white); }
+.hp-pane {
+  background: var(--color-white);
+  min-height: 0;
+}
 .hp-controls {
   padding: 12px 16px;
   display: flex;
@@ -414,11 +553,21 @@ onMounted(() => {
   gap: 10px;
   border-bottom: 1px solid var(--color-line-light);
   flex-shrink: 0;
+  position: relative;
+  z-index: 30;
+  background: var(--color-white);
+}
+.hp-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 .view-toggle {
   display: flex;
   gap: 6px;
-  align-self: flex-start;
+  flex: 0 0 auto;
 }
 .toggle-btn {
   display: flex;
@@ -439,6 +588,32 @@ onMounted(() => {
   color: white;
   border-color: var(--color-ink);
 }
+.sort-toggle {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sort-btn {
+  flex-shrink: 0;
+  min-width: 46px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  border: 1.5px solid var(--color-line);
+  background: var(--color-white);
+  letter-spacing: 0;
+  transition: all 0.15s;
+}
+.sort-btn.active {
+  background: var(--color-peach);
+  color: white;
+  border-color: var(--color-peach);
+}
 .cat-scroll {
   display: flex;
   gap: 8px;
@@ -451,9 +626,18 @@ onMounted(() => {
 
 /* Map */
 .map-wrap {
-  flex: 1;
+  flex: 1 1 320px;
+  min-height: 320px;
+  height: 100%;
   position: relative;
   overflow: hidden;
+  isolation: isolate;
+}
+
+.map-wrap :deep(.trip-map) {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
 }
 
 .map-empty {
@@ -461,7 +645,8 @@ onMounted(() => {
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 5;
+  z-index: 35;
+  max-width: calc(100% - 32px);
   background: var(--color-white);
   border: 1px solid var(--color-line-light);
   box-shadow: var(--shadow-card);
@@ -469,6 +654,7 @@ onMounted(() => {
   padding: 8px 16px;
   font-size: 12.5px;
   color: var(--color-ink-muted);
+  text-align: center;
 }
 
 .hp-empty {
@@ -532,11 +718,14 @@ onMounted(() => {
 }
 .map-card {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  margin: 0 12px 12px;
+  bottom: calc(24px + var(--safe-bottom));
+  left: 12px;
+  right: 12px;
+  z-index: 40;
+  min-height: 88px;
+  margin: 0;
   background: white;
+  border: 1px solid var(--color-line-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: 12px;
@@ -570,8 +759,17 @@ onMounted(() => {
   margin-bottom: 3px;
 }
 .map-card-name { font-size: 15px; font-weight: 700; color: var(--color-ink); letter-spacing: -0.3px; }
-.map-card-sub { font-size: 12px; color: var(--color-ink-muted); margin-top: 2px; }
+.map-card-sub {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  margin-top: 2px;
+}
 .map-card-rating { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--color-ink-secondary); margin-top: 4px; }
+.map-card > svg { flex-shrink: 0; }
 
 .cat-tag {
   display: inline-block;
@@ -587,7 +785,7 @@ onMounted(() => {
 .hp-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 4px 0 calc(88px + var(--safe-bottom));
 }
 .hp-item {
   display: flex;
@@ -596,6 +794,11 @@ onMounted(() => {
   padding: 14px 16px;
   border-bottom: 1px solid var(--color-line-light);
   cursor: pointer;
+}
+.hp-item:focus-visible,
+.map-card:focus-visible {
+  outline: 2px solid var(--color-peach);
+  outline-offset: -2px;
 }
 .hp-thumb {
   position: relative;
@@ -632,132 +835,126 @@ onMounted(() => {
 }
 /* ====== 동행 ====== */
 .companion-pane { background: var(--color-white); }
-.section-header {
+.companion-section { padding: 16px; }
+.companion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.companion-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  overflow: hidden;
+}
+/* 동행 카드 대표 이미지 — 카드 패딩을 상쇄해 상단 전체 폭 배너로 */
+.comp-thumb {
+  margin: -16px -16px 12px;
+  height: 96px;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-line-light);
+}
+.comp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.comp-thumb.ph {
+  background: linear-gradient(135deg, #f7b690 0%, #e89a6c 100%);
+}
+.comp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 10px;
+  margin-bottom: 8px;
 }
-.section-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.4px;
-}
-.see-all-btn {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-ink-muted);
-}
-/* Room cards horizontal scroll */
-.rooms-row {
-  display: flex;
-  gap: 10px;
-  padding: 0 16px 4px;
-  overflow-x: auto;
-}
-.room-card {
-  flex-shrink: 0;
-  width: 120px;
-  border-radius: var(--radius-lg);
-  border: 1.5px solid var(--color-line-light);
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--color-white);
-}
-.room-avatar-area {
-  width: 100%;
-  height: 70px;
-  background: var(--color-surface);
-  overflow: hidden;
-}
-.room-bottom {
-  padding: 8px 10px 10px;
-}
-.room-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.room-d-row { margin-top: 2px; }
-.room-d {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-ink-muted);
-}
-.room-d.urgent { color: var(--color-peach); }
-.room-d.ended { color: var(--color-ink-muted); }
-.room-unread-badge {
-  margin-top: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-peach);
-}
-.room-read {
-  margin-top: 5px;
-  font-size: 11px;
-  color: var(--color-ink-muted);
-}
-
-/* Companion list */
-.companion-list { padding: 0; }
-.comp-item {
-  display: flex;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--color-line-light);
-  cursor: pointer;
-}
-.comp-thumb {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.comp-info { flex: 1; min-width: 0; }
-.comp-header-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-.status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
+.comp-badge {
   background: var(--color-peach-light);
   color: var(--color-peach-pressed);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
 }
-.status-badge.urgent {
+.comp-badge.urgent {
   background: #fff0e8;
   color: #d04010;
 }
-.comp-date { font-size: 12px; color: var(--color-ink-muted); }
+.comp-dday {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-ink-muted);
+}
+.comp-dday.urgent {
+  color: var(--color-error);
+}
 .comp-title {
   font-size: 14.5px;
   font-weight: 700;
   color: var(--color-ink);
   letter-spacing: -0.3px;
-  margin-bottom: 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-bottom: 4px;
 }
-.comp-meta { display: flex; align-items: center; gap: 12px; }
-.comp-loc, .comp-people {
+.comp-sub {
+  font-size: 12.5px;
+  color: var(--color-ink-muted);
+  margin-bottom: 12px;
+}
+.comp-footer {
   display: flex;
   align-items: center;
-  gap: 3px;
+  justify-content: space-between;
+}
+.comp-members {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.member-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-peach);
+}
+.member-text {
   font-size: 12px;
   color: var(--color-ink-muted);
+  margin-left: 4px;
+}
+.join-btn {
+  background: var(--color-peach);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: var(--radius-full);
+  letter-spacing: -0.2px;
+}
+.companion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+.companion-empty-text {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+.companion-empty-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-peach-pressed);
+  background: var(--color-white);
+  border: 1px solid var(--color-line-light);
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
 }
 
 /* FAB */
@@ -776,6 +973,13 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(247, 143, 87, 0.45);
   z-index: 10;
   transition: background 0.15s, transform 0.15s;
+}
+.hp-fab {
+  bottom: calc(20px + var(--safe-bottom));
+  z-index: 50;
+}
+.hp-fab.with-map-card {
+  bottom: calc(128px + var(--safe-bottom));
 }
 .fab:active { background: var(--color-peach-pressed); transform: scale(0.95); }
 

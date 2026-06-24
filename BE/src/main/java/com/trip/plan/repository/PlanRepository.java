@@ -1,6 +1,7 @@
 package com.trip.plan.repository;
 
 import com.trip.plan.entity.TripPlan;
+import com.trip.plan.entity.PlanStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -26,6 +27,8 @@ public interface PlanRepository extends JpaRepository<TripPlan, Long> {
      * 내 플랜 목록 — updatedAt DESC 정렬은 Pageable sort로 위임
      */
     Page<TripPlan> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
+
+    Page<TripPlan> findByUserIdAndStatusOrderByUpdatedAtDesc(Long userId, PlanStatus status, Pageable pageable);
 
     /**
      * 상세 조회 — days fetch join (places는 @BatchSize IN-query로 자동 처리)

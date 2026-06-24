@@ -52,7 +52,7 @@ function goToPlan() {
 <style scoped>
 .cart-fab {
   position: fixed;
-  right: 16px;
+  right: max(16px, calc((100vw - 430px) / 2 + 16px));
   bottom: 24px;
   z-index: 900;
   display: flex;

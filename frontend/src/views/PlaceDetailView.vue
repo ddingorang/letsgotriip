@@ -135,13 +135,45 @@
           </svg>
           지도 보기
         </button>
-        <button class="action-btn secondary" @click="getRecommendation">
+        <button class="action-btn secondary" :disabled="similarLoading" @click="getRecommendation">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+            <path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6L12 3z" />
+            <path d="M19 15l.9 2.7L22 18.5l-2.1.8L19 22l-.9-2.7-2.1-.8 2.1-.8L19 15z" />
           </svg>
-          다시 추천
+          <span class="action-label">비슷한 곳 추천</span>
         </button>
+      </div>
+
+      <div v-if="similarLoaded || similarLoading || similarError" class="similar-section">
+        <div class="similar-head">
+          <h2 class="section-title">비슷한 곳</h2>
+          <button class="similar-refresh" :disabled="similarLoading" @click="loadSimilarPlaces(true)">
+            {{ similarLoading ? '찾는 중' : '새로 추천' }}
+          </button>
+        </div>
+        <div v-if="similarLoading" class="similar-list" aria-busy="true">
+          <div v-for="n in 3" :key="n" class="similar-card similar-skeleton" />
+        </div>
+        <p v-else-if="similarError" class="similar-empty">{{ similarError }}</p>
+        <div v-else class="similar-list">
+          <button
+            v-for="item in similarPlaces"
+            :key="item.contentId"
+            class="similar-card"
+            @click="goSimilarPlace(item)"
+          >
+            <img
+              :src="item.imageUrl || '/images/placeholder-thumb.png'"
+              :alt="item.name"
+              loading="lazy"
+              @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
+            />
+            <span class="similar-body">
+              <strong>{{ item.name }}</strong>
+              <small>{{ item.category || '관광지' }} · {{ distanceLabel(item) }}</small>
+            </span>
+          </button>
+        </div>
       </div>
 
       <!-- ── Image gallery ─────────────────────────────────────────────────── -->
@@ -410,9 +442,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAttractionStore } from '@/stores/attraction.js'
+import { useAttractionStore, mapAttraction } from '@/stores/attraction.js'
 import { usePlanStore } from '@/stores/plan.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { contextApi, reviewApi, favoriteApi, attractionApi } from '@/api/index.js'
@@ -457,6 +489,10 @@ const place = ref(null)
 const loading = ref(false)
 const fetchError = ref(null)
 const addLoading = ref(false)
+const similarPlaces = ref([])
+const similarLoading = ref(false)
+const similarLoaded = ref(false)
+const similarError = ref('')
 
 // ── 리뷰 상태 (실연동) ───────────────────────────────────────────────────────
 const reviews = ref([])
@@ -860,23 +896,167 @@ async function confirmAdd() {
   }
 }
 
-// master: 브라우저 alert 대신 커스텀 $alert 사용("다시 추천" 버튼에서 호출)
-function getRecommendation() {
-  $alert.info('비슷한 여행지를 추천해드릴게요!')
+const SIMILAR_LIMIT = 6
+const SIMILAR_RADIUS_METERS = 30000
+const nameCollator = new Intl.Collator('ko-KR', { numeric: true, sensitivity: 'base' })
+
+function rawAttractionList(data) {
+  return Array.isArray(data) ? data : (data?.content ?? data?.items ?? [])
 }
 
-onMounted(async () => {
-  const contentId = route.params.id
+function toRad(value) {
+  return value * Math.PI / 180
+}
+
+function distanceKmBetween(a, b) {
+  const lat1 = Number(a?.lat)
+  const lng1 = Number(a?.lng)
+  const lat2 = Number(b?.lat)
+  const lng2 = Number(b?.lng)
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return null
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const rLat1 = toRad(lat1)
+  const rLat2 = toRad(lat2)
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dLng / 2) ** 2
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
+}
+
+function textTokens(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 2)
+}
+
+function commonTokenCount(a, b) {
+  const right = new Set(textTokens(b))
+  return textTokens(a).filter((token) => right.has(token)).length
+}
+
+function scoreSimilarPlace(candidate, current) {
+  const distanceKm = distanceKmBetween(candidate, current)
+  let score = 0
+  if (candidate.contentTypeId && candidate.contentTypeId === current.contentTypeId) score += 100
+  if (Number.isFinite(distanceKm)) score += Math.max(0, 60 - distanceKm)
+  score += commonTokenCount(candidate.address, current.address) * 8
+  score += commonTokenCount(candidate.name, current.name) * 4
+  return { ...candidate, distanceKm, similarityScore: score }
+}
+
+async function fetchSimilarBatch(params) {
+  const { data } = await attractionApi.list({ page: 1, size: 30, ...params })
+  return rawAttractionList(data).map((item) => mapAttraction(item))
+}
+
+async function loadSimilarPlaces(force = false) {
+  if (similarLoading.value) return
+  if (!force && similarPlaces.value.length) return
+
+  const current = place.value
+  if (!current?.contentId) return
+
+  similarLoading.value = true
+  similarLoaded.value = true
+  similarError.value = ''
+
+  const queries = []
+  if (current.contentTypeId && current.lat && current.lng) {
+    queries.push({
+      contentTypeId: current.contentTypeId,
+      mapX: current.lng,
+      mapY: current.lat,
+      radius: SIMILAR_RADIUS_METERS,
+    })
+  }
+  if (current.contentTypeId) queries.push({ contentTypeId: current.contentTypeId })
+  if (current.lat && current.lng) {
+    queries.push({ mapX: current.lng, mapY: current.lat, radius: SIMILAR_RADIUS_METERS })
+  }
+
+  try {
+    const seenQuery = new Set()
+    const seenPlace = new Set([String(current.contentId)])
+    const candidates = []
+
+    for (const query of queries) {
+      const key = JSON.stringify(query)
+      if (seenQuery.has(key)) continue
+      seenQuery.add(key)
+
+      const batch = await fetchSimilarBatch(query)
+      for (const item of batch) {
+        const id = String(item.contentId ?? item.id ?? '')
+        if (!id || seenPlace.has(id)) continue
+        seenPlace.add(id)
+        candidates.push(scoreSimilarPlace(item, current))
+      }
+      if (candidates.length >= SIMILAR_LIMIT) break
+    }
+
+    similarPlaces.value = candidates
+      .sort((a, b) => {
+        if (b.similarityScore !== a.similarityScore) return b.similarityScore - a.similarityScore
+        const ad = Number.isFinite(a.distanceKm) ? a.distanceKm : Number.POSITIVE_INFINITY
+        const bd = Number.isFinite(b.distanceKm) ? b.distanceKm : Number.POSITIVE_INFINITY
+        if (ad !== bd) return ad - bd
+        return nameCollator.compare(a.name ?? '', b.name ?? '')
+      })
+      .slice(0, SIMILAR_LIMIT)
+
+    if (!similarPlaces.value.length) similarError.value = '비슷한 여행지를 찾지 못했어요.'
+  } catch (e) {
+    similarPlaces.value = []
+    similarError.value = e?.response?.data?.message ?? '비슷한 여행지를 불러오지 못했어요.'
+  } finally {
+    similarLoading.value = false
+  }
+}
+
+function distanceLabel(item) {
+  if (!Number.isFinite(item?.distanceKm)) return '거리 정보 없음'
+  if (item.distanceKm < 1) return `${Math.round(item.distanceKm * 1000)}m`
+  return `${item.distanceKm.toFixed(item.distanceKm >= 10 ? 0 : 1)}km`
+}
+
+function goSimilarPlace(item) {
+  if (!item?.contentId) return
+  router.push({ name: 'place-detail', params: { id: item.contentId } })
+}
+
+async function getRecommendation() {
+  await loadSimilarPlaces(true)
+}
+
+let detailRequestSeq = 0
+
+async function loadPlaceDetail(contentId) {
   if (!contentId) return
+  const seq = ++detailRequestSeq
   loading.value = true
   imagesLoading.value = true
   fetchError.value = null
+  overviewExpanded.value = false
+  placeImages.value = []
+  similarPlaces.value = []
+  similarLoaded.value = false
+  similarError.value = ''
+  bookmarked.value = false
+  liked.value = false
+  likeCount.value = 0
+  weather.value = null
+  evStations.value = []
+  resetForm()
 
   // place 상세 + 이미지 병렬 요청
   const [detailResult, imagesResult] = await Promise.allSettled([
     store.fetchDetail(contentId),
     attractionApi.images(contentId),
   ])
+
+  if (seq !== detailRequestSeq) return
 
   if (detailResult.status === 'fulfilled') {
     place.value = detailResult.value
@@ -898,7 +1078,18 @@ onMounted(async () => {
   loadReviews()
   loadBookmark()
   loadLike()
+}
+
+onMounted(() => {
+  loadPlaceDetail(route.params.id)
 })
+
+watch(
+  () => route.params.id,
+  (contentId, previousId) => {
+    if (contentId && contentId !== previousId) loadPlaceDetail(contentId)
+  },
+)
 </script>
 
 <style scoped>
@@ -1264,6 +1455,115 @@ onMounted(async () => {
 .action-btn.secondary {
   background: var(--color-surface);
   color: var(--color-ink-secondary);
+}
+
+.action-btn:disabled {
+  opacity: 0.62;
+}
+
+.action-label {
+  min-width: 0;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+/* ── Similar places ──────────────────────────────────────────────────────── */
+.similar-section {
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--color-line-light);
+}
+
+.similar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.similar-head .section-title {
+  margin-bottom: 0;
+}
+
+.similar-refresh {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-peach-light);
+  color: var(--color-peach-pressed);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.similar-refresh:disabled {
+  opacity: 0.62;
+}
+
+.similar-list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+}
+
+.similar-card {
+  flex: 0 0 154px;
+  min-height: 156px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-align: left;
+}
+
+.similar-card img {
+  display: block;
+  width: 100%;
+  height: 88px;
+  object-fit: cover;
+  background: #eee8e3;
+}
+
+.similar-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px 10px;
+}
+
+.similar-body strong {
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.3;
+  letter-spacing: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.similar-body small {
+  color: var(--color-ink-tertiary);
+  font-size: 11.5px;
+  line-height: 1.25;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.similar-empty {
+  padding: 10px 0 2px;
+  color: var(--color-ink-tertiary);
+  font-size: 13px;
+}
+
+.similar-skeleton {
+  background: linear-gradient(90deg, #efe6e4 25%, #e7e0d8 50%, #efe6e4 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
 }
 
 /* ── 장바구니 분할 버튼 ─────────────────────────────────────────────────────── */

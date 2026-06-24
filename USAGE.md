@@ -14,6 +14,8 @@ docker compose up -d --build
 ```
 
 전체 스택(MySQL·MongoDB·Redis·Redis-Vector·RabbitMQ + 백엔드 + 프론트엔드)이 한 번에 뜹니다.
+빈 MySQL 볼륨으로 처음 기동하면 `db/init/01-seed.sql`이 자동 로드되어 데모/시드 데이터가 바로 들어갑니다.
+수동 시드/배치 스크립트는 데이터 재생성 또는 덤프 갱신이 필요할 때만 사용합니다.
 
 | 대상 | 주소 |
 |------|------|
@@ -28,6 +30,7 @@ docker compose up -d --build
 | 역할 | 이메일 | 비밀번호 |
 |------|--------|----------|
 | 일반 사용자 | `demo@triip.com` | `demo1234` |
+| 시드 사용자 | `jeju@seed.triip` 등 `@seed.triip` 계정 | `seed1234` |
 | 관리자 | `admin@triip.com` | `admin1234` |
 
 로그인 폼은 기본적으로 데모 계정이 미리 채워집니다(`.env`의 `VITE_DEMO_*`로 변경/비활성 가능). 직접 **회원가입**하거나 **Google 로그인**도 가능합니다.
@@ -106,7 +109,7 @@ docker compose up -d --build
 - **결제·예약**(`/payment`, `/confirmation`)은 데모 화면입니다 — 실제 PG 연동/결제는 일어나지 않습니다.
 - **STT**는 현재 목업(MockSTTManager)으로 동작합니다 — 실제 음성 인식을 쓰려면 Whisper 연동(`OPENAI_API_KEY`) 전환이 필요합니다.
 - 뉴스·전기차 충전소·그룹 할인 등 일부 데이터는 외부 연동 없이 **데모 데이터**입니다.
-- 시드 데이터(제주 중심 핫플/게시글/동행)는 데모 계정용으로 미리 들어 있습니다.
+- 시드 데이터(제주 중심 핫플/게시글/동행)는 빈 MySQL 볼륨 첫 기동 시 `db/init/01-seed.sql`에서 자동 로드됩니다.
 
 ---
 

@@ -119,7 +119,7 @@ class PlanServiceTest {
         LocalDate start = LocalDate.of(2026, 7, 1);
         LocalDate end   = LocalDate.of(2026, 7, 3);
         PlanCreateRequestDto req = new PlanCreateRequestDto(
-                "3일 여행", start, end, null, null, null);
+                "3일 여행", start, end, null, null, null, null, null);
 
         given(planRepository.save(any(TripPlan.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -179,7 +179,7 @@ class PlanServiceTest {
 
         // 2일로 축소
         PlanUpdateRequestDto req = new PlanUpdateRequestDto(
-                0L, "줄인 여행", origStart, origStart.plusDays(1), null, null);
+                0L, "줄인 여행", origStart, origStart.plusDays(1), null, null, null, null);
 
         // when / then
         assertThatThrownBy(() -> planService.update(OWNER_ID, PLAN_ID, req))
@@ -208,7 +208,7 @@ class PlanServiceTest {
                 "수정 여행",
                 LocalDate.of(2026, 7, 1),
                 LocalDate.of(2026, 7, 3),
-                null, null);
+                null, null, null, null);
 
         // when / then
         assertThatThrownBy(() -> planService.update(OWNER_ID, PLAN_ID, req))
@@ -259,7 +259,7 @@ class PlanServiceTest {
                 "잘못된 기간",
                 LocalDate.of(2026, 7, 5),
                 LocalDate.of(2026, 7, 1),  // end < start
-                null, null, null);
+                null, null, null, null, null);
 
         assertThatThrownBy(() -> planService.create(OWNER_ID, req))
                 .isInstanceOf(PlanHandler.class)

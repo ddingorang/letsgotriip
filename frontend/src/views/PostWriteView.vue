@@ -98,22 +98,20 @@ const form = ref({
   imageUrl: null,
 })
 
-const categories = ['후기', '꿀팁', '동행', '질문']
-// Korean label → BE PostCategory enum (REVIEW/QUESTION/TIP/RESTAURANT/COMPANION)
+const categories = ['후기', '꿀팁', '맛집', '질문']
+// Korean label → BE PostCategory enum (REVIEW/QUESTION/TIP/RESTAURANT)
 const categoryEnum = {
   후기: 'REVIEW',
   꿀팁: 'TIP',
-  동행: 'COMPANION',
-  질문: 'QUESTION',
   맛집: 'RESTAURANT',
+  질문: 'QUESTION',
 }
 // BE enum → Korean label (for prefilling category selector)
 const enumCategory = {
   REVIEW: '후기',
   TIP: '꿀팁',
-  COMPANION: '동행',
-  QUESTION: '질문',
   RESTAURANT: '맛집',
+  QUESTION: '질문',
 }
 
 // 업로드 진행 중에는 등록/수정 비활성(미완 이미지로 제출 방지)

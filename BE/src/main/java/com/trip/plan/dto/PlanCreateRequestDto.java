@@ -2,6 +2,7 @@ package com.trip.plan.dto;
 
 import com.trip.plan.entity.CompanionsType;
 import com.trip.plan.entity.OriginType;
+import com.trip.plan.entity.PlanStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -26,5 +27,7 @@ public record PlanCreateRequestDto(
 
         // 대표 이미지 URL(선택). 없으면 프론트에서 기본 이미지로 표시.
         @Size(max = 500)
-        String imageUrl
+        String imageUrl,
+
+        PlanStatus status
 ) {}

@@ -78,7 +78,7 @@ class RecommendServiceTest {
         return new RecommendRequestDto(AREA,
                 LocalDate.of(2026, 8, 1),
                 LocalDate.of(2026, 8, 2),
-                "COUPLE", 200000, List.of("자연"));
+                "COUPLE", 200000, List.of("자연"), null);
     }
 
     @BeforeEach
@@ -233,7 +233,7 @@ class RecommendServiceTest {
         PlanDetailResponseDto mockPlan = new PlanDetailResponseDto(
                 77L, "기존 계획",
                 LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 2),
-                null, null, OriginType.AI, 0L,
+                null, null, OriginType.AI, null, null, 0L,
                 LocalDateTime.now(), LocalDateTime.now(), List.of()
         );
         given(planService.getDetail(USER_ID, 77L)).willReturn(mockPlan);

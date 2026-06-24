@@ -1,6 +1,7 @@
 package com.trip.plan.dto;
 
 import com.trip.plan.entity.CompanionsType;
+import com.trip.plan.entity.PlanStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -26,5 +27,7 @@ public record PlanUpdateRequestDto(
 
         // 대표 이미지 URL. null이면 미변경, ""이면 제거, 값이면 교체.
         @Size(max = 500)
-        String imageUrl
+        String imageUrl,
+
+        PlanStatus status
 ) {}
