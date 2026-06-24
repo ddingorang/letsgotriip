@@ -43,7 +43,7 @@
       <section class="section">
         <div class="section-header">
           <h2 class="section-title">지금 뜨는 여행지</h2>
-          <button class="see-all" @click="$router.push('/explore')">전체보기</button>
+          <button class="see-all" @click="$router.push({ path: '/community', query: { tab: 'hotplace' } })">전체보기</button>
         </div>
         <div class="horizontal-scroll" ref="hScroll" @wheel.prevent="onHScroll">
           <!-- 로딩 중(데이터 도착 전)엔 스켈레톤 — 빈 줄로 "고장난 것처럼" 보이지 않게 -->
@@ -51,7 +51,7 @@
             <div v-for="n in 3" :key="'sk' + n" class="place-skeleton" />
           </template>
           <template v-else>
-            <PlaceCard v-for="place in places" :key="place.id" :place="place" :rank="place.rank" @click="$router.push(`/hotplace/${place.id}`)" />
+            <PlaceCard v-for="place in places" :key="place.id" :place="place" :rank="place.rank" @click="$router.push({ name: 'hotplace-detail', params: { id: place.id } })" />
           </template>
           <p v-if="!trendingLoading && !places.length" class="trending-empty">표시할 여행지를 불러오지 못했어요.</p>
         </div>

@@ -36,7 +36,7 @@ let kakaoRef = null
 // 선택(selectedId) 변경 시에는 카메라를 재설정하지 않고 panTo 만 수행한다.
 let needsFit = true
 
-const KAKAO_KEY = import.meta.env.VITE_KAKAO_MAP_KEY
+const KAKAO_KEY = String(import.meta.env.VITE_KAKAO_MAP_KEY ?? '').trim()
 
 // SDK를 한 번만 로드 (전역 공유 프라미스)
 function loadKakao() {
@@ -44,13 +44,13 @@ function loadKakao() {
   if (window.__kakaoMapLoading) return window.__kakaoMapLoading
   window.__kakaoMapLoading = new Promise((resolve, reject) => {
     if (!KAKAO_KEY) {
-      reject(new Error('VITE_KAKAO_MAP_KEY 누락'))
+      reject(new Error('Kakao 지도 키가 설정되지 않았습니다.\nfrontend/.env에 VITE_KAKAO_MAP_KEY를 입력해 주세요.'))
       return
     }
     const s = document.createElement('script')
     s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`
     s.onload = () => window.kakao.maps.load(() => resolve(window.kakao))
-    s.onerror = () => reject(new Error('Kakao 지도 SDK 로드 실패(도메인 등록 확인)'))
+    s.onerror = () => reject(new Error('Kakao 지도 SDK를 불러오지 못했습니다.\nKakao Developers의 JavaScript 키와 등록 도메인을 확인해 주세요.'))
     document.head.appendChild(s)
   })
   return window.__kakaoMapLoading
@@ -284,7 +284,7 @@ onMounted(async () => {
       { deep: true },
     )
   } catch (e) {
-    error.value = e.message || '지도를 불러올 수 없습니다.'
+    error.value = e.message || 'Kakao 지도를 불러올 수 없습니다.'
     // eslint-disable-next-line no-console
     console.error('[TripMap]', e)
   }
@@ -318,7 +318,10 @@ onBeforeUnmount(() => {
   text-align: center;
   padding: 16px;
   font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-line;
   color: var(--color-ink-muted, #777);
+  background: rgba(255, 255, 255, 0.92);
   z-index: 1;
 }
 </style>

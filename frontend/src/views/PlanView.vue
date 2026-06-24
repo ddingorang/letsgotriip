@@ -277,7 +277,13 @@
                 </div>
 
                 <div v-if="currentDayPlaces.length" class="plan-map-wrap">
-                  <TripMap :places="currentDayPlaces" :path="currentDayLine" :path-dashed="currentDayDashed" :numbered="true" />
+                  <TripMap
+                    :key="`${plan.id}-${routeMapKey}`"
+                    :places="currentDayPlaces"
+                    :path="currentDayLine"
+                    :path-dashed="currentDayDashed"
+                    :numbered="true"
+                  />
                 </div>
                 <p v-else class="day-empty-map">{{ selectedDay }}일차는 지도에 표시할 장소(좌표)가 없어요.</p>
 
@@ -579,7 +585,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan.js'
@@ -623,6 +629,7 @@ const compareLoading = ref(false)
 const routePath = ref(null)        // { planId, enabled, days }
 const routePathLoading = ref(false)
 const selectedDay = ref(1)         // 지도에 표시 중인 일차(1부터). 계획 펼칠 때 첫 일차로 초기화
+const routeMapKey = ref(0)
 
 // ── 계획 상세 탭 ───────────────────────────────────────────────────────────────
 // 분류(일정·동선·예산)가 길게 쌓이지 않도록 펼친 계획 내부를 탭으로 나눈다.
@@ -638,6 +645,15 @@ function tabFor(planId) {
 }
 function setTab(planId, key) {
   activeTab.value = { ...activeTab.value, [planId]: key }
+  if (key === 'route') queueRouteMapRefresh(planId)
+}
+
+async function queueRouteMapRefresh(planId = selectedPlanId.value) {
+  if (planId == null || tabFor(planId) !== 'route') return
+  await nextTick()
+  if (selectedPlanId.value === planId && tabFor(planId) === 'route') {
+    routeMapKey.value += 1
+  }
 }
 
 // ── 장소 드래그 정렬 상태 ──────────────────────────────────────────────────────
@@ -1007,6 +1023,10 @@ function stepDay(delta) {
   if (next != null) selectedDay.value = next
 }
 
+watch(selectedDay, () => {
+  queueRouteMapRefresh()
+})
+
 /** 펼친 계획의 도로 경로 조회. 좌표 2곳 미만/키 미설정이면 조용히 빈 경로 유지(마커만 표시). */
 async function loadRoutePath(planId) {
   routePathLoading.value = true
@@ -1017,7 +1037,10 @@ async function loadRoutePath(planId) {
   } catch {
     if (selectedPlanId.value === planId) routePath.value = null
   } finally {
-    if (selectedPlanId.value === planId) routePathLoading.value = false
+    if (selectedPlanId.value === planId) {
+      routePathLoading.value = false
+      queueRouteMapRefresh(planId)
+    }
   }
 }
 
@@ -1067,6 +1090,7 @@ async function togglePlan(plan) {
   // 상세 로드 후 실제 첫 일차로 지도를 맞춘다(일차 번호가 1부터가 아닐 수 있음).
   if (planStore.current?.id === plan.id) {
     selectedDay.value = planStore.current?.days?.[0]?.dayNo ?? 1
+    queueRouteMapRefresh(plan.id)
   }
   // 도로 경로(길찾기) 조회 — 실패해도 마커는 그대로 표시
   loadRoutePath(plan.id)

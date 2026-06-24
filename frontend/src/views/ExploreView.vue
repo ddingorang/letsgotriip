@@ -78,7 +78,7 @@
           {{ sheetTitle }}
           <span class="count">{{ displayedPlaces.length }}</span>
         </h2>
-        <button class="sort-btn" :class="{ active: sortMode !== 'default' }" @click="openSortSheet">
+        <button class="sort-btn" :class="{ active: sortMode === 'default' || sortMode === 'distance' }" @click="openSortSheet">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="7" y1="12" x2="17" y2="12" />
@@ -359,7 +359,7 @@ const PAGE_SIZE = 30   // 거리순 정렬이 의미있도록 후보를 넉넉�
 
 // ── 현재 위치 / 정렬 ─────────────────────────────────────────────────────────
 const userLoc = ref(null)              // { lat, lng }
-const sortMode = ref('default')        // 'default' | 'distance' | 'name'
+const sortMode = ref('name')           // 'default' | 'distance' | 'name'
 const sortSheetOpen = ref(false)       // 정렬 기준 바텀시트 표시 여부
 
 // 정렬 기준 정의 — key/label/설명. requiresLoc 인 항목은 위치 없으면 비활성.
