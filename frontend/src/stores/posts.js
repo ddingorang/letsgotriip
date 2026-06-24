@@ -11,6 +11,8 @@ const CATEGORY_LABELS = {
   COMPANION: '동행',
 }
 
+const BOARD_EXCLUDED_CATEGORIES = new Set(['RESTAURANT'])
+
 /**
  * Normalize a post from the BE list endpoint (PostSummaryResponse) or
  * detail endpoint (PostResponse) into the shape the FE templates expect.
@@ -27,6 +29,10 @@ function normalizePost(post) {
     imageUrl: post.imageUrls?.[0] ?? post.thumbnailUrl ?? post.imageUrl ?? null,
     categoryLabel: CATEGORY_LABELS[post.category] ?? post.category ?? null,
   }
+}
+
+function isBoardListPost(post) {
+  return !BOARD_EXCLUDED_CATEGORIES.has(post?.category)
 }
 
 /**
@@ -81,7 +87,7 @@ export const usePostsStore = defineStore('posts', () => {
       const res = await communityApi.getPosts(params)
       const data = res.data
       const raw = data.content || []
-      posts.value.push(...raw.map(normalizePost))
+      posts.value.push(...raw.map(normalizePost).filter(isBoardListPost))
       cursor.value = data.nextCursor || null
       hasMore.value = !!data.nextCursor
     } catch (err) {

@@ -422,7 +422,8 @@ function compareRecommendation(a, b) {
     if (bValue == null) return -1
     if (aValue !== bValue) return bValue - aValue
   }
-  return comparePlaceName(a, b)
+  // 추천 점수가 같으면 API/기본 노출 순서를 유지한다. 이름 정렬은 별도 이름순 옵션에서만 수행한다.
+  return 0
 }
 
 function compareDistance(a, b) {

@@ -300,14 +300,13 @@ function companionDday(dateStr) {
 }
 
 // 공유게시판
-const filterTabs = ['전체', '후기', '질문', '꿀팁', '맛집', '동행']
+const filterTabs = ['전체', '후기', '질문', '꿀팁', '동행']
 const activeFilter = ref('전체')
 // 라벨 → BE PostCategory enum. '전체'는 무필터(undefined).
 const FILTER_ENUM = {
   후기: 'REVIEW',
   질문: 'QUESTION',
   꿀팁: 'TIP',
-  맛집: 'RESTAURANT',
   동행: 'COMPANION',
 }
 // 카테고리 필터 변경 시 서버에서 재조회(클라이언트 필터 제거 — 페이지네이션과 정합)
