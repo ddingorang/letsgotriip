@@ -11,7 +11,7 @@ const CATEGORY_LABELS = {
   COMPANION: '동행',
 }
 
-const BOARD_EXCLUDED_CATEGORIES = new Set(['RESTAURANT'])
+const BOARD_EXCLUDED_CATEGORIES = new Set(['COMPANION'])
 
 /**
  * Normalize a post from the BE list endpoint (PostSummaryResponse) or

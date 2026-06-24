@@ -77,33 +77,35 @@
     <!-- ② 핫플 -->
     <div v-show="activeMain === 1" class="tab-pane hp-pane">
       <div class="hp-controls">
-        <div class="view-toggle">
-          <button :class="['toggle-btn', { active: hpView === 'map' }]" @click="hpView = 'map'">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-              <line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
-            </svg>
-            지도
-          </button>
-          <button :class="['toggle-btn', { active: hpView === 'list' }]" @click="hpView = 'list'">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-            </svg>
-            목록
-          </button>
-        </div>
-        <div class="sort-toggle" aria-label="핫플 정렬 기준">
-          <button
-            v-for="option in hpSortOptions"
-            :key="option.value"
-            type="button"
-            :class="['sort-btn', { active: hpSort === option.value }]"
-            :aria-pressed="hpSort === option.value"
-            @click="selectHpSort(option.value)"
-          >
-            {{ option.label }}
-          </button>
+        <div class="hp-top-row">
+          <div class="view-toggle">
+            <button :class="['toggle-btn', { active: hpView === 'map' }]" @click="hpView = 'map'">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                <line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
+              </svg>
+              지도
+            </button>
+            <button :class="['toggle-btn', { active: hpView === 'list' }]" @click="hpView = 'list'">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+              목록
+            </button>
+          </div>
+          <div class="sort-toggle" aria-label="핫플 정렬 기준">
+            <button
+              v-for="option in hpSortOptions"
+              :key="option.value"
+              type="button"
+              :class="['sort-btn', { active: hpSort === option.value }]"
+              :aria-pressed="hpSort === option.value"
+              @click="selectHpSort(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
         </div>
         <div class="cat-scroll">
           <button
@@ -300,14 +302,14 @@ function companionDday(dateStr) {
 }
 
 // 공유게시판
-const filterTabs = ['전체', '후기', '질문', '꿀팁', '동행']
+const filterTabs = ['전체', '후기', '질문', '꿀팁', '맛집']
 const activeFilter = ref('전체')
 // 라벨 → BE PostCategory enum. '전체'는 무필터(undefined).
 const FILTER_ENUM = {
   후기: 'REVIEW',
   질문: 'QUESTION',
   꿀팁: 'TIP',
-  동행: 'COMPANION',
+  맛집: 'RESTAURANT',
 }
 // 카테고리 필터 변경 시 서버에서 재조회(클라이언트 필터 제거 — 페이지네이션과 정합)
 function selectFilter(f) {
@@ -555,10 +557,17 @@ onMounted(() => {
   z-index: 30;
   background: var(--color-white);
 }
+.hp-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
 .view-toggle {
   display: flex;
   gap: 6px;
-  align-self: flex-start;
+  flex: 0 0 auto;
 }
 .toggle-btn {
   display: flex;
@@ -581,15 +590,18 @@ onMounted(() => {
 }
 .sort-toggle {
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .sort-btn {
   flex-shrink: 0;
-  min-width: 64px;
-  padding: 6px 12px;
+  min-width: 46px;
+  min-height: 34px;
+  padding: 6px 8px;
   border-radius: var(--radius-full);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-ink-muted);
   border: 1.5px solid var(--color-line);
