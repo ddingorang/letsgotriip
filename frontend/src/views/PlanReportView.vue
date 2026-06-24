@@ -89,10 +89,10 @@
         <div v-if="hasMapPlaces" class="map-card">
           <div class="map-card-head">
             <span class="map-card-title">내 계획 지도</span>
-            <span class="map-card-count">장소 {{ mapPlaces.length }}곳</span>
+            <span class="map-card-count">{{ routePathLoading ? '동선 계산 중' : `장소 ${mapPlaces.length}곳` }}</span>
           </div>
           <div class="map-wrap">
-            <TripMap :places="mapPlaces" :center="mapCenter" />
+            <TripMap :places="mapPlaces" :center="mapCenter" :path-segments="mapPathSegments" />
           </div>
         </div>
 
@@ -224,6 +224,8 @@ const reportFailed = ref(false)
 
 // ── 예산 ─────────────────────────────────────────────────────────────────────
 const budget = ref(null)        // { planId, dayBudgets, totalEstimated, plannedBudget, difference, note }
+const routePath = ref(null)
+const routePathLoading = ref(false)
 
 // ── 공유 ─────────────────────────────────────────────────────────────────────
 const shareInfo = ref(null)     // { url }
@@ -245,6 +247,15 @@ onMounted(async () => {
     reportFailed.value = true
   }
   // 예산은 별도로(실패해도 리포트 화면에는 영향 없음)
+  try {
+    routePathLoading.value = true
+    const { data } = await planApi.getRoutePath(planId)
+    routePath.value = data
+  } catch {
+    routePath.value = null
+  } finally {
+    routePathLoading.value = false
+  }
   try {
     const { data } = await planApi.getBudget(planId)
     budget.value = data
@@ -311,6 +322,7 @@ const mapPlaces = computed(() => {
         name: p.attraction?.title ?? p.title ?? '장소',
         lat: c.lat,
         lng: c.lng,
+        dayNo: day.dayNo,
       })
     }
   }
@@ -321,6 +333,23 @@ const hasMapPlaces = computed(() => mapPlaces.value.length > 0)
 const mapCenter = computed(() =>
   hasMapPlaces.value ? [mapPlaces.value[0].lat, mapPlaces.value[0].lng] : [37.5665, 126.978],
 )
+
+const mapPathSegments = computed(() => {
+  const rp = routePath.value
+  const hasRoadPath = rp && String(rp.planId) === String(planId) && rp.enabled
+  return days.value.flatMap((day) => {
+    const road = hasRoadPath
+      ? (rp.days ?? []).find((d) => d.dayNo === day.dayNo)?.path ?? []
+      : []
+    if (road.length >= 2) return [{ path: road, dashed: false }]
+
+    const fallback = (day.places ?? [])
+      .map((place) => coordOf(place))
+      .filter(Boolean)
+      .map((coord) => [coord.lat, coord.lng])
+    return fallback.length >= 2 ? [{ path: fallback, dashed: true }] : []
+  })
+})
 
 // ── 동선 리포트: BE 실데이터를 주 데이터원으로, 좌표 기반 Haversine을 폴백으로 ──
 // 우선순위 1) 서버 동선 리포트(planStore.routeReport, BE RouteCalculator 계산값)

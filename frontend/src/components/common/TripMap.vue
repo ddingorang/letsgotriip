@@ -17,6 +17,7 @@ const props = defineProps({
   categoryColors: { type: Object, default: () => ({}) },
   // 도로 경로선 — [[lat,lng], ...] 또는 [{lat,lng}, ...]. 비어있으면 선 미표시.
   path: { type: Array, default: () => [] },
+  pathSegments: { type: Array, default: () => [] },
   // true면 경로선을 점선으로(도로경로 대신 장소를 직선으로 잇는 근사 동선 표시용).
   pathDashed: { type: Boolean, default: false },
   fit: { type: Boolean, default: true }, // false면 places 변경 시 카메라 재설정 안 함
@@ -28,7 +29,7 @@ const mapEl = ref(null)
 const error = ref('')
 let map = null
 let overlays = []
-let routeLine = null        // 도로 경로선(Polyline)
+let routeLines = []         // 도로 경로선(Polyline[])
 let infoOverlay = null      // 선택된 핀 위의 상세보기 말풍선(인포윈도우)
 let resizeObserver = null
 let kakaoRef = null
@@ -80,33 +81,49 @@ function clearOverlays() {
 }
 
 function clearRoute() {
-  if (routeLine) {
-    routeLine.setMap(null)
-    routeLine = null
-  }
+  routeLines.forEach((line) => line.setMap(null))
+  routeLines = []
 }
 
 // 도로 경로선(Polyline) 렌더. path 원소는 [lat,lng] 또는 {lat,lng} 모두 허용.
+function normalizeRoutePoint(kakao, pt) {
+  const lat = Array.isArray(pt) ? Number(pt[0]) : Number(pt?.lat)
+  const lng = Array.isArray(pt) ? Number(pt[1]) : Number(pt?.lng)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return new kakao.maps.LatLng(lat, lng)
+}
+
+function routeSegments() {
+  if (Array.isArray(props.pathSegments) && props.pathSegments.length) {
+    return props.pathSegments.map((segment) => {
+      if (Array.isArray(segment)) return { path: segment, dashed: props.pathDashed }
+      return {
+        path: Array.isArray(segment?.path) ? segment.path : [],
+        dashed: Boolean(segment?.dashed),
+      }
+    })
+  }
+  return [{ path: props.path, dashed: props.pathDashed }]
+}
+
 function renderRoute(kakao) {
   clearRoute()
-  if (!map || !Array.isArray(props.path) || props.path.length < 2) return
-  const latLngs = props.path
-    .map((pt) => {
-      const lat = Array.isArray(pt) ? Number(pt[0]) : Number(pt.lat)
-      const lng = Array.isArray(pt) ? Number(pt[1]) : Number(pt.lng)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
-      return new kakao.maps.LatLng(lat, lng)
+  if (!map) return
+  routeSegments().forEach((segment) => {
+    const latLngs = (segment.path ?? [])
+      .map((pt) => normalizeRoutePoint(kakao, pt))
+      .filter(Boolean)
+    if (latLngs.length < 2) return
+    const line = new kakao.maps.Polyline({
+      path: latLngs,
+      strokeWeight: 5,
+      strokeColor: '#F78F57',
+      strokeOpacity: 0.85,
+      strokeStyle: segment.dashed ? 'shortdash' : 'solid',
     })
-    .filter(Boolean)
-  if (latLngs.length < 2) return
-  routeLine = new kakao.maps.Polyline({
-    path: latLngs,
-    strokeWeight: 5,
-    strokeColor: '#F78F57',
-    strokeOpacity: 0.85,
-    strokeStyle: props.pathDashed ? 'shortdash' : 'solid',
+    line.setMap(map)
+    routeLines.push(line)
   })
-  routeLine.setMap(map)
 }
 
 // 선택된 핀 위에 '상세보기' 말풍선(인포윈도우)을 띄운다.
@@ -280,6 +297,11 @@ onMounted(async () => {
     // 경로선만 바뀌면(길찾기 응답 도착) 카메라 재설정 없이 선만 다시 그린다.
     watch(
       () => props.path,
+      () => renderRoute(kakao),
+      { deep: true },
+    )
+    watch(
+      () => props.pathSegments,
       () => renderRoute(kakao),
       { deep: true },
     )
