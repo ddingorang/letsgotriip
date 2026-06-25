@@ -230,7 +230,7 @@
         </div>
       </div>
 
-      <!-- ── 여행 맥락 정보 (날씨/일출일몰/충전소) ──────────────────────────── -->
+      <!-- ── 여행 맥락 정보 (날씨/일출일몰) ──────────────────────────── -->
       <div v-if="hasCoords" class="context-section">
         <!-- 날씨 + 일출·일몰 + 3일 예보 -->
         <div v-if="weatherLoading" class="ctx-card ctx-loading">
@@ -272,32 +272,6 @@
           <span class="ctx-empty-text">날씨 정보를 불러올 수 없어요.</span>
         </div>
 
-        <!-- 근처 전기차 충전소 -->
-        <div v-if="evStations.length" class="ev-section">
-          <div class="ev-header">
-            <h3 class="ev-title">
-              근처 전기차 충전소
-              <span class="demo-badge">데모</span>
-            </h3>
-          </div>
-          <div class="ev-list">
-            <div v-for="(ev, i) in evStations" :key="i" class="ev-item">
-              <div class="ev-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-peach)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" />
-                </svg>
-              </div>
-              <div class="ev-info">
-                <p class="ev-name">{{ ev.name }}</p>
-                <p class="ev-addr">{{ ev.address }}</p>
-              </div>
-              <div class="ev-meta">
-                <span class="ev-type">{{ ev.type }}</span>
-                <span class="ev-count">{{ ev.chargerCount }}대</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- ── Reviews (실연동: GET/POST/PATCH/DELETE /api/attractions/{id}/reviews) ── -->
@@ -503,10 +477,9 @@ const reviewSubmitting = ref(false)
 const editingId = ref(null)             // 수정 중인 리뷰 id (null이면 신규 작성 모드)
 const form = reactive({ rating: 5, content: '' })
 
-// ── 여행 맥락 정보 (날씨/일출일몰/충전소) ────────────────────────────────────
+// ── 여행 맥락 정보 (날씨/일출일몰) ────────────────────────────────────
 const weather = ref(null)
 const weatherLoading = ref(false)
-const evStations = ref([])
 
 const hasCoords = computed(() => !!(place.value?.lat && place.value?.lng))
 
@@ -567,12 +540,6 @@ async function loadContext() {
     weatherLoading.value = false
   }
 
-  try {
-    const { data } = await contextApi.evStations(lat, lng)
-    evStations.value = Array.isArray(data) ? data.slice(0, 3) : []
-  } catch {
-    evStations.value = []
-  }
 }
 
 // ── 리뷰 로드/작성/수정/삭제 ─────────────────────────────────────────────────
@@ -1040,7 +1007,6 @@ async function loadPlaceDetail(contentId) {
   liked.value = false
   likeCount.value = 0
   weather.value = null
-  evStations.value = []
   resetForm()
 
   // place 상세 + 이미지 병렬 요청
@@ -1065,7 +1031,7 @@ async function loadPlaceDetail(contentId) {
     : []
   imagesLoading.value = false
 
-  // 좌표가 있으면 날씨/충전소 맥락 정보 로드
+  // 좌표가 있으면 날씨 맥락 정보 로드
   if (hasCoords.value) loadContext()
   // 리뷰 목록 + 찜/좋아요 상태 수화 (공개 리뷰·좋아요수는 항상, 찜·좋아요여부는 로그인 시)
   loadReviews()
@@ -1961,97 +1927,6 @@ watch(
   color: var(--color-ink-muted);
 }
 
-/* ── 충전소 ──────────────────────────────────────────────────────────────── */
-.ev-header {
-  margin-bottom: 10px;
-}
-
-.ev-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.3px;
-}
-
-.demo-badge {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--color-ink-muted);
-  background: var(--color-surface);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-full);
-  padding: 1px 7px;
-}
-
-.ev-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ev-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-}
-
-.ev-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--color-peach-light);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.ev-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.ev-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ev-addr {
-  font-size: 11.5px;
-  color: var(--color-ink-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ev-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.ev-type {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-peach-pressed);
-}
-
-.ev-count {
-  font-size: 11px;
-  color: var(--color-ink-muted);
-}
 
 .bottom-spacer {
   height: 32px;
