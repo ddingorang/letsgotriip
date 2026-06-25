@@ -550,6 +550,15 @@ public class PlanService {
             }
         }
 
+        // 첫 번째 장소의 이미지를 플랜 커버로 사용
+        String coverImageUrl = draft.days() == null ? null : draft.days().stream()
+                .filter(d -> d.places() != null)
+                .flatMap(d -> d.places().stream())
+                .map(ItineraryDraft.PlaceRecommendation::imageUrl)
+                .filter(url -> url != null && !url.isBlank())
+                .findFirst()
+                .orElse(null);
+
         TripPlan plan = TripPlan.builder()
                 .userId(userId)
                 .title(title)
@@ -558,6 +567,7 @@ public class PlanService {
                 .companions(companions)
                 .budget(req.budget())
                 .origin(OriginType.AI)
+                .imageUrl(coverImageUrl)
                 .build();
 
         int totalDays = req.totalDays();

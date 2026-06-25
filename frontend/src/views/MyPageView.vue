@@ -26,11 +26,7 @@
             <img v-if="authStore.user?.profileImageUrl" :src="authStore.user.profileImageUrl" :alt="authStore.user.nickname" class="avatar-img" />
             <span v-else class="avatar-text">프로필</span>
           </div>
-          <div class="camera-icon">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
-            </svg>
-          </div>
+
         </div>
         <div class="profile-info">
           <h2 class="profile-name">{{ authStore.user?.nickname ?? '프로필' }}</h2>
@@ -106,7 +102,8 @@
             @click="$router.push({ path: '/plan', query: { planId: plan.id } })"
           >
             <div class="plan-thumb">
-              <span class="plan-thumb-label">{{ plan.thumbLabel }}</span>
+              <img v-if="plan.imageUrl" :src="plan.imageUrl" :alt="plan.title" class="plan-thumb-img" />
+              <span v-else class="plan-thumb-label">{{ plan.thumbLabel }}</span>
             </div>
             <div class="plan-info">
               <div class="plan-title-row">
@@ -584,7 +581,7 @@ function mapPlan(p) {
     title: p.title,
     status: planStatusLabel(p.status, p.endDate),
     dateRange,
-    // 썸네일은 일정 제목 앞부분을 사용 (이미지 미보유)
+    imageUrl: p.imageUrl ?? null,
     thumbLabel: (p.title || '여행') + '\n일정',
   }
 }
@@ -886,16 +883,7 @@ onMounted(() => {
   object-fit: cover;
   border-radius: 50%;
 }
-.camera-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--color-surface);
-  border: 1px solid var(--color-line-light);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+
 .profile-info {
   padding-top: 8px;
   display: flex;
@@ -1067,6 +1055,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+.plan-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .plan-thumb-label {
   font-size: 10px;
