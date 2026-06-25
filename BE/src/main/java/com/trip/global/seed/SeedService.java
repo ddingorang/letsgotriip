@@ -378,9 +378,12 @@ public class SeedService {
         final String imgNseoul = "https://tong.visitkorea.or.kr/cms/resource/96/2785596_image2_1.jpg";
         final String imgNamsan = "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg";
         final String imgHeunyeoul = "https://tong.visitkorea.or.kr/cms/resource/19/2576419_image2_1.jpg";
-        final String imgGamcheon = "https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg";
+        final String imgGamcheon = "https://tong.visitkorea.or.kr/cms/resource/78/4039278_image2_1.jpg";
         final String imgGwangjang = "https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg";
         final String imgJeju = "https://tong.visitkorea.or.kr/cms/resource/34/3567934_image2_1.jpg";
+        final String imgGwangalli = "https://tong.visitkorea.or.kr/cms/resource/45/3311245_image2_1.jpg";
+        final String imgYeosu = "https://tong.visitkorea.or.kr/cms/resource/72/3393672_image2_1.jpg";
+        final String imgHyangiram = "https://tong.visitkorea.or.kr/cms/resource/07/2642807_image2_1.jpg";
 
         safe(counts, "communityPosts", () -> {
             // 좋아요 평균 ≈ 60, 댓글 평균 ≈ 3건, 본문은 최소 두 문장 이상.
@@ -403,13 +406,13 @@ public class SeedService {
                     List.of(c(foodie, "황리단길 맛집도 궁금해요"), c(seoul, "경주 야경 의외네요!"), c(busan, "코스 잘 짜셨네요"), c(jeju, "저도 다음에 가봐야겠어요")));
             seedPost(yeosu, "여수 밤바다 보고 온 후기",
                     "케이블카를 타고 내려다본 여수 밤바다는 정말 잊을 수가 없어요. 노래 가사가 괜히 나온 게 아니라는 걸 직접 보고서야 알았네요. 해상 케이블카는 꼭 타보시길 추천해요.",
-                    PostCategory.REVIEW, imgGamcheon, 58, List.of(jeju, busan, gangneung),
+                    PostCategory.REVIEW, imgYeosu, 58, List.of(jeju, busan, gangneung),
                     List.of(c(busan, "여수 밤바다 진리죠"), c(gangneung, "케이블카 꼭 타봐야겠어요"), c(jeju, "사진만 봐도 설레네요")));
 
             // ── 질문(QUESTION) 5건 ────────────────────────────────────────
             seedPost(busan, "부산 야경 명소 어디가 제일 좋나요?",
                     "이번 주말에 부산으로 1박 2일 여행을 가요. 야경을 정말 좋아하는데 어디가 제일 예쁜지 추천 부탁드려요 🙏 도보나 대중교통으로 갈 수 있으면 더 좋아요.",
-                    PostCategory.QUESTION, imgGamcheon, 41, List.of(seoul, jeju),
+                    PostCategory.QUESTION, imgGwangalli, 41, List.of(seoul, jeju),
                     List.of(c(seoul, "광안리 더베이101 강추합니다"), c(jeju, "황령산 전망대도 좋아요"), c(gangneung, "송도 케이블카에서 보는 야경도 멋져요"), c(foodie, "흰여울문화마을 노을도 예뻐요")));
             seedPost(seoul, "서울 근교 당일치기 어디가 좋을까요?",
                     "차가 없어서 대중교통으로만 다녀와야 해요. 서울 근교로 당일치기 다녀오기 좋은 곳 추천해주세요. 너무 빡센 코스 말고 여유롭게 쉬다 올 수 있으면 좋겠어요.",
@@ -457,7 +460,7 @@ public class SeedService {
                     List.of(c(busan, "흑돼지 진짜 최고죠 ㅎㅎ"), c(seoul, "저장해갑니다 👍"), c(jeju, "근처 카페도 궁금해요!"), c(gangneung, "리스트 알차네요")));
             seedPost(busan, "부산 돼지국밥 맛집 정리",
                     "서면과 남포동 일대 돼지국밥집 다섯 곳을 직접 다니며 비교해봤어요. 집집마다 국물 진하기와 고기 양이 달라서 취향대로 고르시면 됩니다. 부추를 듬뿍 넣어 드시는 걸 추천해요.",
-                    PostCategory.RESTAURANT, imgGamcheon, 66, List.of(jeju, foodie, gangneung),
+                    PostCategory.RESTAURANT, imgGwangalli, 66, List.of(jeju, foodie, gangneung),
                     List.of(c(foodie, "돼지국밥 리스트 최고예요"), c(jeju, "남포동 자주 가는데 참고할게요"), c(seoul, "국물 진한 집 어디인가요?")));
             seedPost(seoul, "광장시장 먹거리 추천",
                     "광장시장은 빈대떡, 마약김밥, 육회까지 줄 서서 먹을 가치가 충분해요. 평일 낮에 가면 주말보다 덜 붐벼서 여유롭게 즐길 수 있습니다. 현금을 챙겨 가면 결제가 더 수월해요.",
@@ -469,7 +472,7 @@ public class SeedService {
                     List.of(c(sokcho, "초당두부 아침에 먹으면 최고죠"), c(yeosu, "순두부 생각나네요")));
             seedPost(yeosu, "여수 게장 맛집 추천",
                     "간장게장 백반 한 상이면 밥 두 공기는 기본으로 비우게 돼요. 짭조름한 게장에 돌산갓김치를 곁들이면 그야말로 밥도둑입니다. 예약하고 가면 대기 없이 먹을 수 있어요.",
-                    PostCategory.RESTAURANT, imgGamcheon, 62, List.of(busan, foodie, gangneung),
+                    PostCategory.RESTAURANT, imgHyangiram, 62, List.of(busan, foodie, gangneung),
                     List.of(c(foodie, "게장에 밥도둑이죠"), c(busan, "돌산갓김치 조합 인정합니다"), c(jeju, "예약 팁 감사해요")));
             return 20;
         });
@@ -499,7 +502,7 @@ public class SeedService {
             seedHotPlace(busan, "감천문화마을", "부산광역시 사하구 감내2로", 35.0975, 129.0107,
                     HotPlaceCategory.ATTRACTION,
                     "가파른 산비탈을 따라 형형색색의 집들이 계단처럼 쌓여 있는 독특한 경관이에요. 골목 곳곳에 숨어 있는 벽화와 조형물을 찾아다니는 재미가 쏠쏠한 부산의 예술 마을이에요.",
-                    "https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg", 640,
+                    imgGamcheon, 640,
                     everyone.subList(2, 8), everyone.subList(3, 6));
             seedHotPlace(foodie, "광장시장 먹자골목", "서울특별시 종로구 창경궁로", 37.5701, 126.9999,
                     HotPlaceCategory.RESTAURANT,
