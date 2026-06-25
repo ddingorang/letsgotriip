@@ -539,7 +539,7 @@ public class PlanService {
         String areaName = AREA_NAMES.getOrDefault(req.areaCode(), req.areaCode());
         String title = (req.title() != null && !req.title().isBlank())
                 ? req.title()
-                : areaName + " 여행 (" + req.startDate() + " ~ " + req.endDate() + ")";
+                : areaName + " 여행";
 
         CompanionsType companions = null;
         if (req.companions() != null && !req.companions().isBlank()) {
