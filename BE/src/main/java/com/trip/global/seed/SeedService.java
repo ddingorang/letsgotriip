@@ -370,38 +370,108 @@ public class SeedService {
         });
 
         // ── 커뮤니티 게시글 + 참여(댓글·좋아요·스크랩)로 실제 데이터처럼 ─────────────
-        safe(counts, "communityPosts", () -> {
-            var p1 = communityService.createPost(foodie.getId(), new PostCreateRequest(
-                    "제주 흑돼지 맛집 BEST 5 🐷",
-                    "현지인 추천 받아 다녀온 흑돼지 맛집들 정리해봤어요. 연탄구이는 진리!",
-                    PostCategory.RESTAURANT,
-                    List.of("https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg")));
-            var p2 = communityService.createPost(seoul.getId(), new PostCreateRequest(
-                    "서울 고궁 야간개장 일정 공유합니다",
-                    "경복궁 야간개장 예매 꿀팁이랑 동선 정리. 미리 예매 필수예요!",
-                    PostCategory.TIP,
-                    List.of("https://tong.visitkorea.or.kr/cms/resource/23/2678623_image2_1.jpg")));
-            var p3 = communityService.createPost(jeju.getId(), new PostCreateRequest(
-                    "혼자 제주 2박3일 뚜벅이 후기",
-                    "버스랑 도보로만 다녔는데 생각보다 충분했어요. 다닌 코스 공유합니다!",
-                    PostCategory.REVIEW,
-                    List.of("https://tong.visitkorea.or.kr/cms/resource/53/2869753_image2_1.jpg")));
-            var p4 = communityService.createPost(busan.getId(), new PostCreateRequest(
-                    "부산 야경 명소 어디가 제일 좋나요?",
-                    "이번 주말 부산 가는데 야경 보기 좋은 곳 추천 부탁드려요 🙏",
-                    PostCategory.QUESTION,
-                    List.of("https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg")));
+        //    카테고리별 5건씩 — 후기(REVIEW)·질문(QUESTION)·꿀팁(TIP)·맛집(RESTAURANT) = 총 20건.
+        final String imgHeundae = "https://tong.visitkorea.or.kr/cms/resource/41/2655741_image2_1.jpg";
+        final String imgGyeongbok = "https://tong.visitkorea.or.kr/cms/resource/23/2678623_image2_1.jpg";
+        final String imgHyeopjae = "https://tong.visitkorea.or.kr/cms/resource/53/2869753_image2_1.jpg";
+        final String imgSeongsan = "https://tong.visitkorea.or.kr/cms/resource/08/2871008_image2_1.JPG";
+        final String imgNseoul = "https://tong.visitkorea.or.kr/cms/resource/96/2785596_image2_1.jpg";
+        final String imgNamsan = "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg";
+        final String imgHeunyeoul = "https://tong.visitkorea.or.kr/cms/resource/19/2576419_image2_1.jpg";
+        final String imgGamcheon = "https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg";
+        final String imgGwangjang = "https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg";
+        final String imgJeju = "https://tong.visitkorea.or.kr/cms/resource/34/3567934_image2_1.jpg";
 
-            // 게시글별 좋아요/스크랩(여러 사용자) + 댓글
-            engage(p1.id(), "제주 흑돼지 맛집 BEST 5", List.of(jeju, busan, seoul),
-                    List.of(c(busan, "흑돼지 진짜 최고죠 ㅎㅎ"), c(seoul, "저장해갑니다 👍"), c(jeju, "근처 카페도 궁금해요!")));
-            engage(p2.id(), "서울 고궁 야간개장", List.of(foodie, jeju),
-                    List.of(c(jeju, "야간개장 분위기 미쳤어요"), c(foodie, "예매 링크도 공유 가능할까요?")));
-            engage(p3.id(), "혼자 제주 뚜벅이 후기", List.of(seoul, busan, foodie),
-                    List.of(c(seoul, "뚜벅이 여행 좋네요!"), c(busan, "코스 더 자세히 알고 싶어요")));
-            engage(p4.id(), "부산 야경 명소", List.of(seoul),
-                    List.of(c(seoul, "광안리 더베이101 강추합니다")));
-            return 4;
+        safe(counts, "communityPosts", () -> {
+            // 좋아요 평균 ≈ 60, 댓글 평균 ≈ 3건, 본문은 최소 두 문장 이상.
+            // ── 후기(REVIEW) 5건 ──────────────────────────────────────────
+            seedPost(jeju, "혼자 제주 2박3일 뚜벅이 후기",
+                    "렌터카 없이 버스와 도보로만 2박 3일을 다녀봤어요. 처음엔 불편할까 걱정했는데 동선만 잘 짜면 충분히 다닐 만하더라고요. 제가 실제로 다닌 코스와 버스 노선까지 아래에 정리해뒀으니 참고하세요.",
+                    PostCategory.REVIEW, imgHyeopjae, 72, List.of(seoul, busan, foodie),
+                    List.of(c(seoul, "뚜벅이 여행 정보 너무 알차네요!"), c(busan, "버스 노선 정리 감사합니다"), c(foodie, "다음 제주여행 때 꼭 참고할게요")));
+            seedPost(busan, "부산 1박2일 다녀온 솔직 후기",
+                    "해운대에서 시작해 광안리까지 해안을 따라 천천히 걸었어요. 주말이라 사람이 정말 많았지만 그만큼 활기차서 좋았습니다. 야경 포인트마다 사진 찍느라 시간 가는 줄 몰랐네요.",
+                    PostCategory.REVIEW, imgHeundae, 54, List.of(jeju, seoul, gangneung),
+                    List.of(c(jeju, "광안리 야경 진짜 예쁘죠"), c(gangneung, "다음 주에 가는데 참고할게요!"), c(seoul, "사진 잘 찍으셨네요 👍")));
+            seedPost(gangneung, "강릉 바다 보러 다녀왔어요",
+                    "안목해변 커피거리에서 파도 소리를 들으며 커피를 마셨는데 그 자체로 힐링이었어요. 바다 바로 앞 카페에 자리 잡고 한참을 멍하니 앉아 있었네요.",
+                    PostCategory.REVIEW, imgHyeopjae, 48, List.of(jeju, sokcho, yeosu),
+                    List.of(c(sokcho, "안목해변 분위기 너무 좋죠"), c(yeosu, "커피거리 추천 감사해요")));
+            seedPost(gyeongju, "경주 역사 여행 2박3일 후기",
+                    "불국사와 첨성대를 거쳐 황리단길까지 알차게 둘러봤어요. 낮에는 유적지, 밤에는 동궁과 월지 야경으로 하루가 꽉 찼습니다. 생각보다 야경 명소가 많아서 놀랐네요.",
+                    PostCategory.REVIEW, imgGyeongbok, 63, List.of(seoul, busan, foodie),
+                    List.of(c(foodie, "황리단길 맛집도 궁금해요"), c(seoul, "경주 야경 의외네요!"), c(busan, "코스 잘 짜셨네요"), c(jeju, "저도 다음에 가봐야겠어요")));
+            seedPost(yeosu, "여수 밤바다 보고 온 후기",
+                    "케이블카를 타고 내려다본 여수 밤바다는 정말 잊을 수가 없어요. 노래 가사가 괜히 나온 게 아니라는 걸 직접 보고서야 알았네요. 해상 케이블카는 꼭 타보시길 추천해요.",
+                    PostCategory.REVIEW, imgGamcheon, 58, List.of(jeju, busan, gangneung),
+                    List.of(c(busan, "여수 밤바다 진리죠"), c(gangneung, "케이블카 꼭 타봐야겠어요"), c(jeju, "사진만 봐도 설레네요")));
+
+            // ── 질문(QUESTION) 5건 ────────────────────────────────────────
+            seedPost(busan, "부산 야경 명소 어디가 제일 좋나요?",
+                    "이번 주말에 부산으로 1박 2일 여행을 가요. 야경을 정말 좋아하는데 어디가 제일 예쁜지 추천 부탁드려요 🙏 도보나 대중교통으로 갈 수 있으면 더 좋아요.",
+                    PostCategory.QUESTION, imgGamcheon, 41, List.of(seoul, jeju),
+                    List.of(c(seoul, "광안리 더베이101 강추합니다"), c(jeju, "황령산 전망대도 좋아요"), c(gangneung, "송도 케이블카에서 보는 야경도 멋져요"), c(foodie, "흰여울문화마을 노을도 예뻐요")));
+            seedPost(seoul, "서울 근교 당일치기 어디가 좋을까요?",
+                    "차가 없어서 대중교통으로만 다녀와야 해요. 서울 근교로 당일치기 다녀오기 좋은 곳 추천해주세요. 너무 빡센 코스 말고 여유롭게 쉬다 올 수 있으면 좋겠어요.",
+                    PostCategory.QUESTION, imgNseoul, 38, List.of(foodie, gangneung),
+                    List.of(c(gangneung, "춘천 가까워서 좋아요"), c(foodie, "강화도도 추천드려요")));
+            seedPost(sokcho, "속초 맛집 추천 부탁드려요",
+                    "속초로 여행 가는데 닭강정 말고 현지인이 가는 맛집이 궁금해요. 회 종류 말고도 추천해주실 만한 메뉴 있을까요? 아침 식사로 든든하게 먹을 곳도 찾고 있어요.",
+                    PostCategory.QUESTION, imgHeundae, 45, List.of(jeju, gangneung),
+                    List.of(c(gangneung, "물회랑 도루묵찌개 추천해요"), c(jeju, "중앙시장 꼭 가보세요"), c(yeosu, "아침엔 순두부 백반도 좋아요")));
+            seedPost(jeju, "제주 렌터카 vs 뚜벅이 고민돼요",
+                    "운전이 서툰 편이라 제주에서 렌터카를 빌려야 할지 고민이에요. 렌터카 없이 대중교통으로만 다니면 많이 불편할까요? 두 방법 다 경험해보신 분들 의견이 궁금합니다.",
+                    PostCategory.QUESTION, imgSeongsan, 67, List.of(busan, seoul, foodie),
+                    List.of(c(busan, "버스도 잘 돼 있어서 충분히 가능해요"), c(seoul, "동선 짧게 짜면 뚜벅이도 괜찮아요"), c(gangneung, "초행이면 렌터카가 마음 편하긴 해요")));
+            seedPost(gangneung, "강릉 숙소 어디가 좋나요?",
+                    "바다가 보이는 숙소 위주로 찾고 있어요. 1박 10만원 정도 예산인데 가성비 좋은 곳 추천 부탁드려요. 조용히 쉴 수 있는 분위기면 더 좋겠습니다.",
+                    PostCategory.QUESTION, imgHyeopjae, 52, List.of(sokcho, yeosu),
+                    List.of(c(sokcho, "강문해변 쪽 추천해요"), c(yeosu, "경포 근처도 뷰 좋아요"), c(jeju, "사천진해변 쪽도 조용해서 좋더라고요")));
+
+            // ── 꿀팁(TIP) 5건 ─────────────────────────────────────────────
+            seedPost(seoul, "서울 고궁 야간개장 일정 공유합니다",
+                    "경복궁 야간개장은 예매 경쟁이 치열해서 오픈 시간에 바로 들어가야 해요. 예매 꿀팁과 추천 동선을 아래에 정리해뒀습니다. 한복을 입으면 입장료가 무료라는 점도 잊지 마세요.",
+                    PostCategory.TIP, imgGyeongbok, 80, List.of(foodie, jeju),
+                    List.of(c(jeju, "야간개장 분위기 미쳤어요"), c(foodie, "예매 링크도 공유 가능할까요?"), c(busan, "동선 정리 감사합니다")));
+            seedPost(jeju, "제주 항공권 싸게 사는 꿀팁",
+                    "특가 알림을 설정해두고 새벽 시간대 항공권을 노리면 반값에도 잡을 수 있어요. 평일 출발·복귀로 잡는 게 가장 저렴한 핵심 포인트입니다. 성수기는 두 달 전부터 미리 예매하는 걸 추천해요.",
+                    PostCategory.TIP, imgJeju, 85, List.of(busan, seoul, gangneung),
+                    List.of(c(busan, "새벽 특가 진짜 꿀이죠"), c(gangneung, "알림 설정 바로 해야겠네요"), c(foodie, "평일 출발 정보 감사해요"), c(seoul, "두 달 전 예매 팁 좋네요")));
+            seedPost(foodie, "여행 짐 싸기 체크리스트 공유",
+                    "충전기, 상비약, 보조배터리처럼 빠뜨리기 쉬운 것부터 먼저 챙기세요. 품목별로 파우치를 나눠 담으면 가방 안에서 찾기도 편하고 짐도 줄어들어요.",
+                    PostCategory.TIP, imgNamsan, 61, List.of(jeju, seoul, yeosu),
+                    List.of(c(yeosu, "파우치 분류 꿀팁이네요"), c(seoul, "상비약 자주 까먹는데 감사해요")));
+            seedPost(busan, "부산 지하철로 여행하는 법",
+                    "해운대, 광안리, 자갈치시장까지 주요 명소는 대부분 지하철로 닿아요. 하루에 여러 곳을 도는 일정이면 1일권을 끊는 게 훨씬 저렴합니다. 환승 동선까지 아래에 정리해뒀어요.",
+                    PostCategory.TIP, imgHeunyeoul, 49, List.of(seoul, foodie),
+                    List.of(c(seoul, "1일권 정보 감사해요"), c(foodie, "자갈치까지 지하철로 되는군요"), c(jeju, "환승 동선 정리 최고네요")));
+            seedPost(gyeongju, "경주 한복 대여 꿀팁",
+                    "황리단길 근처에서 한복을 빌리면 반납도 편하고 사진 찍을 명소도 바로 가까워요. 평일에 가면 한산해서 인생샷 건지기에도 훨씬 좋습니다. 대여점마다 소품 종류가 다르니 미리 비교해보세요.",
+                    PostCategory.TIP, imgGyeongbok, 57, List.of(seoul, busan, gangneung),
+                    List.of(c(gangneung, "한복 입고 찍으면 예쁘죠"), c(busan, "평일 추천 감사합니다"), c(foodie, "소품 비교 팁 좋네요")));
+
+            // ── 맛집(RESTAURANT) 5건 ──────────────────────────────────────
+            seedPost(foodie, "제주 흑돼지 맛집 BEST 5 🐷",
+                    "현지인 추천을 받아 다녀온 제주 흑돼지 맛집 다섯 곳을 정리했어요. 연탄에 구운 흑돼지는 겉은 바삭하고 속은 촉촉해서 정말 별미였습니다. 가게별 특징과 추천 메뉴도 함께 적어뒀어요.",
+                    PostCategory.RESTAURANT, imgGwangjang, 84, List.of(jeju, busan, seoul),
+                    List.of(c(busan, "흑돼지 진짜 최고죠 ㅎㅎ"), c(seoul, "저장해갑니다 👍"), c(jeju, "근처 카페도 궁금해요!"), c(gangneung, "리스트 알차네요")));
+            seedPost(busan, "부산 돼지국밥 맛집 정리",
+                    "서면과 남포동 일대 돼지국밥집 다섯 곳을 직접 다니며 비교해봤어요. 집집마다 국물 진하기와 고기 양이 달라서 취향대로 고르시면 됩니다. 부추를 듬뿍 넣어 드시는 걸 추천해요.",
+                    PostCategory.RESTAURANT, imgGamcheon, 66, List.of(jeju, foodie, gangneung),
+                    List.of(c(foodie, "돼지국밥 리스트 최고예요"), c(jeju, "남포동 자주 가는데 참고할게요"), c(seoul, "국물 진한 집 어디인가요?")));
+            seedPost(seoul, "광장시장 먹거리 추천",
+                    "광장시장은 빈대떡, 마약김밥, 육회까지 줄 서서 먹을 가치가 충분해요. 평일 낮에 가면 주말보다 덜 붐벼서 여유롭게 즐길 수 있습니다. 현금을 챙겨 가면 결제가 더 수월해요.",
+                    PostCategory.RESTAURANT, imgGwangjang, 73, List.of(busan, foodie, gyeongju),
+                    List.of(c(foodie, "마약김밥 못 참죠"), c(gyeongju, "육회 맛집 어디인가요?"), c(busan, "현금 팁 감사합니다")));
+            seedPost(gangneung, "강릉 초당두부 맛집",
+                    "갓 만든 순두부에 간장을 살짝 올려 먹으면 고소함이 입안 가득 퍼져요. 인기 있는 집은 아침 일찍 가야 자리가 있으니 서두르는 게 좋습니다.",
+                    PostCategory.RESTAURANT, imgHyeopjae, 55, List.of(jeju, sokcho, yeosu),
+                    List.of(c(sokcho, "초당두부 아침에 먹으면 최고죠"), c(yeosu, "순두부 생각나네요")));
+            seedPost(yeosu, "여수 게장 맛집 추천",
+                    "간장게장 백반 한 상이면 밥 두 공기는 기본으로 비우게 돼요. 짭조름한 게장에 돌산갓김치를 곁들이면 그야말로 밥도둑입니다. 예약하고 가면 대기 없이 먹을 수 있어요.",
+                    PostCategory.RESTAURANT, imgGamcheon, 62, List.of(busan, foodie, gangneung),
+                    List.of(c(foodie, "게장에 밥도둑이죠"), c(busan, "돌산갓김치 조합 인정합니다"), c(jeju, "예약 팁 감사해요")));
+            return 20;
         });
 
         // ── 핫플(자동 APPROVED) + 좋아요 — '지금 뜨는 여행지' 추천 정렬용 ──────────
@@ -553,15 +623,25 @@ public class SeedService {
     private record SeedComment(User user, String content) {}
     private SeedComment c(User u, String content) { return new SeedComment(u, content); }
 
-    /** 게시글에 좋아요·스크랩(여러 사용자) + 댓글을 부여해 커뮤니티가 실제 데이터처럼 보이게 한다. */
-    private void engage(Long postId, String title, List<User> likers, List<SeedComment> comments) {
-        for (User u : likers) {
-            try { communityService.toggleLike(postId, u.getId()); } catch (Exception ignore) { /* best-effort */ }
-            try { favoriteService.toggle(u.getId(), FavoriteTargetType.POST, String.valueOf(postId), title); }
+    /**
+     * 게시글 1건 생성 + 좋아요(데모 수)·스크랩·댓글 참여까지 한 번에 처리한다.
+     * likeCount 는 데모용으로 직접 설정해 평균 좋아요 수를 시드 유저 수와 무관하게 맞춘다.
+     */
+    private void seedPost(User author, String title, String body, PostCategory category, String imageUrl,
+                          int likeCount, List<User> scrappers, List<SeedComment> comments) {
+        var resp = communityService.createPost(author.getId(), new PostCreateRequest(
+                title, body, category, imageUrl == null ? List.of() : List.of(imageUrl)));
+        postRepository.findById(resp.id()).ifPresent(p -> {
+            p.applyDemoLikeCount(likeCount);
+            postRepository.save(p);
+        });
+        // 스크랩(찜) + 댓글만 실제 토글. 좋아요는 위에서 데모 수로 고정.
+        for (User u : scrappers) {
+            try { favoriteService.toggle(u.getId(), FavoriteTargetType.POST, String.valueOf(resp.id()), title); }
             catch (Exception ignore) { /* best-effort */ }
         }
         for (SeedComment sc : comments) {
-            try { communityService.createComment(postId, sc.user().getId(), new CommentCreateRequest(sc.content())); }
+            try { communityService.createComment(resp.id(), sc.user().getId(), new CommentCreateRequest(sc.content())); }
             catch (Exception ignore) { /* best-effort */ }
         }
     }

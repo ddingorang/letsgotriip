@@ -63,6 +63,11 @@ public class Post extends BaseEntity {
         this.likeCount++;
     }
 
+    /** 데모/시드용 — 좋아요 수를 임의 값으로 직접 설정한다. */
+    public void applyDemoLikeCount(int value) {
+        this.likeCount = Math.max(0, value);
+    }
+
     public void decrementLikeCount() {
         if (this.likeCount > 0) this.likeCount--;
     }
