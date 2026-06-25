@@ -126,6 +126,18 @@
             </span>
           </button>
         </div>
+        <div v-if="showCountStepper" class="companion-count-row">
+          <span class="night-label">인원 수</span>
+          <div class="night-ctrl">
+            <button class="night-btn" :disabled="companionCount <= 2" @click="companionCount > 2 && companionCount--">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            </button>
+            <span class="night-val">{{ companionCount }}명</span>
+            <button class="night-btn" :disabled="companionCount >= 20" @click="companionCount < 20 && companionCount++">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- 예산 -->
@@ -432,16 +444,20 @@ const companionTypes = [
   },
 ]
 const selectedCompanion = ref('couple')
+const companionCount = ref(3)
+const showCountStepper = computed(() =>
+  selectedCompanion.value === 'family' || selectedCompanion.value === 'friend'
+)
 
 // ── 예산 ──────────────────────────────────────────────────────────────────────
 const budgetOptions = [
   { label: '10만원 이하',  value: 100_000   },
-  { label: '10~30만원',   value: 300_000   },
-  { label: '30~50만원',   value: 500_000   },
-  { label: '50만원 이상', value: 1_000_000 },
-  { label: '상관없음',    value: null       },
+  { label: '10~50만원',   value: 500_000   },
+  { label: '50~100만원',  value: 1_000_000 },
+  { label: '100만원 이상', value: 2_000_000 },
+  { label: '상관 없음',   value: null       },
 ]
-const selectedBudget = ref('10~30만원')
+const selectedBudget = ref('10~50만원')
 
 // ── 테마 ──────────────────────────────────────────────────────────────────────
 // key 값(sea/mountain/food/...)이 BE로 전송되는 테마 코드다.
@@ -488,6 +504,7 @@ function handleNext() {
     startDate: startDate.value,
     endDate: endDate.value,
     companions: companion?.apiVal,
+    ...(showCountStepper.value ? { companionCount: companionCount.value } : {}),
     themes: selectedThemes.value.length ? [...selectedThemes.value] : undefined,
     periodValid: true,
   }
@@ -909,6 +926,16 @@ async function handleCreateEmpty() {
 .people-sub {
   font-size: 11px;
   color: var(--color-ink-muted);
+}
+
+/* ── Companion count stepper ─────────────────────────────────────────────── */
+.companion-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-line-light);
 }
 
 /* ── Budget chips ────────────────────────────────────────────────────────── */
