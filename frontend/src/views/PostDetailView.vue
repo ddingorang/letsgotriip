@@ -286,7 +286,7 @@ async function toggleFollow() {
 const likeCount = computed(() => post.value?.likeCount ?? 0)
 
 // 대표 이미지 — 업로드 이미지가 없으면 공통 기본 이미지를 쓴다.
-const PLACEHOLDER_IMG = '/images/placeholder-thumb.png'
+const PLACEHOLDER_IMG = '/images/map-pin.svg'
 const heroImage = computed(() => post.value?.imageUrl || PLACEHOLDER_IMG)
 function onHeroError(e) {
   // 깨진 이미지(onerror)도 기본 이미지로 대체

@@ -54,7 +54,7 @@ defineEmits(['click', 'bookmark'])
 
 // 썸네일 — 업로드/관광 이미지가 없거나 로딩 실패 시 로컬 기본 썸네일로 채움(외부 더미 미사용)
 const imgFailed = ref(false)
-const placeholder = computed(() => '/images/placeholder-thumb.png')
+const placeholder = computed(() => '/images/map-pin.svg')
 const thumb = computed(() => (!imgFailed.value && props.place.imageUrl) ? props.place.imageUrl : placeholder.value)
 function onImgError() {
   imgFailed.value = true

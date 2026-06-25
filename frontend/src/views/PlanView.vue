@@ -536,11 +536,11 @@
               @click="addPlaceToDay(item)"
             >
               <img
-                :src="item.firstimage || '/images/placeholder-thumb.png'"
+                :src="item.firstimage || '/images/map-pin.svg'"
                 class="addp-thumb"
                 alt=""
                 loading="lazy"
-                @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
+                @error="(e) => { e.target.src = '/images/map-pin.svg' }"
               />
               <span class="addp-result-body">
                 <span class="addp-result-name">{{ item.title }}</span>

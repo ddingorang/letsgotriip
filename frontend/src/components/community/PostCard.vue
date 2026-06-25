@@ -84,7 +84,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 // 게시물 사진 — 업로드 이미지가 없거나 로딩 실패 시 공통 기본 이미지로 채움(외부 더미 미사용)
-const PLACEHOLDER_IMG = '/images/placeholder-thumb.png'
+const PLACEHOLDER_IMG = '/images/map-pin.svg'
 const displayImage = computed(() => props.post.imageUrl || PLACEHOLDER_IMG)
 function onImgError(e) {
   if (!e.target.src.endsWith(PLACEHOLDER_IMG)) e.target.src = PLACEHOLDER_IMG

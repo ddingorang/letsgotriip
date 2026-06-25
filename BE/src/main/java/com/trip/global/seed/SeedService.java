@@ -577,6 +577,7 @@ public class SeedService {
             // 리뷰수 — 좋아요의 35~64% 수준(데모용 자연스러운 표본).
             int ratingCount = Math.max(12, (int) Math.round(likeCount * (0.35 + (h % 30) / 100.0)));
             hp.applyDemoRating(rating, ratingCount);
+            hotPlaceRepository.save(hp); // rating/ratingCount를 즉시 반영
             for (User u : likers) {
                 try {
                     hotPlaceLikeRepository.save(com.trip.community.entity.HotPlaceLike.builder()

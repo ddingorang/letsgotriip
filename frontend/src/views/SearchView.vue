@@ -98,10 +98,10 @@
           >
             <div class="thumb">
               <img
-                :src="item.firstimage || '/images/placeholder-thumb.png'"
+                :src="item.firstimage || '/images/map-pin.svg'"
                 :alt="item.title"
                 class="thumb-img"
-                @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
+                @error="e => { e.target.onerror = null; e.target.src = '/images/map-pin.svg' }"
               />
             </div>
             <div class="row-info">
@@ -176,10 +176,10 @@
           >
             <div class="thumb">
               <img
-                :src="item.imageUrl || '/images/placeholder-thumb.png'"
+                :src="item.imageUrl || '/images/map-pin.svg'"
                 :alt="item.title"
                 class="thumb-img"
-                @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
+                @error="e => { e.target.onerror = null; e.target.src = '/images/map-pin.svg' }"
               />
             </div>
             <div class="row-info">
