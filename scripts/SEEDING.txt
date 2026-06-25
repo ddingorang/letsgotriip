@@ -1,8 +1,8 @@
+# Created: 2026-06-26 03:19:22
 ================================================================================
   Triip — 초기 데이터 시딩 절차
 ================================================================================
 
-아래 두 시나리오 중 하나를 선택해 실행한다.
 모든 스크립트는 프로젝트 루트에서 실행한다.
 
 
@@ -10,47 +10,30 @@
   시나리오 A │ Docker Compose로 완전 새 시작 (권장)
 ────────────────────────────────────────────────────────────────────────────────
 
+  STEP 1 │ 서버 기동
+  $ docker compose up -d
+
   db/init/01-seed.sql 에 관광지·커뮤니티·사용자 스냅샷이 담겨 있어
-  볼륨을 초기화하면 자동으로 로드된다. 추가 스크립트 불필요.
-
-  $ docker compose down -v
-  $ docker compose up -d
-
-  완료. 이후 단계 없음.
-
-
-────────────────────────────────────────────────────────────────────────────────
-  시나리오 B │ 빈 DB에서 수동으로 데이터를 재구성할 때
-────────────────────────────────────────────────────────────────────────────────
-
-  ┌──────────────────────────────────────────────────────────────────────────┐
-  │ TL;DR — STEP 2~5를 한 번에 실행하려면 통합 스크립트를 쓴다.                │
-  │                                                                            │
-  │   $ docker compose up -d            # STEP 1 (서버 기동)                   │
-  │   $ sh scripts/seed-all.sh          # STEP 2 (데모 시드)                   │
-  │   $ sh scripts/seed-all.sh --all    # STEP 2~5 전체 파이프라인            │
-  │                                                                            │
-  │ seed-all.sh 는 아래 개별 스크립트들을 순서대로 호출하는 래퍼다.           │
-  │ 단계별로 직접 실행하고 싶으면 아래 STEP 설명을 따른다.                     │
-  │                                                                            │
-  │ 옵션: --profile <demo|test>  --reset  --batch [total]  --images  --export │
-  └──────────────────────────────────────────────────────────────────────────┘
-
-  STEP 1 │ 서버 기동 (ApplicationRunner 자동 실행)
-  ─────────────────────────────────────────────────
-  $ docker compose up -d
+  볼륨을 초기화하면 자동으로 로드된다.
 
   서버가 켜지면 아래 시더가 자동 실행된다 (별도 조작 불필요):
-
     @Order(20) NoticeSeeder   — 공지 3건 (notices 테이블이 빈 경우만)
     @Order(30) HotplaceSeeder — 제주 핫플 4건 (APPROVED 핫플 없을 때만)
 
-  ※ app.seed.boot.enabled=true 환경이면 SeedBootRunner(@Order 100)도
-    이 단계에서 자동 실행되어 STEP 2가 불필요하다.
+
+  STEP 2 │ 축제 데이터 초기 로드 (첫 실행 시 필수)
+  $ sh scripts/run-festival-sync.sh
+
+  공공데이터 API에서 지역 축제 정보를 수집한다.
+  01-seed.sql에는 축제 데이터가 없으므로 첫 실행 시 반드시 수행해야 한다.
+  이후에는 매일 06:00, 18:00(KST)에 배치로 자동 갱신된다.
+
+  환경 변수 (선택):
+    SEED_API_SECRET  — 기본값: triip-local-seed
+    SEED_BASE_URL    — 기본값: http://localhost:9090
 
 
-  STEP 2 │ 데모 시드 데이터 삽입
-  ─────────────────────────────────────────────────
+  STEP 3 │ 데모 시드 데이터 삽입 (선택 — 테스트 데이터 필요 시)
   $ sh scripts/run-dev-seed.sh
 
   추가되는 데이터 (demo 프로파일):
@@ -66,29 +49,7 @@
     $ sh scripts/run-dev-seed.sh demo --reset
 
 
-  STEP 3 │ 관광지 배치 수집 (선택 — TourAPI에서 실제 데이터 필요 시)
-  ─────────────────────────────────────────────────
-  $ sh scripts/run-attraction-batch.sh 2000
-
-  /api/dev/attractions/batch 를 호출해 TourAPI에서 관광지 N건을 수집한다.
-  백엔드가 먼저 실행 중이어야 하며 SEED_API_ENABLED=true 가 필요하다.
-
-  환경 변수 (선택):
-    SEED_API_SECRET  — 기본값: triip-local-seed
-    SEED_BASE_URL    — 기본값: http://localhost:9090
-
-
-  STEP 4 │ 커뮤니티 이미지 URL 갱신 (선택 — 실제 TourAPI 이미지로 교체 시)
-  ─────────────────────────────────────────────────
-  $ python scripts/refresh-community-image-urls.py
-
-  TourAPI searchKeyword2 로 커뮤니티 게시글 20건의 이미지 URL을 검색해
-  db/seed_community.sql 파일에 반영한다.
-  실행 전 db/seed_community.sql 파일이 존재해야 한다.
-
-
-  STEP 5 │ DB 스냅샷 저장 (선택 — 팀원 공유용 초기 데이터로 저장 시)
-  ─────────────────────────────────────────────────
+  STEP 4 │ DB 스냅샷 저장 (선택 — 팀원 공유용 초기 데이터로 저장 시)
   $ sh scripts/export-db-snapshot.sh
 
   현재 DB 상태를 db/init/01-seed.sql 로 덤프한다.
@@ -103,10 +64,8 @@
   스크립트 목록
 ────────────────────────────────────────────────────────────────────────────────
 
-  seed-all.sh                   STEP 2~5를 순서대로 실행하는 통합 래퍼
-  run-dev-seed.sh               STEP 2  데모/테스트 시드 API 트리거
-  run-attraction-batch.sh       STEP 3  관광지 배치 API 트리거
-  refresh-community-image-urls.py STEP 4  커뮤니티 이미지 URL 갱신
-  export-db-snapshot.sh         STEP 5  DB → db/init/01-seed.sql 덤프
+  run-festival-sync.sh    STEP 2  축제 배치 API 트리거 (첫 실행 시 필수)
+  run-dev-seed.sh         STEP 3  데모/테스트 시드 API 트리거
+  export-db-snapshot.sh   STEP 4  DB → db/init/01-seed.sql 덤프
 
 ================================================================================
