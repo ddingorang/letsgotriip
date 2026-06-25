@@ -71,6 +71,71 @@
         </div>
       </div>
 
+      <!-- 여행 후기 / 별점 -->
+      <div class="reviews-section">
+        <div class="section-header">
+          <h2 class="section-title">핫플 후기 <span v-if="reviews.length" class="rv-total">{{ reviews.length }}</span></h2>
+          <span v-if="reviewAverage" class="rv-avg">평균 {{ reviewAverage.toFixed(1) }}점</span>
+        </div>
+
+        <div class="review-form">
+          <div class="star-input">
+            <button v-for="i in 5" :key="i" type="button" class="star-btn" @click="form.rating = i">
+              <svg width="22" height="22" viewBox="0 0 24 24" :fill="i <= form.rating ? 'var(--color-gold)' : 'var(--color-line)'" stroke="none">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </button>
+          </div>
+          <textarea
+            v-model="form.content"
+            class="review-textarea"
+            rows="2"
+            :placeholder="editingId ? '후기를 수정해 주세요' : '이곳에 다녀오셨나요? 후기를 남겨주세요'"
+          />
+          <div v-if="reviewError" class="review-error">{{ reviewError }}</div>
+          <div class="review-form-actions">
+            <button v-if="editingId" type="button" class="rv-cancel-btn" @click="cancelEdit">취소</button>
+            <button type="button" class="rv-submit-btn" :disabled="reviewSubmitting" @click="submitReview">
+              {{ reviewSubmitting ? '저장 중…' : (editingId ? '수정 완료' : '후기 등록') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="reviewsLoading" class="rv-empty">후기를 불러오는 중…</div>
+        <div v-else-if="!reviews.length" class="rv-empty">아직 후기가 없어요. 첫 후기를 남겨보세요!</div>
+        <div v-else class="review-list">
+          <div v-for="review in reviews" :key="review.id" class="review-card">
+            <div class="review-header">
+              <div class="reviewer-info">
+                <div class="rv-avatar" />
+                <div>
+                  <p class="rv-name">{{ review.nickname || '익명' }}</p>
+                  <p class="rv-date">{{ formatReviewDate(review.createdAt) }}</p>
+                </div>
+              </div>
+              <div class="rv-rating">
+                <svg
+                  v-for="i in 5"
+                  :key="i"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  :fill="i <= review.rating ? 'var(--color-gold)' : 'var(--color-line)'"
+                  stroke="none"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+            </div>
+            <p class="review-text">{{ review.content }}</p>
+            <div v-if="isMyReview(review)" class="rv-actions">
+              <button type="button" class="rv-edit" @click="startEdit(review)">수정</button>
+              <button type="button" class="rv-delete" @click="removeReview(review)">삭제</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style="height: 120px" />
     </div>
 
@@ -100,11 +165,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHotplaceStore } from '@/stores/hotplace.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { favoriteApi, hotplaceApi } from '@/api/index.js'
+import { favoriteApi, hotplaceApi, reviewApi } from '@/api/index.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,6 +191,18 @@ const bookmarkLoading = ref(false)
 const liked = ref(false)
 const likeCount = ref(0)
 const likeLoading = ref(false)
+
+// ── 리뷰 상태 ────────────────────────────────────────────────────────────────
+const reviews = ref([])
+const reviewAverage = ref(0)
+const reviewsLoading = ref(false)
+const reviewError = ref('')
+const reviewSubmitting = ref(false)
+const editingId = ref(null)
+const form = reactive({ rating: 5, content: '' })
+
+// hotplace 전용 contentId (attraction_reviews 테이블 재사용)
+const reviewContentId = computed(() => `hotplace_${hp.value.id}`)
 
 // 미니맵용 실좌표 여부
 const mapEl = ref(null)
@@ -187,11 +264,95 @@ onMounted(async () => {
   // 상세 로드 후 hp.id가 확정되면 초기 찜/좋아요 상태 수화 (좋아요수는 비로그인도)
   loadBookmark()
   loadLike()
+  loadReviews()
 })
 
 onBeforeUnmount(() => {
   miniMap = null
 })
+
+// ── 리뷰 함수 ────────────────────────────────────────────────────────────────
+function formatReviewDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`
+}
+
+function isMyReview(review) {
+  const me = authStore.user?.userId
+  return me != null && review.userId === me
+}
+
+async function loadReviews() {
+  reviewsLoading.value = true
+  try {
+    const { data } = await reviewApi.list(reviewContentId.value)
+    reviews.value = Array.isArray(data?.reviews) ? data.reviews : []
+    reviewAverage.value = data?.averageRating ?? 0
+  } catch {
+    reviews.value = []
+    reviewAverage.value = 0
+  } finally {
+    reviewsLoading.value = false
+  }
+}
+
+function resetForm() {
+  editingId.value = null
+  form.rating = 5
+  form.content = ''
+}
+
+function cancelEdit() {
+  reviewError.value = ''
+  resetForm()
+}
+
+function startEdit(review) {
+  editingId.value = review.id
+  form.rating = review.rating
+  form.content = review.content
+  reviewError.value = ''
+}
+
+async function submitReview() {
+  if (!authStore.isAuthenticated) {
+    router.push(`/login?redirect=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+  const content = form.content.trim()
+  if (!content) {
+    reviewError.value = '후기 내용을 입력해 주세요.'
+    return
+  }
+  reviewSubmitting.value = true
+  reviewError.value = ''
+  try {
+    if (editingId.value) {
+      await reviewApi.update(reviewContentId.value, editingId.value, { rating: form.rating, content })
+    } else {
+      await reviewApi.create(reviewContentId.value, { rating: form.rating, content })
+    }
+    resetForm()
+    await loadReviews()
+  } catch (e) {
+    reviewError.value = e?.response?.data?.message ?? '후기를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+  } finally {
+    reviewSubmitting.value = false
+  }
+}
+
+async function removeReview(review) {
+  if (!confirm('이 후기를 삭제할까요?')) return
+  try {
+    await reviewApi.remove(reviewContentId.value, review.id)
+    await loadReviews()
+  } catch {
+    // noop
+  }
+}
 
 function share() {
   if (navigator.share) navigator.share({ title: hp.value.name, url: location.href })
@@ -204,7 +365,7 @@ function openRoute() {
   window.open(url, '_blank', 'noopener')
 }
 function addToItinerary() {
-  router.push('/plan')
+  router.push({ path: '/explore', query: { q: hp.value.name } })
 }
 
 // ── 찜(즐겨찾기) 토글 — 응답 favorited로 갱신, 실패 시 롤백 ────────────────────
@@ -438,6 +599,106 @@ async function loadLike() {
 .registrant-info { display: flex; flex-direction: column; gap: 2px; }
 .registrant-name { font-size: 14px; font-weight: 600; color: var(--color-ink); }
 .registrant-date { font-size: 12px; color: var(--color-ink-muted); }
+
+/* ── 리뷰 섹션 ── */
+.reviews-section {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-line-light);
+  margin-top: 8px;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.rv-total {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  margin-left: 4px;
+}
+.rv-avg {
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+.review-form {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.star-input {
+  display: flex;
+  gap: 4px;
+}
+.star-btn {
+  padding: 0;
+  background: none;
+  line-height: 0;
+}
+.review-textarea {
+  width: 100%;
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--color-ink);
+  resize: none;
+  background: var(--color-white);
+  box-sizing: border-box;
+}
+.review-textarea:focus { outline: none; border-color: var(--color-peach); }
+.review-error { font-size: 12px; color: #e05252; }
+.review-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.rv-submit-btn {
+  padding: 8px 20px;
+  background: var(--color-peach);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+}
+.rv-submit-btn:disabled { opacity: 0.5; }
+.rv-cancel-btn {
+  padding: 8px 16px;
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+  font-size: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line);
+}
+.rv-empty { font-size: 14px; color: var(--color-ink-muted); text-align: center; padding: 20px 0; }
+.review-list { display: flex; flex-direction: column; gap: 14px; }
+.review-card {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-line-light);
+}
+.review-card:last-child { border-bottom: none; }
+.review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.reviewer-info { display: flex; align-items: center; gap: 10px; }
+.rv-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+.rv-name { font-size: 13px; font-weight: 600; color: var(--color-ink); }
+.rv-date { font-size: 11px; color: var(--color-ink-muted); margin-top: 1px; }
+.rv-rating { display: flex; gap: 2px; align-items: center; }
+.review-text { font-size: 14px; color: var(--color-ink-secondary); line-height: 1.6; }
+.rv-actions { display: flex; gap: 12px; margin-top: 8px; }
+.rv-edit, .rv-delete { font-size: 12px; color: var(--color-ink-muted); }
+.rv-delete { color: #e05252; }
 
 .cta-bar {
   position: absolute;

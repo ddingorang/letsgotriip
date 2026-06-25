@@ -796,7 +796,7 @@ function formatDist(km) {
 }
 
 // 썸네일 — 실제 이미지가 없으면 로컬 기본 썸네일로 채움(외부 더미 미사용)
-const THUMB_PLACEHOLDER = '/images/placeholder-thumb.png'
+const THUMB_PLACEHOLDER = '/images/map-pin.svg'
 function placePlaceholder() {
   return THUMB_PLACEHOLDER
 }
@@ -906,6 +906,21 @@ onMounted(() => {
   // (a) 홈 칩/딥링크로 태그가 지정돼 들어오면 큐레이션(좋아요 인기순)부터 표시.
   if (route.query.tag && TAG_LABELS[route.query.tag]) {
     setTag(route.query.tag)
+    return
+  }
+
+  // (a-1) 핫플 딥링크 ?q=name → 검색어 채우고 즉시 검색
+  if (route.query.q) {
+    const q = route.query.q.trim()
+    searchQuery.value = q
+    if (q.length >= 2) {
+      const cat = CATEGORIES.find((c) => c.key === selectedCategory.value)
+      store.list(
+        { keyword: q, page: 1, size: PAGE_SIZE, ...(cat?.contentTypeId ? { contentTypeId: cat.contentTypeId } : {}) },
+        currentUi(),
+        { forceLoading: true },
+      )
+    }
     return
   }
 
