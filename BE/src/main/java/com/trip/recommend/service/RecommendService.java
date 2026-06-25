@@ -708,6 +708,7 @@ public class RecommendService {
             map.put("companions", req.companions());
             map.put("budget",     req.budget());
             map.put("themes",     req.themes() != null ? new TreeSet<>(req.themes()) : null);
+            map.put("title",      req.title());
             return objectMapper.writeValueAsString(map);
         } catch (Exception e) {
             throw new IllegalStateException("요청 직렬화 실패", e);
