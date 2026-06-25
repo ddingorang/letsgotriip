@@ -174,11 +174,11 @@ class RecommendServiceTest {
         ItineraryDraft draft = new ItineraryDraft(
                 List.of(
                         new DayPlan(1, List.of(
-                                new PlaceRecommendation("111", "관광지A", "10:00", "좋은 곳"),
-                                new PlaceRecommendation("999", "없는곳",  "11:00", "이유")
+                                new PlaceRecommendation("111", "관광지A", "10:00", "좋은 곳", null),
+                                new PlaceRecommendation("999", "없는곳",  "11:00", "이유", null)
                         ), "day1"),
                         new DayPlan(2, List.of(
-                                new PlaceRecommendation("999", "없는곳2", "09:00", "이유2")
+                                new PlaceRecommendation("999", "없는곳2", "09:00", "이유2", null)
                         ), "day2")
                 ),
                 "전체"
@@ -207,7 +207,7 @@ class RecommendServiceTest {
 
         ItineraryDraft draft = new ItineraryDraft(
                 List.of(new DayPlan(1, List.of(
-                        new PlaceRecommendation("999", "없는곳", null, "이유")
+                        new PlaceRecommendation("999", "없는곳", null, "이유", null)
                 ), "day1")),
                 "전체"
         );

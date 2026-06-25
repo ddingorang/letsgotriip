@@ -21,6 +21,7 @@ public record ItineraryDraft(
             String contentId,
             String title,
             String visitTime,  // "HH:mm" — 실패 시 null
-            String reason
+            String reason,
+            String imageUrl    // TourAPI firstimage — validate() 단계에서 주입, LLM 생성값 아님
     ) {}
 }

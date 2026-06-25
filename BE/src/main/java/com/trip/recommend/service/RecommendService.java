@@ -614,7 +614,8 @@ public class RecommendService {
                                 // reason은 모델 설명이므로 유지하되 길이 제한, visitTime은 그대로
                                 String reason = p.reason() == null ? null
                                         : (p.reason().length() > 120 ? p.reason().substring(0, 120) : p.reason());
-                                return new PlaceRecommendation(p.contentId(), title, p.visitTime(), reason);
+                                String imageUrl = src != null ? src.firstimage() : null;
+                                return new PlaceRecommendation(p.contentId(), title, p.visitTime(), reason, imageUrl);
                             })
                             .collect(Collectors.toList());
                     return new DayPlan(d.dayNo(), places, d.summary());
@@ -648,7 +649,8 @@ public class RecommendService {
                             s.contentId(),
                             sanitize(s.title()),
                             null,
-                            "보충 장소"
+                            "보충 장소",
+                            s.firstimage()
                     ));
                 }
                 supplemented.add(new DayPlan(day.dayNo(), places, day.summary()));

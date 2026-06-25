@@ -51,7 +51,7 @@
           <span class="summary-label">동행</span>
           <span class="summary-val">{{ companionLabel }}</span>
         </div>
-        <div v-if="conditions?.budget" class="summary-row">
+        <div v-if="conditions?.budgetLabel" class="summary-row">
           <span class="summary-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="12" y1="1" x2="12" y2="23" />
@@ -59,7 +59,7 @@
             </svg>
           </span>
           <span class="summary-label">예산</span>
-          <span class="summary-val">{{ conditions.budget.toLocaleString() }}원 이하</span>
+          <span class="summary-val">{{ conditions.budgetLabel ?? conditions.budget.toLocaleString() + '원 이하' }}</span>
         </div>
         <div v-if="conditions?.themes?.length" class="summary-row themes-row">
           <span class="summary-icon">

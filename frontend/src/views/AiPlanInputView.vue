@@ -509,6 +509,7 @@ function handleNext() {
     periodValid: true,
   }
   if (budgetOpt?.value != null) conditions.budget = budgetOpt.value
+  if (budgetOpt) conditions.budgetLabel = budgetOpt.label
   if (planTitle.value.trim()) conditions.title = planTitle.value.trim()
 
   // Pass conditions to /ai via History state so AiInputView can read them

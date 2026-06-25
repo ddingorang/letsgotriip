@@ -270,7 +270,7 @@
                       </span>
                       <span class="detail-place-num">{{ idx + 1 }}</span>
                       <span class="detail-place-name">{{ place.attraction?.title ?? place.title ?? '장소' }}</span>
-                      <span v-if="place.visitTime" class="detail-place-time">{{ place.visitTime }}</span>
+                      <span v-if="place.visitTime" class="detail-place-time">{{ shortTime(place.visitTime) }}</span>
                       <button
                         class="place-edit-btn"
                         title="더보기 (다른 날로 이동·삭제)"
