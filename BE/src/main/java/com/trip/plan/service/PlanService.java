@@ -201,21 +201,47 @@ public class PlanService {
     // ─────────────────────────────────────────────────────────────
 
     /**
-     * 카테고리(contentType)별 기본 단가로 일자별/전체 추정 비용 산출(소유자 전용).
-     * 가격 필드가 없으므로 데모 추정치다.
+     * 카테고리·인원 기반 추정 비용 + 카카오 실도로 경로가 있을 때만 주유비 추가.
+     * partial 구간이 하나라도 있으면 거리 신뢰도가 낮으므로 주유비는 제외한다.
      */
     public PlanBudgetResponseDto getBudget(Long userId, Long planId) {
         TripPlan plan = findPlanWithDays(planId);
         verifyOwner(plan, userId);
 
+        int persons = personsFromCompanions(plan.getCompanions());
+
         List<PlanBudgetResponseDto.DayBudget> dayBudgets = new ArrayList<>();
         long total = 0;
         for (TripDay day : plan.getDays()) {
             long cost = day.getPlaces().stream()
-                    .mapToLong(p -> estimatePlaceCost(p.getAttraction().getContentType()))
+                    .mapToLong(p -> estimatePlaceCost(p.getAttraction().getContentType(), persons))
                     .sum();
             total += cost;
             dayBudgets.add(new PlanBudgetResponseDto.DayBudget(day.getDayNo(), cost));
+        }
+
+        // 주유비 — DB 캐시에 실제 도로 거리가 있을 때만 계산 (partial 구간 있으면 제외)
+        Long fuelCost = null;
+        String note = "카테고리·인원 기반 추정치";
+        if (plan.getRoutePathJson() != null && plan.getVersion().equals(plan.getRoutePathVersion())) {
+            try {
+                com.trip.plan.dto.RoutePathResponseDto routeDto = objectMapper.readValue(
+                        plan.getRoutePathJson(), com.trip.plan.dto.RoutePathResponseDto.class);
+                boolean anyPartial = routeDto.days().stream().anyMatch(com.trip.plan.dto.RoutePathResponseDto.DayPath::partial);
+                if (!anyPartial && !routeDto.days().isEmpty()) {
+                    long totalDistanceMeters = routeDto.days().stream()
+                            .mapToLong(com.trip.plan.dto.RoutePathResponseDto.DayPath::distanceMeters)
+                            .sum();
+                    if (totalDistanceMeters > 0) {
+                        // 휘발유 1,900원/L, 연비 10km/L → 190원/km
+                        fuelCost = Math.round((totalDistanceMeters / 1000.0 / 10.0) * 1900);
+                        total += fuelCost;
+                        note = "카테고리·인원·경로 기반 추정치";
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("getBudget 경로 파싱 실패 — planId={}, err={}", planId, e.getMessage());
+            }
         }
 
         Integer planned = plan.getBudget();
@@ -227,18 +253,28 @@ public class PlanService {
                 total,
                 planned,
                 difference,
-                "카테고리 기반 추정치(데모)"
+                fuelCost,
+                note
         );
     }
 
-    /** TourAPI contentType별 기본 단가 추정. 12=관광지, 39=음식점, 32=숙박, 그 외=기타. */
-    private long estimatePlaceCost(Integer contentType) {
-        if (contentType == null) return 10000L;
+    private int personsFromCompanions(CompanionsType companions) {
+        if (companions == null) return 1;
+        return switch (companions) {
+            case SOLO -> 1;
+            case COUPLE -> 2;
+            case FAMILY, FRIENDS -> 4;
+        };
+    }
+
+    /** TourAPI contentType별 인당 단가 × 인원. 12=관광지, 39=음식점, 32=숙박. */
+    private long estimatePlaceCost(Integer contentType, int persons) {
+        if (contentType == null) return 5000L * persons;
         return switch (contentType) {
-            case 12 -> 5000L;   // 관광지
-            case 39 -> 15000L;  // 음식점
-            case 32 -> 80000L;  // 숙박
-            default -> 10000L;  // 기타
+            case 12 -> 2000L * persons;   // 관광지
+            case 39 -> 20000L * persons;  // 음식점
+            case 32 -> 25000L * persons;  // 숙박
+            default -> 5000L * persons;
         };
     }
 

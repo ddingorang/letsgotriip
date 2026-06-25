@@ -374,6 +374,10 @@
                     <span class="budget-day-label">{{ d.dayNo }}일차</span>
                     <span class="budget-day-cost">{{ formatWon(d.estimatedCost) }}</span>
                   </div>
+                  <div v-if="budget.fuelCost != null" class="budget-day-row budget-fuel-row">
+                    <span class="budget-day-label">⛽ 주유비</span>
+                    <span class="budget-day-cost">{{ formatWon(budget.fuelCost) }}</span>
+                  </div>
                 </div>
                 <div v-if="budget.plannedBudget != null" class="budget-planned-row">
                   <span>설정 예산 {{ formatWon(budget.plannedBudget) }}</span>
