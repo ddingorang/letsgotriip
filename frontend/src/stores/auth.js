@@ -24,6 +24,14 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
   }
 
+  function clearUserStorage() {
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('triip.'))
+        .forEach(k => localStorage.removeItem(k))
+    } catch { /* noop */ }
+  }
+
   /** POST /auth/refresh — single source of truth for token renewal */
   async function refresh() {
     const { data } = await axios.post('/auth/refresh', null, {
@@ -59,6 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
       password = passwordArg
     }
     const { data } = await http.post('/auth/login', { email, password })
+    clearUserStorage()
     // data: { accessToken, userId }
     accessToken.value = data.accessToken
     user.value = data.userId ? { userId: data.userId } : null
@@ -71,6 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
       await http.post('/auth/logout')
     } finally {
       clear()
+      clearUserStorage()
     }
   }
 
@@ -94,6 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoggedIn,
     setAuth,
     clear,
+    clearUserStorage,
     refresh,
     fetchMe,
     setUser,
