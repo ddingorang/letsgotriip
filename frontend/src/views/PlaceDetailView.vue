@@ -10,9 +10,9 @@
           <!-- Real image -->
           <div v-else class="img-wrapper">
             <img
-              :src="place?.imageUrl || '/images/placeholder-thumb.png'"
+              :src="place?.imageUrl || '/images/map-pin.svg'"
               :alt="place?.name"
-              @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
+              @error="(e) => { e.target.src = '/images/map-pin.svg' }"
             />
           </div>
           <div class="hero-gradient" />
@@ -119,7 +119,7 @@
               <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             </svg>
-            <span v-if="addLoading">담는 중…</span>
+            <span v-if="addLoading">추가 중…</span>
             <span v-else>{{ cartLabel }}</span>
           </button>
           <button class="cart-caret" :disabled="addLoading" @click="openAddSheet" aria-label="다른 일정에 담기">
@@ -163,10 +163,10 @@
             @click="goSimilarPlace(item)"
           >
             <img
-              :src="item.imageUrl || '/images/placeholder-thumb.png'"
+              :src="item.imageUrl || '/images/map-pin.svg'"
               :alt="item.name"
               loading="lazy"
-              @error="(e) => { e.target.src = '/images/placeholder-thumb.png' }"
+              @error="(e) => { e.target.src = '/images/map-pin.svg' }"
             />
             <span class="similar-body">
               <strong>{{ item.name }}</strong>
@@ -743,14 +743,7 @@ async function loadBookmark() {
 const addedToast = ref({ show: false, text: '' })
 let toastTimer = null
 
-// 버튼 라벨: 활성 계획(=담는 중인 여행)이 있으면 그 이름으로, 없으면 기본 문구.
-// 제목이 길면 잘라 버튼 넘침을 막는다("에 담기"는 항상 보이게).
-const cartLabel = computed(() => {
-  const t = (planStore.activePlanTitle || '').trim()
-  if (!t) return '내 여행에 담기'
-  const short = t.length > 10 ? t.slice(0, 10) + '…' : t
-  return `${short}에 담기`
-})
+const cartLabel = computed(() => '여행에 추가')
 
 function showAddedToast(text) {
   addedToast.value = { show: true, text }

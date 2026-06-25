@@ -60,6 +60,15 @@ export const usePlanStore = defineStore('plan', () => {
       // Backend returns Spring Page({ content: [...] })
       const { data } = await http.get('/api/plans', { params: { page: 0, size: 50, ...params } })
       plans.value = Array.isArray(data) ? data : (data?.content ?? [])
+      // 캐시된 활성 계획이 실제 목록에 없으면 localStorage 초기화
+      if (activePlanId.value && !plans.value.find((p) => p.id === activePlanId.value)) {
+        setActivePlan(null, '')
+        setCartCount(0)
+      }
+      if (plans.value.length === 0) {
+        setActivePlan(null, '')
+        setCartCount(0)
+      }
     } catch (e) {
       const { msg } = handleError(e)
       error.value = msg
