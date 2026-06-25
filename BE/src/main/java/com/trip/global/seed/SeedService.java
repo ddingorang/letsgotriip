@@ -407,35 +407,43 @@ public class SeedService {
         // ── 핫플(자동 APPROVED) + 좋아요 — '지금 뜨는 여행지' 추천 정렬용 ──────────
         safe(counts, "hotPlaces", () -> {
             seedHotPlace(busan, "흰여울문화마을", "부산광역시 영도구 흰여울길", 35.0789, 129.0468,
-                    HotPlaceCategory.ATTRACTION, "영화 촬영지로 유명한 바다 절벽 마을.",
+                    HotPlaceCategory.ATTRACTION,
+                    "영도 절벽 위에 옹기종기 들어선 달동네가 시간을 거슬러 올라간 느낌을 줘요. 좁은 골목마다 바다 뷰가 숨어 있고, 영화 촬영지로 알려지면서 부산 힙스터들의 단골 나들이 코스가 됐어요.",
                     "https://tong.visitkorea.or.kr/cms/resource/19/2576419_image2_1.jpg", 1240,
                     everyone, everyone.subList(0, 5));
             seedHotPlace(jeju, "성산일출봉", "제주특별자치도 서귀포시 성산읍 일출로", 33.4581, 126.9425,
-                    HotPlaceCategory.NATURE, "유네스코 세계자연유산. 일출 명소.",
+                    HotPlaceCategory.NATURE,
+                    "분화구를 향해 오르는 계단길에서 바라보는 제주 동쪽 바다가 시원하게 펼쳐져요. 유네스코 세계자연유산으로 지정된 곳으로, 이른 새벽 일출 시간에 맞춰 오르는 게 진짜 묘미예요.",
                     "https://tong.visitkorea.or.kr/cms/resource/08/2871008_image2_1.JPG", 1080,
                     everyone.subList(0, 7), everyone.subList(0, 4));
             seedHotPlace(seoul, "북촌한옥마을", "서울특별시 종로구 계동길", 37.5826, 126.9831,
-                    HotPlaceCategory.ATTRACTION, "전통 한옥이 늘어선 골목.",
+                    HotPlaceCategory.ATTRACTION,
+                    "600년 넘은 한옥들이 좁다란 골목을 따라 이어져 조선 시대 속으로 걸어 들어가는 기분이 들어요. 이른 아침에 오면 인파 없이 고즈넉한 분위기를 온전히 즐길 수 있어요.",
                     "https://tong.visitkorea.or.kr/cms/resource/23/2678623_image2_1.jpg", 870,
                     everyone.subList(1, 7), everyone.subList(2, 6));
             seedHotPlace(jeju, "협재해수욕장", "제주특별자치도 제주시 한림읍 협재리", 33.3940, 126.2396,
-                    HotPlaceCategory.NATURE, "에메랄드빛 바다와 비양도 전망.",
+                    HotPlaceCategory.NATURE,
+                    "수심이 얕아 걷다 보면 발밑으로 에메랄드빛 바닥이 훤히 들여다보여요. 물빛이 워낙 맑아서 날씨가 흐려도 빛깔이 살아 있고, 멀리 비양도가 수평선에 떠 있어 사진 찍기에도 좋아요.",
                     "https://tong.visitkorea.or.kr/cms/resource/53/2869753_image2_1.jpg", 760,
                     everyone.subList(0, 5), everyone.subList(0, 3));
             seedHotPlace(busan, "감천문화마을", "부산광역시 사하구 감내2로", 35.0975, 129.0107,
-                    HotPlaceCategory.ATTRACTION, "알록달록 산비탈 예술 마을.",
+                    HotPlaceCategory.ATTRACTION,
+                    "가파른 산비탈을 따라 형형색색의 집들이 계단처럼 쌓여 있는 독특한 경관이에요. 골목 곳곳에 숨어 있는 벽화와 조형물을 찾아다니는 재미가 쏠쏠한 부산의 예술 마을이에요.",
                     "https://tong.visitkorea.or.kr/cms/resource/96/2576496_image2_1.jpg", 640,
                     everyone.subList(2, 8), everyone.subList(3, 6));
             seedHotPlace(foodie, "광장시장 먹자골목", "서울특별시 종로구 창경궁로", 37.5701, 126.9999,
-                    HotPlaceCategory.RESTAURANT, "빈대떡·마약김밥 등 길거리 먹거리.",
+                    HotPlaceCategory.RESTAURANT,
+                    "100년 넘은 재래시장 안에 이름난 먹거리 노점들이 가득 들어차 있어요. 바삭한 빈대떡과 꼬들꼬들한 마약김밥은 한 번 먹으면 두고두고 생각나는 맛이에요.",
                     "https://tong.visitkorea.or.kr/cms/resource/56/3467156_image2_1.jpg", 520,
                     everyone.subList(0, 6), everyone.subList(1, 4));
             seedHotPlace(seoul, "남산서울타워", "서울특별시 용산구 남산공원길", 37.5512, 126.9882,
-                    HotPlaceCategory.ATTRACTION, "서울 야경 1번지.",
+                    HotPlaceCategory.ATTRACTION,
+                    "케이블카를 타고 오르면 서울 도심이 360도 파노라마로 한눈에 들어와요. 해 질 녘부터 야경이 피어오르는 순간이 특히 아름다워서 데이트 코스로도 인기가 높아요.",
                     "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 410,
                     everyone.subList(1, 5), everyone.subList(0, 2));
             seedHotPlace(jeju, "오설록 티 뮤지엄", "제주특별자치도 서귀포시 안덕면 신화역사로", 33.3056, 126.2895,
-                    HotPlaceCategory.CAFE, "녹차밭 카페 겸 박물관.",
+                    HotPlaceCategory.CAFE,
+                    "제주 안덕 들판에 펼쳐진 초록빛 녹차밭이 카페 창문 너머로 이어져요. 녹차 아이스크림과 함께 차 한 잔 마시며 천천히 쉬어 가기 좋은 힐링 공간이에요.",
                     "https://tong.visitkorea.or.kr/cms/resource/37/3568037_image2_1.jpg", 280,
                     everyone.subList(3, 7), everyone.subList(4, 7));
             return 8;

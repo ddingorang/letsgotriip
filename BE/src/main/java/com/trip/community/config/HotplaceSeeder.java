@@ -42,13 +42,17 @@ public class HotplaceSeeder implements ApplicationRunner {
 
         List<HotPlace> seeds = List.of(
                 hotplace(submitter, "성산일출봉 전망 카페", "제주특별자치도 서귀포시 성산읍 일출로",
-                        33.4581, 126.9425, HotPlaceCategory.CAFE, "성산일출봉이 통창으로 보이는 오션뷰 카페예요."),
+                        33.4581, 126.9425, HotPlaceCategory.CAFE,
+                        "창가 자리에 앉으면 성산일출봉이 통유리 너머로 가득 채워지는 뷰가 펼쳐져요. 커피 한 잔 들고 일출을 기다리는 기분이 특별한, 제주 동쪽 끝 오션뷰 카페예요."),
                 hotplace(submitter, "협재 해수욕장", "제주특별자치도 제주시 한림읍 협재리",
-                        33.3942, 126.2394, HotPlaceCategory.NATURE, "에메랄드빛 바다와 비양도 뷰가 일품인 해변."),
+                        33.3942, 126.2394, HotPlaceCategory.NATURE,
+                        "수심이 얕아 걷다 보면 발밑으로 에메랄드빛 바닥이 훤히 보여요. 멀리 비양도가 수평선에 걸려 있어 날씨가 흐려도 그림 같은 풍경이 이어지는 해변이에요."),
                 hotplace(submitter, "애월 카페거리", "제주특별자치도 제주시 애월읍",
-                        33.4607, 126.3227, HotPlaceCategory.CAFE, "노을 맛집 카페가 모여있는 애월 해안도로."),
+                        33.4607, 126.3227, HotPlaceCategory.CAFE,
+                        "제주 해안도로를 따라 감성 카페들이 줄지어 들어서 있어요. 저녁노을이 물드는 시간에 오면 바다 위로 번지는 오렌지빛이 커피 한 잔의 여운을 길게 남겨줘요."),
                 hotplace(submitter, "흑돼지 거리 맛집", "제주특별자치도 제주시 건입동",
-                        33.5141, 126.5297, HotPlaceCategory.RESTAURANT, "현지인이 추천하는 제주 흑돼지 노포.")
+                        33.5141, 126.5297, HotPlaceCategory.RESTAURANT,
+                        "연탄 위에서 구워지는 흑돼지 특유의 향이 골목 어귀부터 진하게 풍겨요. 제주 토박이들이 오래전부터 즐겨 찾는 곳으로, 겉바속촉의 제대로 된 흑돼지 맛을 볼 수 있어요.")
         );
         hotPlaceRepository.saveAll(seeds);
         log.info("[HotplaceSeeder] 승인 핫플 {}건 시드 완료", seeds.size());
