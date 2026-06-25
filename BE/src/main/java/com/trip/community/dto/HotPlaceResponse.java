@@ -19,6 +19,9 @@ public record HotPlaceResponse(
         String description,
         HotPlaceStatus status,
         List<String> imageUrls,
+        int likeCount,
+        Double rating,
+        int ratingCount,
         LocalDateTime createdAt
 ) {
     public static HotPlaceResponse of(HotPlace hotPlace, List<String> imageUrls) {
@@ -33,6 +36,9 @@ public record HotPlaceResponse(
                 hotPlace.getDescription(),
                 hotPlace.getStatus(),
                 imageUrls,
+                hotPlace.getLikeCount(),
+                hotPlace.getRating(),
+                hotPlace.getRatingCount(),
                 hotPlace.getCreatedAt()
         );
     }
