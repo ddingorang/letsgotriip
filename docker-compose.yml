@@ -25,11 +25,14 @@ services:
       # 데이터가 이미 있으면(볼륨 유지) 무시된다. 재생성: ./scripts/db-dump.sh
       - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
-      interval: 10s
+      # ⚠ -h localhost 는 유닉스 소켓으로 붙는다 → initdb 중(--skip-networking, port:0)인
+      # 임시 서버에도 ping이 통해 healthy 로 뒤집히고, backend가 TCP 3306 열리기 전에 붙어 죽는다.
+      # 127.0.0.1 + --protocol=TCP 로 실제 TCP 리스닝을 검사한다.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-P", "3306", "--protocol=TCP", "-uroot", "-ppassword"]
+      interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 20
+      start_period: 40s
 
   mongodb:
     image: mongo:7.0
